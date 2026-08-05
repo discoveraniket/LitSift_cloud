@@ -586,9 +586,9 @@ body {
 }
 
 .grid-toolbar {
-  height: 30px;
+  height: 32px;
   background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;

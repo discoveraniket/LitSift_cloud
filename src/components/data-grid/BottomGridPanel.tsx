@@ -7,22 +7,6 @@ interface BottomGridPanelProps {
 export const BottomGridPanel: React.FC<BottomGridPanelProps> = ({ activePdfTitle }) => {
   return (
     <footer className="panel bottom-grid">
-      <div className="grid-toolbar">
-        <span className="grid-scope-label">
-          SCOPED TABLE (Active PDF: {activePdfTitle})
-        </span>
-        <div className="grid-actions">
-          <button className="grid-action-btn primary">⚡ Extract Data</button>
-          <button className="grid-action-btn">🔗 Merge Rows</button>
-          <button className="grid-action-btn">✂️ Split Cell</button>
-          <button className="grid-action-btn success">✓ Confirm AI Edits</button>
-          <button className="grid-action-btn danger">✗ Reject AI Edits</button>
-          <button className="grid-action-btn">Undo</button>
-          <button className="grid-action-btn">Redo</button>
-          <button className="grid-action-btn secondary">📥 Export CSV</button>
-        </div>
-      </div>
-
       <div className="table-container">
         <table className="data-grid-table">
           <thead>
@@ -48,6 +32,22 @@ export const BottomGridPanel: React.FC<BottomGridPanelProps> = ({ activePdfTitle
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div className="grid-toolbar bottom-toolbar">
+        <span className="grid-scope-label">
+          SCOPED TABLE (Active PDF: {activePdfTitle})
+        </span>
+        <div className="grid-actions">
+          <button className="grid-action-btn primary">⚡ Extract Data</button>
+          <button className="grid-action-btn">🔗 Merge Rows</button>
+          <button className="grid-action-btn">✂️ Split Cell</button>
+          <button className="grid-action-btn success">✓ Confirm AI Edits</button>
+          <button className="grid-action-btn danger">✗ Reject AI Edits</button>
+          <button className="grid-action-btn">Undo</button>
+          <button className="grid-action-btn">Redo</button>
+          <button className="grid-action-btn secondary">📥 Export CSV</button>
+        </div>
       </div>
     </footer>
   );
