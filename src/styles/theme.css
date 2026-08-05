@@ -253,6 +253,53 @@ body {
   user-select: none;
 }
 
+/* AG Grid Dark Theme Overrides */
+.ag-theme-quartz-dark,
+.ag-theme-quartz-dark [class*="ag-theme-"],
+.ag-theme-quartz-dark .ag-styled-root,
+.ag-theme-quartz-dark .ag-grid-scrolling-rows,
+.ag-theme-alpine-dark,
+.ag-theme-alpine-dark [class*="ag-theme-"],
+.ag-theme-alpine-dark .ag-styled-root,
+.ag-theme-balham-dark,
+.ag-theme-balham-dark [class*="ag-theme-"],
+.ag-theme-alpine,
+.ag-root-wrapper {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  --ag-background-color: var(--bg-secondary) !important;
+  --ag-data-background-color: var(--bg-secondary) !important;
+  --ag-header-background-color: var(--bg-tertiary) !important;
+  --ag-odd-row-background-color: var(--bg-secondary) !important;
+  --ag-header-foreground-color: var(--text-secondary) !important;
+  --ag-foreground-color: var(--text-primary) !important;
+  --ag-border-color: var(--border-subtle) !important;
+  --ag-row-border-color: var(--border-subtle) !important;
+  --ag-font-family: var(--font-sans) !important;
+  --ag-font-size: 11px !important;
+}
+
+.ag-root-wrapper,
+.ag-root-wrapper-body,
+.ag-header,
+.ag-header-row,
+.ag-header-cell,
+.ag-row,
+.ag-cell,
+.ag-body-viewport,
+.ag-floating-top,
+.ag-floating-bottom {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+.ag-header,
+.ag-header-cell {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-secondary) !important;
+}
+
 .panel {
   height: 100%;
   background: var(--bg-secondary);

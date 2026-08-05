@@ -1,4 +1,5 @@
 import React from 'react';
+import { AgGridWrapper } from '../data-grid/AgGridWrapper';
 
 interface CentralViewerPanelProps {
   activeView: 'pdf' | 'master_grid';
@@ -13,15 +14,10 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
     return (
       <main className="panel central-viewer master-grid-mode">
         <div className="viewer-header">
-          <span>WORKSPACE MASTER DATA GRID (GLOBAL VIEW)</span>
+          <span>WORKSPACE MASTER DATA GRID (GLOBAL VIEW - ALL PAPERS)</span>
         </div>
-        <div className="viewer-placeholder-content">
-          <div className="placeholder-card">
-            <h2>📊 Master Structured Data View</h2>
-            <p>
-              Displaying aggregated extraction table across all research papers in the workspace.
-            </p>
-          </div>
+        <div className="table-container" style={{ height: 'calc(100% - 32px)', padding: '4px' }}>
+          <AgGridWrapper />
         </div>
       </main>
     );
