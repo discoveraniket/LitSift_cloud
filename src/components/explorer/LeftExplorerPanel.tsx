@@ -10,7 +10,7 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   onOpenMasterGrid,
 }) => {
   const mockPdfs = [
-    { id: 'pdf-1', name: 'Attention_Is_All_You_Need.pdf', status: 'Extracted' },
+    { id: 'pdf-1', name: '38094623.pdf', status: 'Extracted' },
     { id: 'pdf-2', name: 'GPT4_Technical_Report.pdf', status: 'Pending' },
     { id: 'pdf-3', name: 'Llama3_Architecture_Paper.pdf', status: 'Extracted' },
   ];

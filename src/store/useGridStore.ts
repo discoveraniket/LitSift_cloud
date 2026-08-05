@@ -14,7 +14,7 @@ const initialRows: GridRow[] = [
   {
     id: 'row-1',
     pdfId: 'pdf-1',
-    pdfTitle: 'Attention_Is_All_You_Need.pdf',
+    pdfTitle: '38094623.pdf',
     methodology: 'Transformer Self-Attention Mechanism',
     sampleSize: '8 x NVIDIA P100 GPUs',
     keyResults: '28.4 BLEU score on WMT 2014 EN-DE',

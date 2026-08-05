@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AgGridWrapper } from '../data-grid/AgGridWrapper';
+import { PdfReader } from './PdfReader';
 
 interface CentralViewerPanelProps {
   activeView: 'pdf' | 'master_grid';
@@ -10,6 +11,12 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
   activeView,
   activePdfTitle,
 }) => {
+  const [zoomScale, setZoomScale] = useState<number>(1.2);
+
+  const handleZoomIn = () => setZoomScale((prev) => Math.min(prev + 0.2, 2.5));
+  const handleZoomOut = () => setZoomScale((prev) => Math.max(prev - 0.2, 0.6));
+  const handleFitWidth = () => setZoomScale(1.1);
+
   if (activeView === 'master_grid') {
     return (
       <main className="panel central-viewer master-grid-mode">
@@ -28,21 +35,16 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
       <div className="viewer-header">
         <span>DOCUMENT VIEWER: {activePdfTitle}</span>
         <div className="viewer-controls">
-          <button className="control-btn">Zoom In (+)</button>
-          <button className="control-btn">Zoom Out (-)</button>
-          <button className="control-btn">Fit Width</button>
+          <button className="control-btn" onClick={handleZoomOut}>Zoom Out (-)</button>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', padding: '0 4px' }}>
+            {Math.round(zoomScale * 100)}%
+          </span>
+          <button className="control-btn" onClick={handleZoomIn}>Zoom In (+)</button>
+          <button className="control-btn" onClick={handleFitWidth}>Fit Width</button>
         </div>
       </div>
-      <div className="viewer-placeholder-content">
-        <div className="pdf-paper-page">
-          <h3>[PDF READER CANVAS PLACEHOLDER]</h3>
-          <p style={{ marginTop: '12px', color: 'var(--text-secondary)' }}>
-            Showing pages for <strong>{activePdfTitle}</strong> with evidence bounding-box highlight layer.
-          </p>
-          <div className="evidence-highlight-snippet">
-            Snippet Evidence Highlighted: "We evaluate our architecture on WMT 2014 English-to-German translation task..."
-          </div>
-        </div>
+      <div className="viewer-placeholder-content" style={{ padding: 0, height: 'calc(100% - 32px)' }}>
+        <PdfReader pdfUrl="/sample-pdfs/38094623.pdf" zoomScale={zoomScale} />
       </div>
     </main>
   );
