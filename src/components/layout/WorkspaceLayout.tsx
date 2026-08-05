@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { HeaderBar } from './HeaderBar';
 import { LeftExplorerPanel } from '../explorer/LeftExplorerPanel';
 import { CentralViewerPanel } from '../pdf-viewer/CentralViewerPanel';
@@ -10,6 +9,18 @@ export const WorkspaceLayout: React.FC = () => {
   const [activeView, setActiveView] = useState<'pdf' | 'master_grid'>('pdf');
   const [activePdfTitle, setActivePdfTitle] = useState('Attention_Is_All_You_Need.pdf');
 
+  // Side Panel Toggle States
+  const [showLeftPanel, setShowLeftPanel] = useState(true);
+  const [showBottomPanel, setShowBottomPanel] = useState(true);
+  const [showRightPanel, setShowRightPanel] = useState(true);
+
+  // Pixel Width/Height State for perfect, non-squashing dragging
+  const [leftWidth, setLeftWidth] = useState(260);
+  const [rightWidth, setRightWidth] = useState(300);
+  const [bottomHeight, setBottomHeight] = useState(240);
+
+  const [isDragging, setIsDragging] = useState<string | null>(null);
+
   const handleSelectPdf = (_id: string, title: string) => {
     setActivePdfTitle(title);
     setActiveView('pdf');
@@ -19,50 +30,145 @@ export const WorkspaceLayout: React.FC = () => {
     setActiveView('master_grid');
   };
 
+  const handleToggleZenMode = () => {
+    if (showLeftPanel || showBottomPanel || showRightPanel) {
+      setShowLeftPanel(false);
+      setShowBottomPanel(false);
+      setShowRightPanel(false);
+    } else {
+      setShowLeftPanel(true);
+      setShowBottomPanel(true);
+      setShowRightPanel(true);
+    }
+  };
+
+  // Custom Mouse Drag Handlers
+  const handleMouseDownLeft = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging('left');
+    const startX = e.clientX;
+    const startWidth = leftWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      setLeftWidth(Math.max(180, Math.min(600, startWidth + delta)));
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(null);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleMouseDownRight = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging('right');
+    const startX = e.clientX;
+    const startWidth = rightWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = startX - moveEvent.clientX;
+      setRightWidth(Math.max(200, Math.min(600, startWidth + delta)));
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(null);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleMouseDownBottom = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging('bottom');
+    const startY = e.clientY;
+    const startHeight = bottomHeight;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = startY - moveEvent.clientY;
+      setBottomHeight(Math.max(120, Math.min(600, startHeight + delta)));
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(null);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
   return (
-    <div className="workspace-container">
+    <div className={`workspace-container ${isDragging ? 'is-dragging' : ''}`}>
       <HeaderBar
         activeView={activeView}
         activePdfTitle={activePdfTitle}
+        showLeftPanel={showLeftPanel}
+        showBottomPanel={showBottomPanel}
+        showRightPanel={showRightPanel}
         onToggleView={setActiveView}
+        onToggleLeftPanel={() => setShowLeftPanel(!showLeftPanel)}
+        onToggleBottomPanel={() => setShowBottomPanel(!showBottomPanel)}
+        onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
+        onToggleZenMode={handleToggleZenMode}
       />
 
       <div className="workspace-body">
-        {/* Main Vertical Splitter: Top 3-panel row vs Bottom Table panel */}
-        <PanelGroup orientation="vertical">
-          <Panel defaultSize={70} minSize={30}>
-            {/* Top Horizontal Splitter: Left Explorer, Central Viewer, Right Agent */}
-            <PanelGroup orientation="horizontal">
-              <Panel defaultSize={20} minSize={5}>
+        <div className="layout-row-top">
+          {showLeftPanel && (
+            <>
+              <div className="layout-col-left" style={{ width: `${leftWidth}px` }}>
                 <LeftExplorerPanel
                   onSelectPdf={handleSelectPdf}
                   onOpenMasterGrid={handleOpenMasterGrid}
                 />
-              </Panel>
+              </div>
+              <div
+                className="custom-drag-handle horizontal"
+                onMouseDown={handleMouseDownLeft}
+              />
+            </>
+          )}
 
-              <PanelResizeHandle className="resize-handle-horizontal" />
+          <div className="layout-col-center">
+            <CentralViewerPanel
+              activeView={activeView}
+              activePdfTitle={activePdfTitle}
+            />
+          </div>
 
-              <Panel defaultSize={55} minSize={10}>
-                <CentralViewerPanel
-                  activeView={activeView}
-                  activePdfTitle={activePdfTitle}
-                />
-              </Panel>
-
-              <PanelResizeHandle className="resize-handle-horizontal" />
-
-              <Panel defaultSize={25} minSize={5}>
+          {showRightPanel && (
+            <>
+              <div
+                className="custom-drag-handle horizontal"
+                onMouseDown={handleMouseDownRight}
+              />
+              <div className="layout-col-right" style={{ width: `${rightWidth}px` }}>
                 <RightAgentPanel />
-              </Panel>
-            </PanelGroup>
-          </Panel>
+              </div>
+            </>
+          )}
+        </div>
 
-          <PanelResizeHandle className="resize-handle-vertical" />
-
-          <Panel defaultSize={30} minSize={5}>
-            <BottomGridPanel activePdfTitle={activePdfTitle} />
-          </Panel>
-        </PanelGroup>
+        {showBottomPanel && (
+          <>
+            <div
+              className="custom-drag-handle vertical"
+              onMouseDown={handleMouseDownBottom}
+            />
+            <div className="layout-row-bottom" style={{ height: `${bottomHeight}px` }}>
+              <BottomGridPanel activePdfTitle={activePdfTitle} />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
