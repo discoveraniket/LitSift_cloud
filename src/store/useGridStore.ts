@@ -3,7 +3,7 @@ import { produce } from 'immer';
 import { GridState, SchemaColumn, GridRow } from '../types/grid';
 
 const initialColumns: SchemaColumn[] = [
-  { field: 'pdfTitle', headerName: 'Document', editable: false },
+  { field: 'pdfTitle', headerName: 'Document', editable: true },
   { field: 'methodology', headerName: 'Methodology', editable: true },
   { field: 'sampleSize', headerName: 'Sample Size', editable: true },
   { field: 'keyResults', headerName: 'Key Results', editable: true },

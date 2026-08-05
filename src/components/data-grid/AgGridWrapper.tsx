@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { ColDef, CellValueChangedEvent, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
+import { ColDef, CellValueChangedEvent, CellFocusedEvent, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import { useGridStore } from '../../store/useGridStore';
 import { GridRow } from '../../types/grid';
 import 'ag-grid-community/styles/ag-grid.css';
@@ -19,6 +19,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   const { columns, rows, updateCell, confirmAIEdits, rejectAIEdits, addColumn } = useGridStore();
   const [newColName, setNewColName] = useState('');
   const [showAddColInput, setShowAddColInput] = useState(false);
+  const [focusedRowIndex, setFocusedRowIndex] = useState<number | null>(null);
 
   // Filter rows if in scoped view
   const rowData = useMemo(() => {
@@ -33,87 +34,62 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     const dynamicCols: ColDef<GridRow>[] = columns.map((col) => ({
       field: col.field,
       headerName: col.headerName,
-      editable: col.editable !== false,
+      editable: true, // All cells are double-clickable and editable
       sortable: true,
       filter: true,
       resizable: true,
+      autoHeight: true, // Allow cell height to expand for full content
       cellStyle: (params) => {
+        const isFocusedRow = params.node.rowIndex === focusedRowIndex;
         if (params.data?.aiStatus === 'Pending Review') {
-          return { backgroundColor: 'rgba(249, 226, 175, 0.18)', color: '#f9e2af', opacity: 1, fontStyle: 'normal' };
+          return {
+            backgroundColor: 'rgba(249, 226, 175, 0.18)',
+            color: '#f9e2af',
+            opacity: 1,
+            fontStyle: 'normal',
+            whiteSpace: isFocusedRow ? 'normal' : 'nowrap',
+            wordBreak: isFocusedRow ? 'break-word' : 'normal',
+          };
         }
         if (params.data?.isDraftRow) {
-          return { backgroundColor: 'transparent', color: 'var(--text-secondary)', opacity: 0.6, fontStyle: 'italic' };
+          return {
+            backgroundColor: 'transparent',
+            color: 'var(--text-secondary)',
+            opacity: 0.6,
+            fontStyle: 'italic',
+            whiteSpace: isFocusedRow ? 'normal' : 'nowrap',
+            wordBreak: isFocusedRow ? 'break-word' : 'normal',
+          };
         }
-        return null;
+        return {
+          backgroundColor: 'transparent',
+          color: 'var(--text-primary)',
+          opacity: 1,
+          fontStyle: 'normal',
+          whiteSpace: isFocusedRow ? 'normal' : 'nowrap',
+          wordBreak: isFocusedRow ? 'break-word' : 'normal',
+        };
       },
     }));
 
-    // Row index renderer: displays '*' for the bottom blank draft row (MS Access style)
+    // Slim, fixed & pinned row index column (#)
     const rowNumCol: ColDef<GridRow> = {
       headerName: '#',
-      width: 75,
-      rowDrag: (params) => !params.data?.isDraftRow,
+      width: 50,
+      pinned: 'left',
+      sortable: false,
+      filter: false,
+      editable: false,
       resizable: false,
-      cellRenderer: (params: any) => {
-        if (params.data?.isDraftRow) {
-          return (
-            <span style={{ color: 'var(--accent-primary)', fontWeight: 700 }}>
-              *
-            </span>
-          );
-        }
-
-        const isPending = params.data?.aiStatus === 'Pending Review';
-        const rowId = params.data?.id;
-        const rowIndex = params.node.rowIndex + 1;
-
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span>{rowIndex}</span>
-            {isPending && (
-              <div style={{ display: 'inline-flex', gap: '2px', marginLeft: '2px' }}>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    confirmAIEdits(rowId);
-                  }}
-                  title="Accept AI Entry"
-                  style={{
-                    background: '#a6e3a1',
-                    color: '#11111b',
-                    border: 'none',
-                    borderRadius: '3px',
-                    padding: '0 4px',
-                    fontSize: '9px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  ✓
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    rejectAIEdits(rowId);
-                  }}
-                  title="Reject AI Entry"
-                  style={{
-                    background: '#f38ba8',
-                    color: '#11111b',
-                    border: 'none',
-                    borderRadius: '3px',
-                    padding: '0 4px',
-                    fontSize: '9px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  ✗
-                </button>
-              </div>
-            )}
-          </div>
-        );
+      valueGetter: (params) => {
+        if (params.data?.isDraftRow) return '*';
+        return (params.node?.rowIndex ?? 0) + 1;
+      },
+      cellStyle: {
+        fontWeight: 600,
+        fontSize: '11px',
+        color: 'var(--text-secondary)',
+        textAlign: 'center',
       },
     };
 
@@ -189,7 +165,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
           )}
         </div>
       ),
-      width: 110,
+      width: 105,
       resizable: false,
       editable: false,
       sortable: false,
@@ -197,13 +173,28 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     };
 
     return [rowNumCol, ...dynamicCols, addColCol];
-  }, [columns, confirmAIEdits, rejectAIEdits, addColumn, showAddColInput, newColName]);
+  }, [columns, confirmAIEdits, rejectAIEdits, addColumn, showAddColInput, newColName, focusedRowIndex]);
 
   const handleCellValueChanged = (event: CellValueChangedEvent<GridRow>) => {
     if (event.data && event.colDef.field) {
       updateCell(event.data.id, event.colDef.field, event.newValue);
     }
   };
+
+  // Expand row height dynamically on selection/focus
+  const handleCellFocused = useCallback((event: CellFocusedEvent<GridRow>) => {
+    setFocusedRowIndex(event.rowIndex);
+  }, []);
+
+  const getRowHeight = useCallback(
+    (params: any) => {
+      if (params.node.rowIndex === focusedRowIndex) {
+        return 60; // Expanded height for focused row so all content is readable
+      }
+      return 28; // Compact row height for unselected rows
+    },
+    [focusedRowIndex]
+  );
 
   return (
     <div className="ag-theme-quartz-dark" style={{ height: '100%', width: '100%' }}>
@@ -220,6 +211,8 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         rowDragManaged={true}
         suppressMoveWhenRowDragging={true}
         onCellValueChanged={handleCellValueChanged}
+        onCellFocused={handleCellFocused}
+        getRowHeight={getRowHeight}
         animateRows={true}
       />
     </div>
