@@ -1,14 +1,9 @@
 import React from 'react';
+import WorkspaceLayout from './components/layout/WorkspaceLayout';
+import './styles/theme.css';
 
 export const App: React.FC = () => {
-  return (
-    <div style={{ padding: '24px', textAlign: 'center' }}>
-      <h1>LitSift Cloud Workspace</h1>
-      <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>
-        Agentic Research & Structured PDF Data Extraction Platform
-      </p>
-    </div>
-  );
+  return <WorkspaceLayout />;
 };
 
 export default App;
