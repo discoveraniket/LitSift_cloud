@@ -41,6 +41,17 @@ const initialRows: GridRow[] = [
     limitations: 'Requires fine-tuning for specific domain tasks',
     aiStatus: 'Pending Review',
   },
+  {
+    id: 'draft-row-initial',
+    pdfId: 'pdf-1',
+    pdfTitle: 'Attention_Is_All_You_Need.pdf',
+    methodology: '',
+    sampleSize: '',
+    keyResults: '',
+    limitations: '',
+    aiStatus: 'Confirmed',
+    isDraftRow: true,
+  },
 ];
 
 export const useGridStore = create<GridState>((set) => ({
@@ -54,7 +65,25 @@ export const useGridStore = create<GridState>((set) => ({
         const row = state.rows.find((r) => r.id === rowId);
         if (row) {
           row[field] = value;
-          row.aiStatus = 'Confirmed';
+          if (row.isDraftRow) {
+            row.isDraftRow = false;
+            row.aiStatus = 'Confirmed';
+            // Spawn next blank draft row at bottom
+            const newDraftRow: GridRow = {
+              id: `draft-row-${Date.now()}`,
+              pdfId: row.pdfId || 'pdf-1',
+              pdfTitle: row.pdfTitle || 'Attention_Is_All_You_Need.pdf',
+              methodology: '',
+              sampleSize: '',
+              keyResults: '',
+              limitations: '',
+              aiStatus: 'Confirmed',
+              isDraftRow: true,
+            };
+            state.rows.push(newDraftRow);
+          } else {
+            row.aiStatus = 'Confirmed';
+          }
         }
       })
     ),

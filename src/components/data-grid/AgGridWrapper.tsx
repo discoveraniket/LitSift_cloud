@@ -15,9 +15,8 @@ interface AgGridWrapperProps {
 
 export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   filterPdfId,
-  activePdfTitle = 'Attention_Is_All_You_Need.pdf',
 }) => {
-  const { columns, rows, updateCell, confirmAIEdits, rejectAIEdits, addRow, addColumn } = useGridStore();
+  const { columns, rows, updateCell, confirmAIEdits, rejectAIEdits, addColumn } = useGridStore();
   const [newColName, setNewColName] = useState('');
   const [showAddColInput, setShowAddColInput] = useState(false);
 
@@ -29,7 +28,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     return rows;
   }, [rows, filterPdfId]);
 
-  // Construct AG Grid column definitions without a dedicated status column
+  // Construct AG Grid column definitions
   const colDefs = useMemo<ColDef<GridRow>[]>(() => {
     const dynamicCols: ColDef<GridRow>[] = columns.map((col) => ({
       field: col.field,
@@ -40,23 +39,26 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
       resizable: true,
       cellStyle: (params) => {
         if (params.data?.aiStatus === 'Pending Review') {
-          return { backgroundColor: 'rgba(249, 226, 175, 0.18)', color: '#f9e2af' };
+          return { backgroundColor: 'rgba(249, 226, 175, 0.18)', color: '#f9e2af', opacity: 1, fontStyle: 'normal' };
+        }
+        if (params.data?.isDraftRow) {
+          return { backgroundColor: 'transparent', color: 'var(--text-secondary)', opacity: 0.6, fontStyle: 'italic' };
         }
         return null;
       },
     }));
 
-    // Header '# row' renderer includes inline Accept/Reject buttons ONLY when row is pending review
+    // Row index renderer: displays '*' for the bottom blank draft row (MS Access style)
     const rowNumCol: ColDef<GridRow> = {
       headerName: '#',
-      width: 85,
-      rowDrag: true,
+      width: 75,
+      rowDrag: (params) => !params.data?.isDraftRow,
       resizable: false,
       cellRenderer: (params: any) => {
-        if (params.data?.isPinnedAddRow) {
+        if (params.data?.isDraftRow) {
           return (
-            <span style={{ color: 'var(--accent-primary)', fontWeight: 700, cursor: 'pointer' }}>
-              +
+            <span style={{ color: 'var(--accent-primary)', fontWeight: 700 }}>
+              *
             </span>
           );
         }
@@ -187,7 +189,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
           )}
         </div>
       ),
-      width: 120,
+      width: 110,
       resizable: false,
       editable: false,
       sortable: false,
@@ -204,32 +206,22 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   };
 
   return (
-    <div className="ag-theme-quartz-dark" style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: 1, minHeight: 0 }}>
-        <AgGridReact
-          rowData={rowData}
-          columnDefs={colDefs}
-          defaultColDef={{
-            width: 180, // Standardized Excel cell width
-            resizable: true,
-            sortable: true,
-            filter: true,
-            editable: true,
-          }}
-          rowDragManaged={true}
-          suppressMoveWhenRowDragging={true}
-          onCellValueChanged={handleCellValueChanged}
-          animateRows={true}
-          pinnedBottomRowData={[
-            { id: 'add-row-pinned', pdfTitle: '+ Add New Row', isPinnedAddRow: true }
-          ]}
-          onRowClicked={(e) => {
-            if (e.data?.isPinnedAddRow) {
-              addRow(filterPdfId || 'pdf-1', activePdfTitle);
-            }
-          }}
-        />
-      </div>
+    <div className="ag-theme-quartz-dark" style={{ height: '100%', width: '100%' }}>
+      <AgGridReact
+        rowData={rowData}
+        columnDefs={colDefs}
+        defaultColDef={{
+          width: 180, // Standardized Excel cell width
+          resizable: true,
+          sortable: true,
+          filter: true,
+          editable: true,
+        }}
+        rowDragManaged={true}
+        suppressMoveWhenRowDragging={true}
+        onCellValueChanged={handleCellValueChanged}
+        animateRows={true}
+      />
     </div>
   );
 };
