@@ -169,24 +169,34 @@ body {
 
 /* Panel Splitters */
 .resize-handle-horizontal {
-  width: 4px;
+  width: 6px;
   background: var(--bg-primary);
   cursor: col-resize;
+  position: relative;
+  z-index: 10;
+  touch-action: none;
   transition: background 0.2s ease;
 }
 
-.resize-handle-horizontal:hover {
+.resize-handle-horizontal:hover,
+.resize-handle-horizontal[data-resize-handle-state="hover"],
+.resize-handle-horizontal[data-resize-handle-state="drag"] {
   background: var(--accent-primary);
 }
 
 .resize-handle-vertical {
-  height: 4px;
+  height: 6px;
   background: var(--bg-primary);
   cursor: row-resize;
+  position: relative;
+  z-index: 10;
+  touch-action: none;
   transition: background 0.2s ease;
 }
 
-.resize-handle-vertical:hover {
+.resize-handle-vertical:hover,
+.resize-handle-vertical[data-resize-handle-state="hover"],
+.resize-handle-vertical[data-resize-handle-state="drag"] {
   background: var(--accent-primary);
 }
 

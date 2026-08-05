@@ -33,7 +33,7 @@ export const WorkspaceLayout: React.FC = () => {
           <Panel defaultSize={70} minSize={30}>
             {/* Top Horizontal Splitter: Left Explorer, Central Viewer, Right Agent */}
             <PanelGroup orientation="horizontal">
-              <Panel defaultSize={20} minSize={15} maxSize={35}>
+              <Panel defaultSize={20} minSize={5} maxSize={60}>
                 <LeftExplorerPanel
                   onSelectPdf={handleSelectPdf}
                   onOpenMasterGrid={handleOpenMasterGrid}
@@ -42,7 +42,7 @@ export const WorkspaceLayout: React.FC = () => {
 
               <PanelResizeHandle className="resize-handle-horizontal" />
 
-              <Panel defaultSize={55} minSize={30}>
+              <Panel defaultSize={55} minSize={20}>
                 <CentralViewerPanel
                   activeView={activeView}
                   activePdfTitle={activePdfTitle}
@@ -51,7 +51,7 @@ export const WorkspaceLayout: React.FC = () => {
 
               <PanelResizeHandle className="resize-handle-horizontal" />
 
-              <Panel defaultSize={25} minSize={20} maxSize={40}>
+              <Panel defaultSize={25} minSize={5} maxSize={60}>
                 <RightAgentPanel />
               </Panel>
             </PanelGroup>
@@ -59,7 +59,7 @@ export const WorkspaceLayout: React.FC = () => {
 
           <PanelResizeHandle className="resize-handle-vertical" />
 
-          <Panel defaultSize={30} minSize={15} maxSize={60}>
+          <Panel defaultSize={30} minSize={5} maxSize={85}>
             <BottomGridPanel activePdfTitle={activePdfTitle} />
           </Panel>
         </PanelGroup>
