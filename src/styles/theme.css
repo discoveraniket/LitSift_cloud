@@ -1,0 +1,71 @@
+/* LitSift Cloud Design System Tokens */
+:root {
+  /* Color Palette - Dark Mode Defaults (VS Code Aesthetics) */
+  --bg-primary: #1e1e2e;
+  --bg-secondary: #181825;
+  --bg-tertiary: #11111b;
+  --bg-surface: #252538;
+  --bg-hover: #313244;
+  --bg-active: #45475a;
+
+  /* Accent Colors */
+  --accent-primary: #89b4fa;
+  --accent-primary-hover: #b4befe;
+  --accent-secondary: #cba6f7;
+  --accent-success: #a6e3a1;
+  --accent-warning: #f9e2af;
+  --accent-danger: #f38ba8;
+
+  /* AI Status Colors */
+  --ai-pending-bg: rgba(249, 226, 175, 0.15);
+  --ai-pending-border: #f9e2af;
+  --ai-confirmed-bg: rgba(166, 227, 161, 0.15);
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --text-primary: #cdd6f4;
+  --text-secondary: #a6adc8;
+  --text-muted: #6c7086;
+
+  /* Borders & Dividers */
+  --border-subtle: #313244;
+  --border-focus: #89b4fa;
+
+  /* Layout Dimensions */
+  --header-height: 44px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-surface);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--bg-active);
+}
