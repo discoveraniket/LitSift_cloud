@@ -29,32 +29,25 @@ export const PdfReader: React.FC<PdfReaderProps> = ({ pdfUrl, zoomScale }) => {
     if (pageWrapper) {
       pageWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-      // Highlight passage box
-      const existingBox = pageWrapper.querySelector('.pdf-evidence-box');
-      if (!existingBox) {
-        const highlightBox = document.createElement('div');
-        highlightBox.className = 'pdf-evidence-box';
-        highlightBox.style.position = 'absolute';
-        highlightBox.style.top = activeEvidence.bbox
-          ? `${activeEvidence.bbox.y}px`
-          : '20%';
-        highlightBox.style.left = activeEvidence.bbox
-          ? `${activeEvidence.bbox.x}px`
-          : '10%';
-        highlightBox.style.width = activeEvidence.bbox
-          ? `${activeEvidence.bbox.width}px`
-          : '80%';
-        highlightBox.style.height = activeEvidence.bbox
-          ? `${activeEvidence.bbox.height}px`
-          : '40px';
-        highlightBox.style.background = 'rgba(137, 180, 250, 0.35)';
-        highlightBox.style.border = '2px solid var(--accent-primary)';
-        highlightBox.style.borderRadius = '4px';
-        highlightBox.style.pointerEvents = 'none';
-        highlightBox.style.boxShadow = '0 0 12px rgba(137, 180, 250, 0.8)';
+      // Clean up previous highlights and render fresh box for the active cell
+      const existingBoxes = pageWrapper.querySelectorAll('.pdf-active-cell-box');
+      existingBoxes.forEach((b) => b.remove());
 
-        pageWrapper.appendChild(highlightBox);
-      }
+      const highlightBox = document.createElement('div');
+      highlightBox.className = 'pdf-evidence-box pdf-active-cell-box';
+      highlightBox.style.position = 'absolute';
+      highlightBox.style.top = activeEvidence.bbox ? `${activeEvidence.bbox.y}px` : '20%';
+      highlightBox.style.left = activeEvidence.bbox ? `${activeEvidence.bbox.x}px` : '10%';
+      highlightBox.style.width = activeEvidence.bbox ? `${activeEvidence.bbox.width}px` : '80%';
+      highlightBox.style.height = activeEvidence.bbox ? `${activeEvidence.bbox.height}px` : '40px';
+      highlightBox.style.background = 'rgba(137, 180, 250, 0.28)';
+      highlightBox.style.border = '2px solid var(--accent-primary)';
+      highlightBox.style.borderRadius = '4px';
+      highlightBox.style.pointerEvents = 'none';
+      highlightBox.style.boxShadow = '0 0 16px rgba(137, 180, 250, 0.9)';
+      highlightBox.style.transition = 'all 0.3s ease';
+
+      pageWrapper.appendChild(highlightBox);
     }
   }, [activeEvidence]);
 

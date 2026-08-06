@@ -37,6 +37,32 @@ const initialRows: GridRow[] = [
         bbox: { x: 340, y: 280, width: 250, height: 40 },
       },
     },
+    citationMap: {
+      methodology: {
+        pageNumber: 1,
+        sectionName: 'Abstract & Section 2.1 (Phage Isolation)',
+        snippetQuote: 'Characterizations of novel broad-spectrum lytic bacteriophages Sfln-2 and Sfln-6 infecting MDR Shigella spp.',
+        reasoning: 'Extracted isolation protocols for Sfln-2 and Sfln-6 because disc diffusion assays proved lytic activity across multidrug-resistant Shigella isolates.',
+        confidence: 0.96,
+        bbox: { x: 340, y: 190, width: 260, height: 60 },
+      },
+      sampleSize: {
+        pageNumber: 1,
+        sectionName: 'Section 2.2 (Bacterial Strains & Growth)',
+        snippetQuote: 'Bacteriophage activity evaluated against clinical MDR Shigella flexneri and Shigella sonnei strains.',
+        reasoning: 'Identified Sfln-2 & Sfln-6 target strains from experimental strain table.',
+        confidence: 0.94,
+        bbox: { x: 340, y: 250, width: 220, height: 40 },
+      },
+      keyResults: {
+        pageNumber: 1,
+        sectionName: 'Abstract (Biocontrol Results)',
+        snippetQuote: 'Application of bacteriophages on raw chicken reduced Shigella load by over 2.5 log10 CFU/g.',
+        reasoning: 'Selected 2.5 log reduction on raw chicken meat as the primary biocontrol efficacy key result.',
+        confidence: 0.98,
+        bbox: { x: 340, y: 280, width: 250, height: 40 },
+      },
+    },
   },
   {
     id: 'row-2',
@@ -61,6 +87,32 @@ const initialRows: GridRow[] = [
       keyResults: {
         pageNumber: 1,
         snippetText: 'Siphoviridae family with isometric head',
+        bbox: { x: 340, y: 580, width: 220, height: 35 },
+      },
+    },
+    citationMap: {
+      methodology: {
+        pageNumber: 1,
+        sectionName: 'Section 3.4 (Genomic Architecture)',
+        snippetQuote: 'Whole-genome sequencing performed via Illumina NovaSeq followed by bioinformatic annotation.',
+        reasoning: 'Extracted sequencing methodology used to verify absence of toxin/antibiotic resistance genes.',
+        confidence: 0.95,
+        bbox: { x: 340, y: 640, width: 240, height: 45 },
+      },
+      sampleSize: {
+        pageNumber: 1,
+        sectionName: 'Section 3.4 (Genome Features)',
+        snippetQuote: 'The double-stranded DNA genomes of Sfln-2 and Sfln-6 contain 50,390 bp and 50,523 bp respectively.',
+        reasoning: 'Extracted exact base pair length metrics for both bacteriophage genomes.',
+        confidence: 0.99,
+        bbox: { x: 340, y: 600, width: 240, height: 35 },
+      },
+      keyResults: {
+        pageNumber: 1,
+        sectionName: 'Section 3.5 (Phylogenetics)',
+        snippetQuote: 'Phylogenetic analysis classified both phages as novel members of the Siphoviridae family.',
+        reasoning: 'Extracted taxonomic classification result.',
+        confidence: 0.93,
         bbox: { x: 340, y: 580, width: 220, height: 35 },
       },
     },
@@ -371,6 +423,7 @@ export const useGridStore = create<GridState>((set) => ({
   setSelectedColumnField: (field) => set({ selectedColumnField: field }),
   setFocusedCell: (cell) => set({ focusedCell: cell }),
   setActiveEvidence: (evidence) => set({ activeEvidence: evidence }),
+  setActiveCitation: (citation) => set({ activeCitation: citation }),
 
   reorderRows: (sourceIndex, destinationIndex) =>
     set(

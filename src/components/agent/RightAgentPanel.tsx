@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, Terminal } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Terminal, FileText, Lightbulb } from 'lucide-react';
 import { useAgentStore } from '../../store/useAgentStore';
+import { useGridStore } from '../../store/useGridStore';
 
 export const RightAgentPanel: React.FC = () => {
   const { messages, isThinking, sendMessage, selectOption } = useAgentStore();
+  const { activeCitation, focusedCell } = useGridStore();
   const [inputPrompt, setInputPrompt] = useState('');
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
@@ -34,6 +36,70 @@ export const RightAgentPanel: React.FC = () => {
           <Bot size={14} color="var(--accent-primary)" /> AGENTIC AI COMMAND CENTER
         </span>
       </div>
+
+      {/* Cell Evidence & AI Reasoning Inspector Card */}
+      {focusedCell && activeCitation && (
+        <div
+          style={{
+            margin: '10px 10px 0 10px',
+            background: 'var(--bg-tertiary)',
+            border: '1px solid var(--accent-primary)',
+            borderRadius: '8px',
+            padding: '10px 12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '6px',
+              fontSize: '11px',
+              fontWeight: 700,
+              color: 'var(--accent-primary)',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Lightbulb size={13} color="#f9e2af" /> AI CELL REASONING
+            </span>
+            <span
+              style={{
+                fontSize: '10px',
+                background: 'rgba(166, 227, 161, 0.2)',
+                color: 'var(--accent-success)',
+                padding: '1px 6px',
+                borderRadius: '10px',
+                border: '1px solid var(--accent-success)',
+              }}
+            >
+              {Math.round(activeCitation.confidence * 100)}% Confidence
+            </span>
+          </div>
+
+          <div style={{ fontSize: '11px', color: 'var(--text-primary)', marginBottom: '8px', lineHeight: '1.4' }}>
+            <strong>💡 Reasoning:</strong> {activeCitation.reasoning}
+          </div>
+
+          <div
+            style={{
+              background: 'var(--bg-secondary)',
+              borderLeft: '3px solid var(--accent-primary)',
+              padding: '6px 8px',
+              borderRadius: '4px',
+              fontSize: '10px',
+              color: 'var(--text-secondary)',
+              fontStyle: 'italic',
+              marginBottom: '8px',
+            }}
+          >
+            <div style={{ fontWeight: 600, fontStyle: 'normal', color: 'var(--text-primary)', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <FileText size={11} /> Source: {activeCitation.sectionName} (Page {activeCitation.pageNumber})
+            </div>
+            "{activeCitation.snippetQuote}"
+          </div>
+        </div>
+      )}
 
       <div className="agent-stream-container" style={{ flex: 1, padding: '12px', overflowY: 'auto' }}>
         {messages.map((msg) => (

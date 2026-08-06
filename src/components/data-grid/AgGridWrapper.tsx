@@ -101,6 +101,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     setSelectedColumnField,
     setFocusedCell,
     setActiveEvidence,
+    setActiveCitation,
   } = useGridStore();
 
   const [newColName, setNewColName] = useState('');
@@ -302,10 +303,15 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
           } else {
             setActiveEvidence(null);
           }
+          if (row.citationMap && row.citationMap[colId]) {
+            setActiveCitation(row.citationMap[colId]);
+          } else {
+            setActiveCitation(null);
+          }
         }
       }
     },
-    [rowData, setFocusedCell, setActiveEvidence]
+    [rowData, setFocusedCell, setActiveEvidence, setActiveCitation]
   );
 
   const getRowHeight = useCallback(

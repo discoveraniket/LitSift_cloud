@@ -4,6 +4,15 @@ export interface EvidenceLocation {
   bbox?: { x: number; y: number; width: number; height: number };
 }
 
+export interface CellCitation {
+  pageNumber: number;
+  sectionName: string;
+  snippetQuote: string;
+  reasoning: string;
+  confidence: number;
+  bbox?: { x: number; y: number; width: number; height: number };
+}
+
 export interface SchemaColumn {
   field: string;
   headerName: string;
@@ -15,7 +24,8 @@ export interface GridRow {
   pdfId: string;
   pdfTitle: string;
   aiStatus: 'Confirmed' | 'Pending Review';
-  evidenceMap?: Record<string, EvidenceLocation>; // Maps column field -> PDF Evidence Location
+  evidenceMap?: Record<string, EvidenceLocation>;
+  citationMap?: Record<string, CellCitation>; // Maps column field -> Rich Cell Citation
   [key: string]: any;
 }
 
@@ -26,6 +36,7 @@ export interface GridState {
   selectedColumnField?: string;
   focusedCell?: { rowId: string; field: string } | null;
   activeEvidence?: EvidenceLocation | null;
+  activeCitation?: CellCitation | null;
   
   // Actions
   updateCell: (rowId: string, field: string, value: any) => void;
@@ -44,5 +55,6 @@ export interface GridState {
   setSelectedColumnField: (field?: string) => void;
   setFocusedCell: (cell: { rowId: string; field: string } | null) => void;
   setActiveEvidence: (evidence: EvidenceLocation | null) => void;
+  setActiveCitation: (citation: CellCitation | null) => void;
   reorderRows: (sourceIndex: number, destinationIndex: number) => void;
 }
