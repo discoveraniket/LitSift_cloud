@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { produce } from 'immer';
 import { AgentState, AgentMessage } from '../types/agent';
-import { useGridStore } from './useGridStore';
+import { processAgentInteraction } from '../services/geminiService';
 
 const initialMessages: AgentMessage[] = [
   {
@@ -31,51 +31,20 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       })
     );
 
-    // Simulate Agent Tool Execution Engine based on prompt keywords
-    setTimeout(() => {
-      const lower = text.toLowerCase();
-      const gridStore = useGridStore.getState();
-
-      let agentText = '';
-      let toolCall = undefined;
-      let options = undefined;
-
-      if (lower.includes('extract') || lower.includes('methodology') || lower.includes('data')) {
-        toolCall = {
-          name: 'extract_schema_data',
-          description: 'Extracted key findings and methodology from 38094623.pdf',
-          status: 'completed' as const,
-        };
-        agentText = 'Extracted new research findings from 38094623.pdf into the data grid. Please review the highlighted pending row.';
-        gridStore.addRow('pdf-1', '38094623.pdf');
-      } else if (lower.includes('split')) {
-        toolCall = {
-          name: 'propose_split_cell',
-          description: 'Split row 1 cell content into distinct entry rows',
-          status: 'completed' as const,
-        };
-        agentText = 'Proposed splitting row 1 methodology into two distinct sub-rows. Edits are highlighted in gold for your confirmation.';
-        gridStore.addRow('pdf-1', '38094623.pdf');
-      } else if (lower.includes('schema') || lower.includes('column')) {
-        toolCall = {
-          name: 'generate_schema',
-          description: 'Generated new schema column based on research prompt',
-          status: 'completed' as const,
-        };
-        agentText = 'Generated new schema column "Clinical Implications". Added to grid layout.';
-        gridStore.addColumn('Clinical Implications');
-      } else {
-        agentText = 'Which section of 38094623.pdf would you like me to process?';
-        options = ['Full Paper Methodology', 'Key Experimental Results', 'Author Limitations'];
-      }
-
+    // Execute Live Gemini 3.6 Interactions Engine
+    processAgentInteraction(text).then((result) => {
       const agentMsg: AgentMessage = {
         id: `msg-${Date.now() + 1}`,
         sender: 'agent',
-        text: agentText,
+        text: result.replyText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        toolCall,
-        options,
+        toolCall: result.toolExecuted
+          ? {
+              name: result.toolExecuted.name,
+              description: result.toolExecuted.description,
+              status: 'completed',
+            }
+          : undefined,
       };
 
       set(
@@ -84,7 +53,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           state.isThinking = false;
         })
       );
-    }, 900);
+    });
   },
 
   selectOption: (optionText: string) => {
