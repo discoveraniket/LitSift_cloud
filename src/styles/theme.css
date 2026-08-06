@@ -475,6 +475,65 @@ body {
   margin-top: 2px;
 }
 
+/* VS Code Explorer Tree Styling */
+.vscode-tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+.vscode-tree-header:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.vscode-action-icon {
+  opacity: 0.7;
+  padding: 2px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vscode-action-icon:hover {
+  opacity: 1;
+  background: var(--bg-tertiary);
+  color: var(--accent-primary);
+}
+
+.vscode-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 5px 18px;
+  font-size: 11px;
+  color: var(--text-primary);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.vscode-tree-item:hover {
+  background: var(--bg-hover);
+}
+
+.vscode-tree-item.active {
+  background: var(--bg-tertiary);
+  border-left-color: var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
 /* Central Viewer */
 .central-viewer {
   background: var(--bg-primary);

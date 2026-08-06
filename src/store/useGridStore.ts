@@ -484,6 +484,54 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
+  importCsvDataset: (headers, parsedRows) =>
+    set(
+      produce((state: GridState) => {
+        saveSnapshot(state);
+
+        // Convert CSV headers to SchemaColumn format
+        const newCols: SchemaColumn[] = headers.map((h) => {
+          const cleanHeader = h.trim();
+          let field = cleanHeader.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (!field) field = `col_${Math.random().toString(36).substring(2, 6)}`;
+          if (field === 'document' || field === 'title' || field === 'pdf') field = 'pdfTitle';
+          return {
+            field,
+            headerName: cleanHeader,
+            editable: true,
+          };
+        });
+
+        // Ensure pdfTitle exists as first column
+        if (!newCols.some((c) => c.field === 'pdfTitle')) {
+          newCols.unshift({ field: 'pdfTitle', headerName: 'Document', editable: true });
+        }
+
+        // Map parsed CSV rows into GridRow structure
+        const newRows: GridRow[] = parsedRows.map((r, i) => {
+          const rowObj: GridRow = {
+            id: `imported-${Date.now()}-${i}`,
+            pdfId: `pdf-imported-${i}`,
+            pdfTitle: r.pdfTitle || r.Document || r.Title || r.filename || `Imported_Paper_${i + 1}.pdf`,
+            aiStatus: 'Confirmed',
+          };
+
+          newCols.forEach((col) => {
+            if (r[col.headerName] !== undefined) {
+              rowObj[col.field] = r[col.headerName];
+            } else if (r[col.field] !== undefined) {
+              rowObj[col.field] = r[col.field];
+            }
+          });
+
+          return rowObj;
+        });
+
+        state.columns = newCols;
+        state.rows = newRows;
+      })
+    ),
+
   reorderRows: (sourceIndex, destinationIndex) =>
     set(
       produce((state: GridState) => {

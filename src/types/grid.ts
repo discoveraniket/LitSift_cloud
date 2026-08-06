@@ -65,5 +65,6 @@ export interface GridState {
   setActiveEvidence: (evidence: EvidenceLocation | null) => void;
   setActiveCitation: (citation: CellCitation | null) => void;
   addCellDiscussionMessage: (rowId: string, field: string, userText: string) => void;
+  importCsvDataset: (headers: string[], parsedRows: Record<string, any>[]) => void;
   reorderRows: (sourceIndex: number, destinationIndex: number) => void;
 }
