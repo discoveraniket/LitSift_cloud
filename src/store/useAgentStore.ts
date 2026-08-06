@@ -94,5 +94,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     get().sendMessage(optionText);
   },
 
-  clearMessages: () => set({ messages: initialMessages }),
+  clearMessages: () =>
+    set({
+      messages: [
+        {
+          id: `msg-${Date.now()}`,
+          sender: 'agent',
+          text: 'Fresh session started. LitSift Agent is ready for new paper extractions and table edits!',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ],
+    }),
 }));

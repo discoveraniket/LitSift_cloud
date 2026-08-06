@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, Terminal, FileText, Lightbulb } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Terminal, FileText, Lightbulb, Trash2 } from 'lucide-react';
 import { useAgentStore } from '../../store/useAgentStore';
 import { useGridStore } from '../../store/useGridStore';
 
 export const RightAgentPanel: React.FC = () => {
-  const { messages, isThinking, sendMessage, selectOption } = useAgentStore();
+  const { messages, isThinking, sendMessage, selectOption, clearMessages } = useAgentStore();
   const { activeCitation, focusedCell, addCellDiscussionMessage } = useGridStore();
   const [inputPrompt, setInputPrompt] = useState('');
   const chatBottomRef = useRef<HTMLDivElement>(null);
@@ -39,10 +39,31 @@ export const RightAgentPanel: React.FC = () => {
 
   return (
     <aside className="panel right-agent">
-      <div className="panel-header">
+      <div className="panel-header" style={{ justifyContent: 'space-between' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Bot size={14} color="var(--accent-primary)" /> AGENTIC AI COMMAND CENTER
         </span>
+        <button
+          onClick={() => clearMessages()}
+          title="Clear Chat History & Start Fresh Session"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            fontSize: '11px',
+            padding: '2px 6px',
+            borderRadius: '4px',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-danger)')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+        >
+          <Trash2 size={13} />
+          <span>Clear Chat</span>
+        </button>
       </div>
 
       {/* Minimal Read-Only AI Cell Reasoning Card */}
