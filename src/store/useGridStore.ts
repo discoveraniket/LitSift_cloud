@@ -2,133 +2,9 @@ import { create } from 'zustand';
 import { produce } from 'immer';
 import { GridState, SchemaColumn, GridRow } from '../types/grid';
 
-const initialColumns: SchemaColumn[] = [
-  { field: 'pdfTitle', headerName: 'Document', editable: true },
-  { field: 'methodology', headerName: 'Methodology', editable: true },
-  { field: 'sampleSize', headerName: 'Sample Size', editable: true },
-  { field: 'keyResults', headerName: 'Key Results', editable: true },
-  { field: 'limitations', headerName: 'Limitations', editable: true },
-];
+const initialColumns: SchemaColumn[] = [];
 
-const initialRows: GridRow[] = [
-  {
-    id: 'row-1',
-    pdfId: 'pdf-1',
-    pdfTitle: '38094623.pdf',
-    methodology: 'Bacteriophage isolation & Disc Diffusion Method',
-    sampleSize: 'MDR Shigella strains (Sfln-2 & Sfln-6)',
-    keyResults: 'Broad-spectrum lytic activity reducing bacterial load on raw chicken',
-    limitations: 'Specific host-range limitations for non-Shigella serotypes',
-    aiStatus: 'Pending Review',
-    evidenceMap: {
-      methodology: {
-        pageNumber: 1,
-        snippetText: 'Characterizations of novel broad-spectrum lytic bacteriophages Sfln-2 and Sfln-6',
-        bbox: { x: 340, y: 190, width: 260, height: 60 },
-      },
-      sampleSize: {
-        pageNumber: 1,
-        snippetText: 'infecting MDR Shigella spp.',
-        bbox: { x: 340, y: 250, width: 220, height: 40 },
-      },
-      keyResults: {
-        pageNumber: 1,
-        snippetText: 'their application on raw chicken to reduce the Shigella load',
-        bbox: { x: 340, y: 280, width: 250, height: 40 },
-      },
-    },
-    citationMap: {
-      methodology: {
-        pageNumber: 1,
-        sectionName: 'Abstract & Section 2.1 (Phage Isolation)',
-        snippetQuote: 'Characterizations of novel broad-spectrum lytic bacteriophages Sfln-2 and Sfln-6 infecting MDR Shigella spp.',
-        reasoning: 'Extracted isolation protocols for Sfln-2 and Sfln-6 because disc diffusion assays proved lytic activity across multidrug-resistant Shigella isolates.',
-        confidence: 0.96,
-        bbox: { x: 340, y: 190, width: 260, height: 60 },
-      },
-      sampleSize: {
-        pageNumber: 1,
-        sectionName: 'Section 2.2 (Bacterial Strains & Growth)',
-        snippetQuote: 'Bacteriophage activity evaluated against clinical MDR Shigella flexneri and Shigella sonnei strains.',
-        reasoning: 'Identified Sfln-2 & Sfln-6 target strains from experimental strain table.',
-        confidence: 0.94,
-        bbox: { x: 340, y: 250, width: 220, height: 40 },
-      },
-      keyResults: {
-        pageNumber: 1,
-        sectionName: 'Abstract (Biocontrol Results)',
-        snippetQuote: 'Application of bacteriophages on raw chicken reduced Shigella load by over 2.5 log10 CFU/g.',
-        reasoning: 'Selected 2.5 log reduction on raw chicken meat as the primary biocontrol efficacy key result.',
-        confidence: 0.98,
-        bbox: { x: 340, y: 280, width: 250, height: 40 },
-      },
-    },
-  },
-  {
-    id: 'row-2',
-    pdfId: 'pdf-1',
-    pdfTitle: '38094623.pdf',
-    methodology: 'Genomic Sequencing & Phylogenetic Tree Analysis',
-    sampleSize: '50,390 bp (Sfln-2) & 50,523 bp (Sfln-6)',
-    keyResults: 'Identified novel T1-like phages within Siphoviridae family',
-    limitations: 'Endotoxin removal required prior to clinical application',
-    aiStatus: 'Confirmed',
-    evidenceMap: {
-      methodology: {
-        pageNumber: 1,
-        snippetText: 'Phage genome sequencing and bioinformatic characterization',
-        bbox: { x: 340, y: 640, width: 240, height: 45 },
-      },
-      sampleSize: {
-        pageNumber: 1,
-        snippetText: 'Genome size 50,390 bp and 50,523 bp',
-        bbox: { x: 340, y: 600, width: 240, height: 35 },
-      },
-      keyResults: {
-        pageNumber: 1,
-        snippetText: 'Siphoviridae family with isometric head',
-        bbox: { x: 340, y: 580, width: 220, height: 35 },
-      },
-    },
-    citationMap: {
-      methodology: {
-        pageNumber: 1,
-        sectionName: 'Section 3.4 (Genomic Architecture)',
-        snippetQuote: 'Whole-genome sequencing performed via Illumina NovaSeq followed by bioinformatic annotation.',
-        reasoning: 'Extracted sequencing methodology used to verify absence of toxin/antibiotic resistance genes.',
-        confidence: 0.95,
-        bbox: { x: 340, y: 640, width: 240, height: 45 },
-      },
-      sampleSize: {
-        pageNumber: 1,
-        sectionName: 'Section 3.4 (Genome Features)',
-        snippetQuote: 'The double-stranded DNA genomes of Sfln-2 and Sfln-6 contain 50,390 bp and 50,523 bp respectively.',
-        reasoning: 'Extracted exact base pair length metrics for both bacteriophage genomes.',
-        confidence: 0.99,
-        bbox: { x: 340, y: 600, width: 240, height: 35 },
-      },
-      keyResults: {
-        pageNumber: 1,
-        sectionName: 'Section 3.5 (Phylogenetics)',
-        snippetQuote: 'Phylogenetic analysis classified both phages as novel members of the Siphoviridae family.',
-        reasoning: 'Extracted taxonomic classification result.',
-        confidence: 0.93,
-        bbox: { x: 340, y: 580, width: 220, height: 35 },
-      },
-    },
-  },
-  {
-    id: 'draft-row-initial',
-    pdfId: 'pdf-1',
-    pdfTitle: '38094623.pdf',
-    methodology: '',
-    sampleSize: '',
-    keyResults: '',
-    limitations: '',
-    aiStatus: 'Confirmed',
-    isDraftRow: true,
-  },
-];
+const initialRows: GridRow[] = [];
 
 interface GridSnapshot {
   columns: SchemaColumn[];
@@ -489,7 +365,7 @@ export const useGridStore = create<GridState>((set) => ({
       produce((state: GridState) => {
         saveSnapshot(state);
 
-        // Convert CSV headers to SchemaColumn format
+        // Convert CSV headers to SchemaColumn format strictly as defined in the CSV
         const newCols: SchemaColumn[] = headers.map((h) => {
           const cleanHeader = h.trim();
           let field = cleanHeader.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -502,17 +378,12 @@ export const useGridStore = create<GridState>((set) => ({
           };
         });
 
-        // Ensure pdfTitle exists as first column
-        if (!newCols.some((c) => c.field === 'pdfTitle')) {
-          newCols.unshift({ field: 'pdfTitle', headerName: 'Document', editable: true });
-        }
-
         // Map parsed CSV rows into GridRow structure
         const newRows: GridRow[] = parsedRows.map((r, i) => {
           const rowObj: GridRow = {
             id: `imported-${Date.now()}-${i}`,
             pdfId: `pdf-imported-${i}`,
-            pdfTitle: r.pdfTitle || r.Document || r.Title || r.filename || `Imported_Paper_${i + 1}.pdf`,
+            pdfTitle: r.pdfTitle || r.Document || r.Title || r.filename || '',
             aiStatus: 'Confirmed',
           };
 
@@ -581,7 +452,13 @@ export const useGridStore = create<GridState>((set) => ({
     set(
       produce((state: GridState) => {
         saveSnapshot(state);
+        state.columns = [];
         state.rows = [];
+        state.selectedRowIds = [];
+        state.selectedColumnField = undefined;
+        state.focusedCell = null;
+        state.activeCitation = null;
+        state.activeEvidence = null;
       })
     ),
 

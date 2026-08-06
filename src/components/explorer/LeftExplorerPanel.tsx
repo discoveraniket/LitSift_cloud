@@ -9,6 +9,7 @@ import {
   FileText,
   Table,
   Download,
+  Trash2,
 } from 'lucide-react';
 
 interface LeftExplorerPanelProps {
@@ -96,25 +97,43 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
         return rowObj;
       });
 
-      // Save pending CSV import payload globally in window or pass to agent store
-      (window as any).__pendingCsvImport = { headers, parsedRows, filename: file.name };
+      const gridStore = useGridStore.getState();
+      const hasExistingData = gridStore.rows.length > 0 || gridStore.columns.length > 0;
 
-      // Dispatch interactive choice message to Agent Command Center
-      useAgentStore.setState((state) => ({
-        messages: [
-          ...state.messages,
-          {
-            id: `msg-${Date.now()}`,
-            sender: 'agent',
-            text: `📥 CSV File "${file.name}" ready for import (${parsedRows.length} rows, ${headers.length} columns). How would you like to handle your open table?`,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            options: [
-              `👉 Append to current table (${file.name})`,
-              `👉 Replace current table (${file.name})`,
-            ],
-          },
-        ],
-      }));
+      if (!hasExistingData) {
+        // Automatically import immediately if table is currently empty
+        gridStore.importCsvDataset(headers, parsedRows);
+        useAgentStore.setState((state) => ({
+          messages: [
+            ...state.messages,
+            {
+              id: `msg-${Date.now()}`,
+              sender: 'agent',
+              text: `📥 Automatically imported "${file.name}" (${parsedRows.length} rows, ${headers.length} columns) into master data grid.`,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            },
+          ],
+        }));
+      } else {
+        // Save pending CSV import payload and prompt user only if a table already exists
+        (window as any).__pendingCsvImport = { headers, parsedRows, filename: file.name };
+
+        useAgentStore.setState((state) => ({
+          messages: [
+            ...state.messages,
+            {
+              id: `msg-${Date.now()}`,
+              sender: 'agent',
+              text: `📥 CSV File "${file.name}" ready for import (${parsedRows.length} rows, ${headers.length} columns). How would you like to handle your open table?`,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              options: [
+                `👉 Append to current table (${file.name})`,
+                `👉 Replace current table (${file.name})`,
+              ],
+            },
+          ],
+        }));
+      }
 
       onOpenMasterGrid();
       setActiveItem('master-grid');
@@ -271,13 +290,6 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
 
           {schemasOpen && (
             <div style={{ padding: '4px 8px 4px 18px' }}>
-              <div className="schema-card" style={{ marginBottom: '8px' }}>
-                <span className="schema-name">Standard Research Schema</span>
-                <span className="schema-fields">
-                  {columns.map((c) => c.headerName).join(', ')}
-                </span>
-              </div>
-
               <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
                 <button
                   className="vscode-tree-item"
@@ -308,6 +320,25 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                 >
                   <Download size={12} />
                   <span>Export CSV Dataset</span>
+                </button>
+
+                <button
+                  className="vscode-tree-item"
+                  style={{
+                    marginTop: '6px',
+                    background: 'rgba(243, 139, 168, 0.15)',
+                    border: '1px solid var(--accent-danger)',
+                    color: 'var(--accent-danger)',
+                    borderRadius: '4px',
+                    padding: '6px 8px',
+                    justifyContent: 'center',
+                    fontWeight: 600,
+                  }}
+                  onClick={() => useGridStore.getState().clearTable()}
+                  title="Clear entire table schema and all rows (Can be undone via Ctrl+Z)"
+                >
+                  <Trash2 size={12} />
+                  <span>Clear Entire Table</span>
                 </button>
               </div>
             </div>
