@@ -4,6 +4,13 @@ export interface EvidenceLocation {
   bbox?: { x: number; y: number; width: number; height: number };
 }
 
+export interface CellCitationMessage {
+  id: string;
+  sender: 'user' | 'agent';
+  text: string;
+  timestamp: string;
+}
+
 export interface CellCitation {
   pageNumber: number;
   sectionName: string;
@@ -11,6 +18,7 @@ export interface CellCitation {
   reasoning: string;
   confidence: number;
   bbox?: { x: number; y: number; width: number; height: number };
+  history?: CellCitationMessage[];
 }
 
 export interface SchemaColumn {
@@ -56,5 +64,6 @@ export interface GridState {
   setFocusedCell: (cell: { rowId: string; field: string } | null) => void;
   setActiveEvidence: (evidence: EvidenceLocation | null) => void;
   setActiveCitation: (citation: CellCitation | null) => void;
+  addCellDiscussionMessage: (rowId: string, field: string, userText: string) => void;
   reorderRows: (sourceIndex: number, destinationIndex: number) => void;
 }

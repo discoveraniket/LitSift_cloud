@@ -5,16 +5,24 @@ import { useGridStore } from '../../store/useGridStore';
 
 export const RightAgentPanel: React.FC = () => {
   const { messages, isThinking, sendMessage, selectOption } = useAgentStore();
-  const { activeCitation, focusedCell } = useGridStore();
+  const { activeCitation, focusedCell, addCellDiscussionMessage } = useGridStore();
   const [inputPrompt, setInputPrompt] = useState('');
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputPrompt.trim() && !isThinking) {
+    if (!inputPrompt.trim() || isThinking) return;
+
+    if (focusedCell) {
+      // If a cell is focused, dispatch the discussion to the cell's citation & grid store
+      addCellDiscussionMessage(focusedCell.rowId, focusedCell.field, inputPrompt.trim());
+      // Also send message to the main chat stream for a unified conversation history
+      sendMessage(`[Cell: ${focusedCell.field}] ${inputPrompt.trim()}`);
+    } else {
       sendMessage(inputPrompt.trim());
-      setInputPrompt('');
     }
+
+    setInputPrompt('');
   };
 
   const handleChipClick = (promptText: string) => {
@@ -37,7 +45,7 @@ export const RightAgentPanel: React.FC = () => {
         </span>
       </div>
 
-      {/* Cell Evidence & AI Reasoning Inspector Card */}
+      {/* Minimal Read-Only AI Cell Reasoning Card */}
       {focusedCell && activeCitation && (
         <div
           style={{
@@ -90,7 +98,6 @@ export const RightAgentPanel: React.FC = () => {
               fontSize: '10px',
               color: 'var(--text-secondary)',
               fontStyle: 'italic',
-              marginBottom: '8px',
             }}
           >
             <div style={{ fontWeight: 600, fontStyle: 'normal', color: 'var(--text-primary)', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -178,15 +185,15 @@ export const RightAgentPanel: React.FC = () => {
                       onClick={() => selectOption(opt)}
                       style={{
                         background: 'var(--bg-secondary)',
-                        border: '1px solid var(--accent-primary)',
                         color: 'var(--accent-primary)',
+                        border: '1px solid var(--accent-primary)',
                         borderRadius: '6px',
                         padding: '6px 10px',
                         fontSize: '11px',
-                        fontWeight: 600,
                         textAlign: 'left',
                         cursor: 'pointer',
-                        transition: 'background 0.15s ease',
+                        fontWeight: 500,
+                        transition: 'all 0.2s ease',
                       }}
                     >
                       👉 {opt}
@@ -199,20 +206,21 @@ export const RightAgentPanel: React.FC = () => {
         ))}
 
         {isThinking && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-primary)', fontSize: '11px', fontStyle: 'italic' }}>
-            <Sparkles size={13} className="spin-icon" /> Agent is processing document and tool calls...
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--accent-primary)', fontStyle: 'italic', padding: '6px 0' }}>
+            <Sparkles size={14} className="spin-icon" /> Agent is reasoning & executing tools...
           </div>
         )}
 
         <div ref={chatBottomRef} />
       </div>
 
-      {/* Preset Quick Prompt Chips */}
-      <div style={{ padding: '6px 10px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-tertiary)', display: 'flex', gap: '6px', overflowX: 'auto' }}>
+      {/* Suggested Quick Prompt Chips */}
+      <div style={{ padding: '0 8px 6px 8px', display: 'flex', gap: '6px', overflowX: 'auto' }}>
         <button
-          onClick={() => handleChipClick('Extract methodology and key findings')}
+          onClick={() => handleChipClick('Extract paper data from 38094623.pdf')}
+          disabled={isThinking}
           style={{
-            background: 'var(--bg-secondary)',
+            background: 'var(--bg-tertiary)',
             border: '1px solid var(--border-subtle)',
             color: 'var(--text-secondary)',
             borderRadius: '12px',
@@ -222,12 +230,13 @@ export const RightAgentPanel: React.FC = () => {
             cursor: 'pointer',
           }}
         >
-          ⚡ Extract Methodology
+          ⚡ Extract Data
         </button>
         <button
-          onClick={() => handleChipClick('Split row 1 cell findings')}
+          onClick={() => handleChipClick('Split row 1 cell content into sub-rows')}
+          disabled={isThinking}
           style={{
-            background: 'var(--bg-secondary)',
+            background: 'var(--bg-tertiary)',
             border: '1px solid var(--border-subtle)',
             color: 'var(--text-secondary)',
             borderRadius: '12px',
@@ -237,12 +246,13 @@ export const RightAgentPanel: React.FC = () => {
             cursor: 'pointer',
           }}
         >
-          ✂️ Split Row Cell
+          ✂️ Split Cell Content
         </button>
         <button
-          onClick={() => handleChipClick('Generate schema for clinical implications')}
+          onClick={() => handleChipClick('Generate custom schema column for Host Range')}
+          disabled={isThinking}
           style={{
-            background: 'var(--bg-secondary)',
+            background: 'var(--bg-tertiary)',
             border: '1px solid var(--border-subtle)',
             color: 'var(--text-secondary)',
             borderRadius: '12px',
@@ -256,19 +266,24 @@ export const RightAgentPanel: React.FC = () => {
         </button>
       </div>
 
+      {/* Single Unified Prompt Form */}
       <form className="agent-input-form" onSubmit={handleSend} style={{ padding: '8px', borderTop: '1px solid var(--border-subtle)' }}>
         <div className="input-group" style={{ display: 'flex', gap: '6px' }}>
           <input
             type="text"
             className="agent-prompt-input"
-            placeholder="Type command e.g. 'split row 1' or 'extract data'..."
+            placeholder={
+              focusedCell
+                ? `Discuss cell "${focusedCell.field}"... (e.g. 'page 2 mentions sequencing')`
+                : "Type command e.g. 'split row 1' or 'extract data'..."
+            }
             value={inputPrompt}
             onChange={(e) => setInputPrompt(e.target.value)}
             disabled={isThinking}
             style={{
               flex: 1,
               background: 'var(--bg-secondary)',
-              border: '1px solid var(--border-subtle)',
+              border: focusedCell ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
               color: 'var(--text-primary)',
               padding: '8px 10px',
               borderRadius: '6px',

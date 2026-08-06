@@ -425,6 +425,65 @@ export const useGridStore = create<GridState>((set) => ({
   setActiveEvidence: (evidence) => set({ activeEvidence: evidence }),
   setActiveCitation: (citation) => set({ activeCitation: citation }),
 
+  addCellDiscussionMessage: (rowId, field, userText) =>
+    set(
+      produce((state: GridState) => {
+        saveSnapshot(state);
+        const row = state.rows.find((r) => r.id === rowId);
+        if (!row) return;
+
+        if (!row.citationMap) row.citationMap = {};
+        if (!row.citationMap[field]) {
+          row.citationMap[field] = {
+            pageNumber: 1,
+            sectionName: 'User Discussion',
+            snippetQuote: String(row[field] || ''),
+            reasoning: 'Manual/Discussion entry',
+            confidence: 0.9,
+          };
+        }
+
+        const citation = row.citationMap[field];
+        if (!citation.history) citation.history = [];
+
+        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        citation.history.push({
+          id: `msg-${Date.now()}`,
+          sender: 'user',
+          text: userText,
+          timestamp: now,
+        });
+
+        // Simulate agent reasoning & cell value mutation
+        const lower = userText.toLowerCase();
+        let agentResponseText = '';
+        let updatedValue = row[field];
+
+        if (lower.includes('genomic') || lower.includes('sequencing') || lower.includes('page 2')) {
+          updatedValue = `${row[field]} & Illumina NovaSeq Genomic Sequencing`;
+          citation.reasoning = `Updated methodology based on user clarification and Page 2 genomic sequencing protocols.`;
+          agentResponseText = `Understood! Added Genomic Sequencing from Page 2 to the cell value and updated the reasoning explanation.`;
+          row.aiStatus = 'Pending Review';
+        } else if (lower.includes('split')) {
+          agentResponseText = `I recommend using the ✂️ Split Row action button to separate these into distinct rows.`;
+        } else {
+          agentResponseText = `Duly noted! Updated the cell context to reflect your note: "${userText}".`;
+          citation.reasoning = `Refined based on user note: "${userText}".`;
+        }
+
+        row[field] = updatedValue;
+
+        citation.history.push({
+          id: `msg-${Date.now() + 1}`,
+          sender: 'agent',
+          text: agentResponseText,
+          timestamp: now,
+        });
+
+        state.activeCitation = { ...citation };
+      })
+    ),
+
   reorderRows: (sourceIndex, destinationIndex) =>
     set(
       produce((state: GridState) => {
