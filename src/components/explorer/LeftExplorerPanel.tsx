@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useGridStore } from '../../store/useGridStore';
+import { useAgentStore } from '../../store/useAgentStore';
 import {
   ChevronDown,
   ChevronRight,
@@ -19,7 +20,7 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   onSelectPdf,
   onOpenMasterGrid,
 }) => {
-  const { columns, rows, importCsvDataset } = useGridStore();
+  const { columns, rows } = useGridStore();
 
   const [viewsOpen, setViewsOpen] = useState(true);
   const [papersOpen, setPapersOpen] = useState(true);
@@ -95,11 +96,32 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
         return rowObj;
       });
 
-      importCsvDataset(headers, parsedRows);
+      // Save pending CSV import payload globally in window or pass to agent store
+      (window as any).__pendingCsvImport = { headers, parsedRows, filename: file.name };
+
+      // Dispatch interactive choice message to Agent Command Center
+      useAgentStore.setState((state) => ({
+        messages: [
+          ...state.messages,
+          {
+            id: `msg-${Date.now()}`,
+            sender: 'agent',
+            text: `📥 CSV File "${file.name}" ready for import (${parsedRows.length} rows, ${headers.length} columns). How would you like to handle your open table?`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            options: [
+              `👉 Append to current table (${file.name})`,
+              `👉 Replace current table (${file.name})`,
+            ],
+          },
+        ],
+      }));
+
       onOpenMasterGrid();
       setActiveItem('master-grid');
     };
     reader.readAsText(file);
+    // Reset file input value so user can re-upload same file if needed
+    e.target.value = '';
   };
 
   const handleExportCsv = () => {

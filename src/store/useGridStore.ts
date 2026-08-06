@@ -532,6 +532,59 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
+  appendCsvDataset: (headers, parsedRows) =>
+    set(
+      produce((state: GridState) => {
+        saveSnapshot(state);
+
+        // Check for new headers and add missing columns to schema
+        const existingHeaders = state.columns.map((c) => c.headerName.toLowerCase());
+
+        headers.forEach((h) => {
+          const cleanHeader = h.trim();
+          if (!existingHeaders.includes(cleanHeader.toLowerCase())) {
+            let field = cleanHeader.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (!field) field = `col_${Math.random().toString(36).substring(2, 6)}`;
+            state.columns.push({
+              field,
+              headerName: cleanHeader,
+              editable: true,
+            });
+          }
+        });
+
+        // Append new rows
+        const appendedRows: GridRow[] = parsedRows.map((r, i) => {
+          const rowObj: GridRow = {
+            id: `imported-${Date.now()}-${i}`,
+            pdfId: `pdf-imported-${i}`,
+            pdfTitle: r.pdfTitle || r.Document || r.Title || r.filename || `Imported_Paper_${i + 1}.pdf`,
+            aiStatus: 'Confirmed',
+          };
+
+          state.columns.forEach((col) => {
+            if (r[col.headerName] !== undefined) {
+              rowObj[col.field] = r[col.headerName];
+            } else if (r[col.field] !== undefined) {
+              rowObj[col.field] = r[col.field];
+            }
+          });
+
+          return rowObj;
+        });
+
+        state.rows.push(...appendedRows);
+      })
+    ),
+
+  clearTable: () =>
+    set(
+      produce((state: GridState) => {
+        saveSnapshot(state);
+        state.rows = [];
+      })
+    ),
+
   reorderRows: (sourceIndex, destinationIndex) =>
     set(
       produce((state: GridState) => {

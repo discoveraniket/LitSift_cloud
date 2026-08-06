@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { produce } from 'immer';
 import { AgentState, AgentMessage } from '../types/agent';
 import { processAgentInteraction } from '../services/geminiService';
+import { useGridStore } from './useGridStore';
 
 const initialMessages: AgentMessage[] = [
   {
@@ -57,7 +58,40 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 
   selectOption: (optionText: string) => {
-    get().sendMessage(`Execute extraction for: ${optionText}`);
+    const pendingCsv = (window as any).__pendingCsvImport;
+    if (pendingCsv && optionText.toLowerCase().includes('append')) {
+      useGridStore.getState().appendCsvDataset(pendingCsv.headers, pendingCsv.parsedRows);
+      (window as any).__pendingCsvImport = null;
+      set(
+        produce((state: AgentState) => {
+          state.messages.push({
+            id: `msg-${Date.now()}`,
+            sender: 'agent',
+            text: `Appended ${pendingCsv.parsedRows.length} rows from "${pendingCsv.filename}" to your current table!`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          });
+        })
+      );
+      return;
+    }
+
+    if (pendingCsv && optionText.toLowerCase().includes('replace')) {
+      useGridStore.getState().importCsvDataset(pendingCsv.headers, pendingCsv.parsedRows);
+      (window as any).__pendingCsvImport = null;
+      set(
+        produce((state: AgentState) => {
+          state.messages.push({
+            id: `msg-${Date.now()}`,
+            sender: 'agent',
+            text: `Replaced open table with ${pendingCsv.parsedRows.length} rows from "${pendingCsv.filename}". (Previous table saved to Undo stack).`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          });
+        })
+      );
+      return;
+    }
+
+    get().sendMessage(optionText);
   },
 
   clearMessages: () => set({ messages: initialMessages }),

@@ -138,6 +138,15 @@ export const BottomGridPanel: React.FC<BottomGridPanelProps> = ({ activePdfId = 
             ↪ Redo
           </button>
 
+          {/* Clear Entire Table Button */}
+          <button
+            className="grid-action-btn danger"
+            onClick={() => useGridStore.getState().clearTable()}
+            title="Clear all rows in the master grid (Can be undone via Ctrl+Z)"
+          >
+            🧹 Clear Table
+          </button>
+
           {/* Dynamic AI Review status / buttons */}
           {hasPendingEdits ? (
             <>
