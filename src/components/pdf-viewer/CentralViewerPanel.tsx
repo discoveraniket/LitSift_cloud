@@ -4,6 +4,7 @@ import { PdfReader } from './PdfReader';
 
 interface CentralViewerPanelProps {
   activeView: 'pdf' | 'master_grid';
+  activePdfId?: string;
   activePdfTitle: string;
 }
 
@@ -16,6 +17,11 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
   const handleZoomIn = () => setZoomScale((prev) => Math.min(prev + 0.2, 2.5));
   const handleZoomOut = () => setZoomScale((prev) => Math.max(prev - 0.2, 0.6));
   const handleFitWidth = () => setZoomScale(1.1);
+
+  // Map PDF titles to URL (default to 38094623.pdf for demo research paper)
+  const pdfUrl = activePdfTitle.includes('38094623')
+    ? '/sample-pdfs/38094623.pdf'
+    : '/sample-pdfs/38094623.pdf';
 
   if (activeView === 'master_grid') {
     return (
@@ -44,7 +50,7 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
         </div>
       </div>
       <div className="viewer-placeholder-content" style={{ padding: 0, height: 'calc(100% - 32px)' }}>
-        <PdfReader pdfUrl="/sample-pdfs/38094623.pdf" zoomScale={zoomScale} />
+        <PdfReader key={activePdfTitle} pdfUrl={pdfUrl} zoomScale={zoomScale} />
       </div>
     </main>
   );

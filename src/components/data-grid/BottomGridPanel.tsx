@@ -3,10 +3,11 @@ import { AgGridWrapper } from './AgGridWrapper';
 import { useGridStore } from '../../store/useGridStore';
 
 interface BottomGridPanelProps {
+  activePdfId?: string;
   activePdfTitle: string;
 }
 
-export const BottomGridPanel: React.FC<BottomGridPanelProps> = ({ activePdfTitle }) => {
+export const BottomGridPanel: React.FC<BottomGridPanelProps> = ({ activePdfId = 'pdf-1', activePdfTitle }) => {
   const {
     rows,
     confirmAIEdits,
@@ -81,7 +82,7 @@ export const BottomGridPanel: React.FC<BottomGridPanelProps> = ({ activePdfTitle
   return (
     <footer className="panel bottom-grid">
       <div className="table-container">
-        <AgGridWrapper filterPdfId="pdf-1" activePdfTitle={activePdfTitle} isPreviewMode={true} />
+        <AgGridWrapper filterPdfId={activePdfId} activePdfTitle={activePdfTitle} isPreviewMode={true} />
       </div>
 
       <div className="grid-toolbar bottom-toolbar">

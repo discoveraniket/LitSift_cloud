@@ -1,3 +1,9 @@
+export interface EvidenceLocation {
+  pageNumber: number;
+  snippetText: string;
+  bbox?: { x: number; y: number; width: number; height: number };
+}
+
 export interface SchemaColumn {
   field: string;
   headerName: string;
@@ -9,6 +15,7 @@ export interface GridRow {
   pdfId: string;
   pdfTitle: string;
   aiStatus: 'Confirmed' | 'Pending Review';
+  evidenceMap?: Record<string, EvidenceLocation>; // Maps column field -> PDF Evidence Location
   [key: string]: any;
 }
 
@@ -18,6 +25,7 @@ export interface GridState {
   selectedRowIds: string[];
   selectedColumnField?: string;
   focusedCell?: { rowId: string; field: string } | null;
+  activeEvidence?: EvidenceLocation | null;
   
   // Actions
   updateCell: (rowId: string, field: string, value: any) => void;
@@ -35,5 +43,6 @@ export interface GridState {
   setSelectedRows: (rowIds: string[]) => void;
   setSelectedColumnField: (field?: string) => void;
   setFocusedCell: (cell: { rowId: string; field: string } | null) => void;
+  setActiveEvidence: (evidence: EvidenceLocation | null) => void;
   reorderRows: (sourceIndex: number, destinationIndex: number) => void;
 }

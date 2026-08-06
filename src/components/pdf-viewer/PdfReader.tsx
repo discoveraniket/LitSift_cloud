@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import { useGridStore } from '../../store/useGridStore';
 
 // Set pdfjs worker source using CDN fallback for browser runtime compatibility
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -14,6 +15,48 @@ export const PdfReader: React.FC<PdfReaderProps> = ({ pdfUrl, zoomScale }) => {
   const [numPages, setNumPages] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  const activeEvidence = useGridStore((state) => state.activeEvidence);
+
+  // Auto-scroll to activeEvidence page and highlight passage
+  useEffect(() => {
+    if (!activeEvidence || !containerRef.current) return;
+
+    const pageWrapper = containerRef.current.querySelector(
+      `[data-page-number="${activeEvidence.pageNumber}"]`
+    );
+
+    if (pageWrapper) {
+      pageWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      // Highlight passage box
+      const existingBox = pageWrapper.querySelector('.pdf-evidence-box');
+      if (!existingBox) {
+        const highlightBox = document.createElement('div');
+        highlightBox.className = 'pdf-evidence-box';
+        highlightBox.style.position = 'absolute';
+        highlightBox.style.top = activeEvidence.bbox
+          ? `${activeEvidence.bbox.y}px`
+          : '20%';
+        highlightBox.style.left = activeEvidence.bbox
+          ? `${activeEvidence.bbox.x}px`
+          : '10%';
+        highlightBox.style.width = activeEvidence.bbox
+          ? `${activeEvidence.bbox.width}px`
+          : '80%';
+        highlightBox.style.height = activeEvidence.bbox
+          ? `${activeEvidence.bbox.height}px`
+          : '40px';
+        highlightBox.style.background = 'rgba(137, 180, 250, 0.35)';
+        highlightBox.style.border = '2px solid var(--accent-primary)';
+        highlightBox.style.borderRadius = '4px';
+        highlightBox.style.pointerEvents = 'none';
+        highlightBox.style.boxShadow = '0 0 12px rgba(137, 180, 250, 0.8)';
+
+        pageWrapper.appendChild(highlightBox);
+      }
+    }
+  }, [activeEvidence]);
 
   useEffect(() => {
     let isMounted = true;
@@ -48,6 +91,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({ pdfUrl, zoomScale }) => {
             // Create wrapper container for page & highlight overlay
             const pageWrapper = document.createElement('div');
             pageWrapper.className = 'pdf-page-wrapper';
+            pageWrapper.setAttribute('data-page-number', String(pageNum));
             pageWrapper.style.position = 'relative';
             pageWrapper.style.marginBottom = '16px';
             pageWrapper.style.boxShadow = '0 4px 12px rgba(0,0,0,0.4)';
@@ -63,7 +107,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({ pdfUrl, zoomScale }) => {
 
             pageWrapper.appendChild(canvas);
 
-            // Mock evidence highlight bounding box overlay on Page 1
+            // Default evidence highlight bounding box overlay on Page 1
             if (pageNum === 1) {
               const highlightBox = document.createElement('div');
               highlightBox.className = 'pdf-evidence-box';
@@ -158,7 +202,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({ pdfUrl, zoomScale }) => {
         </div>
       )}
 
-      <div ref={containerRef} style={{ display: loading ? 'none' : 'block' }} />
+      <div ref={containerRef} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }} />
     </div>
   );
 };

@@ -7,7 +7,8 @@ import { BottomGridPanel } from '../data-grid/BottomGridPanel';
 
 export const WorkspaceLayout: React.FC = () => {
   const [activeView, setActiveView] = useState<'pdf' | 'master_grid'>('pdf');
-  const [activePdfTitle, setActivePdfTitle] = useState('Attention_Is_All_You_Need.pdf');
+  const [activePdfId, setActivePdfId] = useState('pdf-1');
+  const [activePdfTitle, setActivePdfTitle] = useState('38094623.pdf');
 
   // Side Panel Toggle States
   const [showLeftPanel, setShowLeftPanel] = useState(true);
@@ -21,7 +22,8 @@ export const WorkspaceLayout: React.FC = () => {
 
   const [isDragging, setIsDragging] = useState<string | null>(null);
 
-  const handleSelectPdf = (_id: string, title: string) => {
+  const handleSelectPdf = (id: string, title: string) => {
+    setActivePdfId(id);
     setActivePdfTitle(title);
     setActiveView('pdf');
   };
@@ -141,6 +143,7 @@ export const WorkspaceLayout: React.FC = () => {
           <div className="layout-col-center">
             <CentralViewerPanel
               activeView={activeView}
+              activePdfId={activePdfId}
               activePdfTitle={activePdfTitle}
             />
           </div>
@@ -165,7 +168,7 @@ export const WorkspaceLayout: React.FC = () => {
               onMouseDown={handleMouseDownBottom}
             />
             <div className="layout-row-bottom" style={{ height: `${bottomHeight}px` }}>
-              <BottomGridPanel activePdfTitle={activePdfTitle} />
+              <BottomGridPanel activePdfId={activePdfId} activePdfTitle={activePdfTitle} />
             </div>
           </>
         )}
