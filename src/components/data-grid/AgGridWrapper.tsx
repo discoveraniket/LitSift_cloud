@@ -109,10 +109,10 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   const [focusedRowIndex, setFocusedRowIndex] = useState<number | null>(null);
   const gridApiRef = useRef<any>(null);
 
-  // Filter rows if in scoped view
+  // Filter rows if in scoped view (show rows matching active PDF OR global/imported rows)
   const rowData = useMemo(() => {
     if (filterPdfId) {
-      return rows.filter((r) => r.pdfId === filterPdfId);
+      return rows.filter((r) => !r.pdfId || r.pdfId === filterPdfId || r.pdfId.startsWith('pdf-imported'));
     }
     return rows;
   }, [rows, filterPdfId]);
