@@ -135,7 +135,7 @@ async function executeToolCall(name: string, args: any): Promise<{ replyText: st
 
   if (name === 'extractPDFData' || name === 'extract_schema_data') {
     const activeCols = gridStore.columns;
-    const targetPdfTitle = args.pdfId || '38094623.pdf';
+    const targetPdfTitle = args.pdfId || 'Active Research Paper';
     const apiKey = getGeminiApiKey();
 
     if (activeCols.length > 0) {

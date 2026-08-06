@@ -217,7 +217,7 @@ export const RightAgentPanel: React.FC = () => {
       {/* Suggested Quick Prompt Chips */}
       <div style={{ padding: '0 8px 6px 8px', display: 'flex', gap: '6px', overflowX: 'auto' }}>
         <button
-          onClick={() => handleChipClick('Extract paper data from 38094623.pdf')}
+          onClick={() => handleChipClick('Extract paper data into table')}
           disabled={isThinking}
           style={{
             background: 'var(--bg-tertiary)',
