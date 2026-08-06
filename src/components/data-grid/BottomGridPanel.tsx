@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { AgGridWrapper } from './AgGridWrapper';
 import { useGridStore } from '../../store/useGridStore';
+import { useAgentStore } from '../../store/useAgentStore';
 
 interface BottomGridPanelProps {
   activePdfId?: string;
@@ -8,6 +9,7 @@ interface BottomGridPanelProps {
 }
 
 export const BottomGridPanel: React.FC<BottomGridPanelProps> = ({ activePdfId = 'pdf-1', activePdfTitle }) => {
+  const { sendMessage } = useAgentStore();
   const {
     rows,
     confirmAIEdits,
@@ -23,6 +25,10 @@ export const BottomGridPanel: React.FC<BottomGridPanelProps> = ({ activePdfId = 
     undo,
     redo,
   } = useGridStore();
+
+  const handleExtractData = () => {
+    sendMessage(`Extract paper data from ${activePdfTitle}`);
+  };
 
   const hasPendingEdits = rows.some((r) => r.aiStatus === 'Pending Review');
 
@@ -91,7 +97,9 @@ export const BottomGridPanel: React.FC<BottomGridPanelProps> = ({ activePdfId = 
         </span>
 
         <div className="grid-actions">
-          <button className="grid-action-btn primary">⚡ Extract Data</button>
+          <button className="grid-action-btn primary" onClick={handleExtractData}>
+            ⚡ Extract Data
+          </button>
 
           {/* Icon-Only Smart Delete Button */}
           <button

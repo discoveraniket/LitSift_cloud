@@ -1,4 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
+import { produce } from 'immer';
 import { useGridStore } from '../store/useGridStore';
 
 // Retrieve API key from environment variable (GEMINI_API_KEY) or localStorage fallback
@@ -78,118 +79,143 @@ export interface AgentExecutionResult {
 export async function processAgentInteraction(userPrompt: string): Promise<AgentExecutionResult> {
   const apiKey = getGeminiApiKey();
 
-  // If live key is present, execute via official @google/genai SDK
-  if (apiKey) {
-    try {
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: userPrompt }],
-          },
-        ],
-        config: {
-          systemInstruction:
-            'You are LitSift Agent, an expert academic literature agent. You can execute function calls to update table cells, split sub-rows, and add custom extraction schema columns.',
-          temperature: 0.2,
-          tools: [{ functionDeclarations: [updateCellDeclaration, splitRowDeclaration, addColumnDeclaration, extractPDFDataDeclaration] }],
-        },
-      });
-
-      const candidate = response.candidates?.[0];
-      const parts = candidate?.content?.parts || [];
-      const functionCalls = parts.filter((p) => p.functionCall);
-
-      if (functionCalls && functionCalls.length > 0) {
-        const fc = functionCalls[0].functionCall!;
-        const toolResult = executeToolCall(fc.name || '', fc.args || {});
-        return {
-          replyText: toolResult.replyText,
-          toolExecuted: {
-            name: fc.name || 'toolCall',
-            description: toolResult.summary,
-          },
-        };
-      }
-
-      const textPart = parts.find((p) => p.text)?.text || 'Interaction completed.';
-      return {
-        replyText: textPart,
-      };
-    } catch (err: any) {
-      console.warn('Gemini API call warning/fallback:', err);
-      // Fallback to local intelligent agent simulation if API call encounters network/quota limits
-      return executeMockAgentInteraction(userPrompt);
-    }
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is missing. Please set GEMINI_API_KEY in environment variables.');
   }
 
-  // Fallback to intelligent local execution if no API key is set
-  return executeMockAgentInteraction(userPrompt);
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: userPrompt }],
+        },
+      ],
+      config: {
+        systemInstruction:
+          'You are LitSift Agent, an expert academic literature agent. You can execute function calls to update table cells, split sub-rows, add custom extraction schema columns, or extract structured PDF data into the open schema.',
+        temperature: 0.2,
+        tools: [{ functionDeclarations: [updateCellDeclaration, splitRowDeclaration, addColumnDeclaration, extractPDFDataDeclaration] }],
+      },
+    });
+
+    const candidate = response.candidates?.[0];
+    const parts = candidate?.content?.parts || [];
+    const functionCalls = parts.filter((p) => p.functionCall);
+
+    if (functionCalls && functionCalls.length > 0) {
+      const fc = functionCalls[0].functionCall!;
+      const toolResult = await executeToolCall(fc.name || '', fc.args || {});
+      return {
+        replyText: toolResult.replyText,
+        toolExecuted: {
+          name: fc.name || 'toolCall',
+          description: toolResult.summary,
+        },
+      };
+    }
+
+    const textPart = parts.find((p) => p.text)?.text || 'Interaction completed.';
+    return {
+      replyText: textPart,
+    };
+  } catch (err: any) {
+    console.error('Gemini API Error:', err);
+    return {
+      replyText: `⚠️ Gemini API Error: ${err.message || 'Failed to communicate with Gemini API.'}`,
+    };
+  }
 }
 
 // Tool Call Execution Handler
-function executeToolCall(name: string, args: any): { replyText: string; summary: string } {
+async function executeToolCall(name: string, args: any): Promise<{ replyText: string; summary: string }> {
   const gridStore = useGridStore.getState();
 
   if (name === 'extractPDFData' || name === 'extract_schema_data') {
-    // Populate master table with paper extraction findings
-    const sampleHeaders = ['Document', 'Methodology', 'Sample Size', 'Key Results', 'Limitations'];
-    const sampleExtractedData = [
-      {
-        Document: '38094623.pdf',
-        Methodology: 'Bacteriophage isolation & Disc Diffusion Method',
-        'Sample Size': 'MDR Shigella strains (Sfln-2 & Sfln-6)',
-        'Key Results': 'Broad-spectrum lytic activity reducing bacterial load on raw chicken',
-        Limitations: 'Specific host-range limitations for non-Shigella serotypes',
-      },
-      {
-        Document: '38094623.pdf',
-        Methodology: 'Genomic Sequencing & Phylogenetic Tree Analysis',
-        'Sample Size': '50,390 bp (Sfln-2) & 50,523 bp (Sfln-6)',
-        'Key Results': 'Identified novel T1-like phages within Siphoviridae family',
-        Limitations: 'Endotoxin removal required prior to clinical application',
-      },
-    ];
+    const activeCols = gridStore.columns;
+    const targetPdfTitle = args.pdfId || '38094623.pdf';
+    const apiKey = getGeminiApiKey();
 
-    gridStore.importCsvDataset(sampleHeaders, sampleExtractedData);
+    if (activeCols.length > 0) {
+      const headers = activeCols.map((c) => c.headerName);
 
-    // Attach rich citation reasonings & evidence bounding boxes to the extracted rows
-    const row1 = gridStore.rows[0];
-    if (row1) {
-      row1.citationMap = {
-        methodology: {
-          pageNumber: 1,
-          sectionName: 'Abstract & Section 2.1 (Phage Isolation)',
-          snippetQuote: 'Characterizations of novel broad-spectrum lytic bacteriophages Sfln-2 and Sfln-6 infecting MDR Shigella spp.',
-          reasoning: 'Extracted isolation protocols for Sfln-2 and Sfln-6 because disc diffusion assays proved lytic activity across multidrug-resistant Shigella isolates.',
-          confidence: 0.96,
-          bbox: { x: 340, y: 190, width: 260, height: 60 },
-        },
-        sampleSize: {
-          pageNumber: 1,
-          sectionName: 'Section 2.2 (Bacterial Strains & Growth)',
-          snippetQuote: 'Bacteriophage activity evaluated against clinical MDR Shigella flexneri and Shigella sonnei strains.',
-          reasoning: 'Identified Sfln-2 & Sfln-6 target strains from experimental strain table.',
-          confidence: 0.94,
-          bbox: { x: 340, y: 250, width: 220, height: 40 },
-        },
-        keyResults: {
-          pageNumber: 1,
-          sectionName: 'Abstract (Biocontrol Results)',
-          snippetQuote: 'Application of bacteriophages on raw chicken reduced Shigella load by over 2.5 log10 CFU/g.',
-          reasoning: 'Selected 2.5 log reduction on raw chicken meat as the primary biocontrol efficacy key result.',
-          confidence: 0.98,
-          bbox: { x: 340, y: 280, width: 250, height: 40 },
-        },
-      };
-      gridStore.setActiveCitation(row1.citationMap.methodology);
+      if (!apiKey) {
+        throw new Error('GEMINI_API_KEY is missing. Unable to perform LLM extraction.');
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      const schemaPrompt = `You are extracting structured scientific findings from the research paper "${targetPdfTitle}".
+Extract concise values for the following schema columns:
+${headers.map((h, i) => `${i + 1}. "${h}"`).join('\n')}
+
+Return your response strictly as a JSON object with this exact key-value format:
+{
+  "extractions": {
+    ${headers.map((h) => `"${h}": "<Extracted value from paper>"`).join(',\n    ')}
+  },
+  "citations": {
+    "${headers[0]}": {
+      "pageNumber": 1,
+      "sectionName": "<Section Name>",
+      "snippetQuote": "<Exact quote from paper>",
+      "reasoning": "<Explanation of extracted value>"
+    }
+  }
+}`;
+
+      try {
+        const res = await ai.models.generateContent({
+          model: 'gemini-3.6-flash',
+          contents: [{ role: 'user', parts: [{ text: schemaPrompt }] }],
+          config: {
+            temperature: 0.1,
+            responseMimeType: 'application/json',
+          },
+        });
+
+        const text = res.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) {
+          throw new Error('Gemini API returned an empty extraction response.');
+        }
+
+        const parsed = JSON.parse(text);
+        const extractions = parsed.extractions || {};
+        const citations = parsed.citations || {};
+
+        gridStore.appendCsvDataset(headers, [extractions]);
+
+        useGridStore.setState(
+          produce((state: any) => {
+            const lastRow = state.rows[state.rows.length - 1];
+            if (lastRow) {
+              lastRow.citationMap = citations;
+              const firstField = activeCols[0].field;
+              if (citations[activeCols[0].headerName]) {
+                lastRow.citationMap[firstField] = citations[activeCols[0].headerName];
+                state.activeCitation = lastRow.citationMap[firstField];
+              }
+            }
+          })
+        );
+
+        return {
+          replyText: `✅ Live Gemini 3.6 Flash successfully extracted findings from "${targetPdfTitle}" and populated a new row into your data grid!`,
+          summary: `extractPDFData(${targetPdfTitle})`,
+        };
+      } catch (err: any) {
+        console.error('Gemini extraction error:', err);
+        return {
+          replyText: `❌ Extraction Failed: ${err.message || 'Error executing Gemini extraction call.'}`,
+          summary: `extractPDFData(${targetPdfTitle}) - FAILED`,
+        };
+      }
     }
 
     return {
-      replyText: `Extracted paper findings from 38094623.pdf into the master data grid! 2 rows populated with evidence bounding boxes.`,
-      summary: `extractPDFData(38094623.pdf)`,
+      replyText: `Please import a CSV schema or add columns first before extracting paper data.`,
+      summary: `extractPDFData(${targetPdfTitle})`,
     };
   }
 
@@ -200,15 +226,22 @@ function executeToolCall(name: string, args: any): { replyText: string; summary:
 
     if (row) {
       gridStore.updateCell(row.id, field || 'Methodology', newValue);
-      if (!row.citationMap) row.citationMap = {};
-      row.citationMap[field] = {
-        pageNumber: pageNumber || 1,
-        sectionName: sectionName || 'Section 2.1 (Phage Isolation)',
-        snippetQuote: snippetQuote || newValue,
-        reasoning: reasoning || 'Updated by Gemini Agent',
-        confidence: 0.96,
-      };
-      gridStore.setActiveCitation({ ...row.citationMap[field] });
+      useGridStore.setState(
+        produce((state: any) => {
+          const target = state.rows.find((r: any) => r.id === row.id);
+          if (target) {
+            if (!target.citationMap) target.citationMap = {};
+            target.citationMap[field] = {
+              pageNumber: pageNumber || 1,
+              sectionName: sectionName || 'Section 2.1 (Phage Isolation)',
+              snippetQuote: snippetQuote || newValue,
+              reasoning: reasoning || 'Updated by Gemini Agent',
+              confidence: 0.96,
+            };
+            state.activeCitation = target.citationMap[field];
+          }
+        })
+      );
     }
 
     return {
@@ -236,39 +269,5 @@ function executeToolCall(name: string, args: any): { replyText: string; summary:
   return {
     replyText: `Executed tool: ${name}`,
     summary: name,
-  };
-}
-
-// Fallback intelligent agent behavior for offline / keyless testing
-function executeMockAgentInteraction(userPrompt: string): AgentExecutionResult {
-  const lower = userPrompt.toLowerCase();
-
-  if (lower.includes('extract') || lower.includes('data') || lower.includes('38094623')) {
-    return executeToolCall('extractPDFData', { pdfId: '38094623.pdf' });
-  }
-
-  if (lower.includes('split')) {
-    return executeToolCall('splitRow', { rowId: '1' });
-  }
-
-  if (lower.includes('column') || lower.includes('schema') || lower.includes('add')) {
-    const colName = lower.includes('host') ? 'Host Range' : lower.includes('morphology') ? 'Morphology' : 'Custom Attribute';
-    return executeToolCall('addColumn', { headerName: colName });
-  }
-
-  if (lower.includes('sequencing') || lower.includes('page 2') || lower.includes('method')) {
-    return executeToolCall('updateCell', {
-      rowId: '1',
-      field: 'Methodology',
-      newValue: 'Bacteriophage isolation & Illumina NovaSeq Genomic Sequencing',
-      reasoning: 'Extracted genomic sequencing protocols from Page 2 Section 2.3.',
-      sectionName: 'Section 2.3 (Genome Sequencing)',
-      pageNumber: 2,
-      snippetQuote: 'Genomic DNA of Sfln-2 and Sfln-6 phages sequenced using Illumina NovaSeq platform.',
-    });
-  }
-
-  return {
-    replyText: `LitSift Agent processed command: "${userPrompt}". All table citations and document evidence remain in sync.`,
   };
 }
