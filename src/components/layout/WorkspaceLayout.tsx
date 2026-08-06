@@ -4,11 +4,13 @@ import { LeftExplorerPanel } from '../explorer/LeftExplorerPanel';
 import { CentralViewerPanel } from '../pdf-viewer/CentralViewerPanel';
 import { RightAgentPanel } from '../agent/RightAgentPanel';
 import { BottomGridPanel } from '../data-grid/BottomGridPanel';
+import { SettingsModal } from '../settings/SettingsModal';
 
 export const WorkspaceLayout: React.FC = () => {
   const [activeView, setActiveView] = useState<'pdf' | 'master_grid'>('pdf');
   const [activePdfId, setActivePdfId] = useState('pdf-1');
   const [activePdfTitle, setActivePdfTitle] = useState('38094623.pdf');
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Side Panel Toggle States
   const [showLeftPanel, setShowLeftPanel] = useState(true);
@@ -52,8 +54,9 @@ export const WorkspaceLayout: React.FC = () => {
     const startWidth = leftWidth;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const delta = moveEvent.clientX - startX;
-      setLeftWidth(Math.max(180, Math.min(600, startWidth + delta)));
+      const deltaX = moveEvent.clientX - startX;
+      const newWidth = Math.max(180, Math.min(500, startWidth + deltaX));
+      setLeftWidth(newWidth);
     };
 
     const handleMouseUp = () => {
@@ -73,8 +76,9 @@ export const WorkspaceLayout: React.FC = () => {
     const startWidth = rightWidth;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const delta = startX - moveEvent.clientX;
-      setRightWidth(Math.max(200, Math.min(600, startWidth + delta)));
+      const deltaX = startX - moveEvent.clientX;
+      const newWidth = Math.max(220, Math.min(600, startWidth + deltaX));
+      setRightWidth(newWidth);
     };
 
     const handleMouseUp = () => {
@@ -94,8 +98,9 @@ export const WorkspaceLayout: React.FC = () => {
     const startHeight = bottomHeight;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const delta = startY - moveEvent.clientY;
-      setBottomHeight(Math.max(120, Math.min(600, startHeight + delta)));
+      const deltaY = startY - moveEvent.clientY;
+      const newHeight = Math.max(120, Math.min(500, startHeight + deltaY));
+      setBottomHeight(newHeight);
     };
 
     const handleMouseUp = () => {
@@ -121,6 +126,7 @@ export const WorkspaceLayout: React.FC = () => {
         onToggleBottomPanel={() => setShowBottomPanel(!showBottomPanel)}
         onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
         onToggleZenMode={handleToggleZenMode}
+        onOpenSettings={() => setShowSettingsModal(true)}
       />
 
       <div className="workspace-body">
@@ -173,6 +179,11 @@ export const WorkspaceLayout: React.FC = () => {
           </>
         )}
       </div>
+
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+      />
     </div>
   );
 };

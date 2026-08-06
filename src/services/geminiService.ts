@@ -13,6 +13,15 @@ export function getGeminiApiKey(): string {
   return localStorage.getItem('LITSIFT_GEMINI_API_KEY') || '';
 }
 
+// Model Selection Helpers
+export function getSelectedGeminiModel(): string {
+  return localStorage.getItem('LITSIFT_SELECTED_MODEL') || 'gemini-3.6-flash';
+}
+
+export function setSelectedGeminiModel(modelId: string): void {
+  localStorage.setItem('LITSIFT_SELECTED_MODEL', modelId);
+}
+
 // Define Tool Declarations for Gemini Function Calling
 const updateCellDeclaration = {
   name: 'updateCell',
@@ -78,6 +87,7 @@ export interface AgentExecutionResult {
 
 export async function processAgentInteraction(userPrompt: string): Promise<AgentExecutionResult> {
   const apiKey = getGeminiApiKey();
+  const selectedModel = getSelectedGeminiModel();
 
   if (!apiKey) {
     throw new Error('GEMINI_API_KEY is missing. Please set GEMINI_API_KEY in environment variables.');
@@ -86,7 +96,7 @@ export async function processAgentInteraction(userPrompt: string): Promise<Agent
   try {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: selectedModel,
       contents: [
         {
           role: 'user',
@@ -137,6 +147,7 @@ async function executeToolCall(name: string, args: any): Promise<{ replyText: st
     const activeCols = gridStore.columns;
     const targetPdfTitle = args.pdfId || 'Active Research Paper';
     const apiKey = getGeminiApiKey();
+    const selectedModel = getSelectedGeminiModel();
 
     if (activeCols.length > 0) {
       const headers = activeCols.map((c) => c.headerName);
@@ -167,7 +178,7 @@ Return your response strictly as a JSON object with this exact key-value format:
 
       try {
         const res = await ai.models.generateContent({
-          model: 'gemini-3.6-flash',
+          model: selectedModel,
           contents: [{ role: 'user', parts: [{ text: schemaPrompt }] }],
           config: {
             temperature: 0.1,

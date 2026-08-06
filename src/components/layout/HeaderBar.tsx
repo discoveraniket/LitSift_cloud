@@ -1,5 +1,6 @@
 import React from 'react';
-import { PanelLeft, PanelBottom, PanelRight, Maximize2 } from 'lucide-react';
+import { PanelLeft, PanelBottom, PanelRight, Maximize2, Settings } from 'lucide-react';
+import { getSelectedGeminiModel } from '../../services/geminiService';
 
 interface HeaderBarProps {
   activeView: 'pdf' | 'master_grid';
@@ -12,6 +13,7 @@ interface HeaderBarProps {
   onToggleBottomPanel: () => void;
   onToggleRightPanel: () => void;
   onToggleZenMode: () => void;
+  onOpenSettings: () => void;
 }
 
 export const HeaderBar: React.FC<HeaderBarProps> = ({
@@ -25,7 +27,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onToggleBottomPanel,
   onToggleRightPanel,
   onToggleZenMode,
+  onOpenSettings,
 }) => {
+  const currentModel = getSelectedGeminiModel();
+
   return (
     <header className="header-bar">
       <div className="header-brand">
@@ -50,6 +55,16 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       </div>
 
       <div className="header-controls">
+        <button
+          className="layout-toggle-btn"
+          onClick={onOpenSettings}
+          title={`Configure AI Model & API Settings (Active: ${currentModel})`}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', fontSize: '11px' }}
+        >
+          <Settings size={15} color="var(--accent-primary)" />
+          <span style={{ fontSize: '11px', fontWeight: 600 }}>{currentModel}</span>
+        </button>
+
         <div className="status-indicator">
           <span className="status-dot online"></span>
           AI Ready
