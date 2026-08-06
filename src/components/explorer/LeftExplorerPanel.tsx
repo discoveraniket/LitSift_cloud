@@ -53,6 +53,19 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
           <span className="schema-name">Standard Research Schema (CSV)</span>
           <span className="schema-fields">Columns: Title, Authors, Methodology, Sample Size, Key Results</span>
         </div>
+        <button
+          className="explorer-item-btn"
+          style={{
+            marginTop: '10px',
+            background: 'var(--accent-primary)',
+            color: 'var(--bg-secondary)',
+            fontWeight: 600,
+            justifyContent: 'center',
+          }}
+          onClick={() => alert('Exporting dataset to CSV...')}
+        >
+          📥 Export CSV Dataset
+        </button>
       </div>
     </aside>
   );

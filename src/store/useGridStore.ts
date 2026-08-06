@@ -54,6 +54,25 @@ const initialRows: GridRow[] = [
   },
 ];
 
+interface GridSnapshot {
+  columns: SchemaColumn[];
+  rows: GridRow[];
+}
+
+const undoStack: GridSnapshot[] = [];
+const redoStack: GridSnapshot[] = [];
+
+const saveSnapshot = (state: GridState) => {
+  if (undoStack.length >= 25) {
+    undoStack.shift();
+  }
+  undoStack.push({
+    columns: JSON.parse(JSON.stringify(state.columns)),
+    rows: JSON.parse(JSON.stringify(state.rows)),
+  });
+  redoStack.length = 0; // Clear redo stack on new edit action
+};
+
 export const useGridStore = create<GridState>((set) => ({
   columns: initialColumns,
   rows: initialRows,
@@ -62,6 +81,7 @@ export const useGridStore = create<GridState>((set) => ({
   updateCell: (rowId, field, value) =>
     set(
       produce((state: GridState) => {
+        saveSnapshot(state);
         const row = state.rows.find((r) => r.id === rowId);
         if (row) {
           row[field] = value;
@@ -91,6 +111,7 @@ export const useGridStore = create<GridState>((set) => ({
   addRow: (pdfId = 'pdf-1', pdfTitle = 'Attention_Is_All_You_Need.pdf') =>
     set(
       produce((state: GridState) => {
+        saveSnapshot(state);
         const newRowId = `row-${Date.now()}`;
         const newRow: GridRow = {
           id: newRowId,
@@ -109,6 +130,7 @@ export const useGridStore = create<GridState>((set) => ({
   deleteRow: (rowId) =>
     set(
       produce((state: GridState) => {
+        saveSnapshot(state);
         state.rows = state.rows.filter((r) => r.id !== rowId);
       })
     ),
@@ -116,6 +138,7 @@ export const useGridStore = create<GridState>((set) => ({
   addColumn: (headerName) =>
     set(
       produce((state: GridState) => {
+        saveSnapshot(state);
         const field = headerName.toLowerCase().replace(/\s+/g, '_');
         if (!state.columns.some((c) => c.field === field)) {
           state.columns.push({ field, headerName, editable: true });
@@ -126,21 +149,147 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
+  renameColumn: (field, newHeaderName) =>
+    set(
+      produce((state: GridState) => {
+        saveSnapshot(state);
+        const col = state.columns.find((c) => c.field === field);
+        if (col && field !== 'pdfTitle') {
+          col.headerName = newHeaderName;
+        }
+      })
+    ),
+
   deleteColumn: (field) =>
     set(
       produce((state: GridState) => {
+        saveSnapshot(state);
         if (field !== 'pdfTitle') {
           state.columns = state.columns.filter((c) => c.field !== field);
           state.rows.forEach((row) => {
             delete row[field];
           });
+          if (state.selectedColumnField === field) {
+            state.selectedColumnField = undefined;
+          }
         }
+      })
+    ),
+
+  mergeSelectedRows: (rowIds) =>
+    set(
+      produce((state: GridState) => {
+        if (rowIds.length < 2) return;
+        const targetRows = state.rows.filter((r) => rowIds.includes(r.id) && !r.isDraftRow);
+        if (targetRows.length < 2) return;
+
+        saveSnapshot(state);
+        const firstRowIndex = state.rows.findIndex((r) => r.id === targetRows[0].id);
+        const mergedRow: GridRow = {
+          id: `row-${Date.now()}`,
+          pdfId: targetRows[0].pdfId,
+          pdfTitle: targetRows[0].pdfTitle,
+          aiStatus: 'Pending Review',
+        };
+
+        // Merge column values: deduplicate identical values & format bullet points with newlines
+        state.columns.forEach((col) => {
+          const rawVals = targetRows
+            .map((r) => r[col.field])
+            .filter((v) => v && v !== '-' && v !== '');
+
+          // Extract individual items if already bullet-separated or newline-separated
+          const expandedItems: string[] = [];
+          rawVals.forEach((val) => {
+            if (typeof val === 'string') {
+              const parts = val
+                .split(/\n|•/)
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0);
+              expandedItems.push(...parts);
+            } else {
+              expandedItems.push(String(val));
+            }
+          });
+
+          // Deduplicate items intelligently (case-sensitive exact match)
+          const uniqueItems = Array.from(new Set(expandedItems));
+
+          if (uniqueItems.length === 0) {
+            mergedRow[col.field] = '-';
+          } else if (uniqueItems.length === 1) {
+            mergedRow[col.field] = uniqueItems[0];
+          } else {
+            // Multiple distinct items: format with newlines and bullet points (\n• )
+            mergedRow[col.field] = uniqueItems.map((item) => `• ${item}`).join('\n');
+          }
+        });
+
+        // Remove original rows and insert merged row at the first position
+        state.rows = state.rows.filter((r) => !rowIds.includes(r.id));
+        state.rows.splice(firstRowIndex, 0, mergedRow);
+        state.selectedRowIds = [];
+      })
+    ),
+
+  splitSelectedRow: (rowId, targetField) =>
+    set(
+      produce((state: GridState) => {
+        const rowIndex = state.rows.findIndex((r) => r.id === rowId);
+        if (rowIndex === -1) return;
+        const sourceRow = state.rows[rowIndex];
+        if (sourceRow.isDraftRow) return;
+
+        // Find field to split (either targetField, or first multi-line / bullet / semicolon field)
+        let fieldToSplit = targetField;
+        if (!fieldToSplit) {
+          fieldToSplit = state.columns.find((col) => {
+            const val = sourceRow[col.field];
+            return typeof val === 'string' && (val.includes('\n') || val.includes('•') || val.includes(';'));
+          })?.field;
+        }
+
+        if (!fieldToSplit) {
+          fieldToSplit = 'methodology'; // default fallback
+        }
+
+        const rawVal = sourceRow[fieldToSplit] || '';
+        // Split by \n, •, or ;
+        const parts = rawVal
+          .split(/\n|•|;/)
+          .map((s: string) => s.trim())
+          .filter((s: string) => s.length > 0);
+
+        if (parts.length <= 1) {
+          // If no delimiters found, cleanly split string in half
+          const mid = Math.floor(rawVal.length / 2);
+          parts[0] = rawVal.slice(0, mid).trim() || 'Part 1';
+          parts[1] = rawVal.slice(mid).trim() || 'Part 2';
+        }
+
+        const newRowA: GridRow = {
+          ...sourceRow,
+          id: `row-${Date.now()}-a`,
+          [fieldToSplit]: parts[0],
+          aiStatus: 'Pending Review',
+        };
+
+        const newRowB: GridRow = {
+          ...sourceRow,
+          id: `row-${Date.now()}-b`,
+          [fieldToSplit]: parts.slice(1).join('\n• '),
+          aiStatus: 'Pending Review',
+        };
+
+        // Replace original row with split rows
+        state.rows.splice(rowIndex, 1, newRowA, newRowB);
       })
     ),
 
   confirmAIEdits: (rowId) =>
     set(
       produce((state: GridState) => {
+        saveSnapshot(state);
         if (rowId) {
           const row = state.rows.find((r) => r.id === rowId);
           if (row) row.aiStatus = 'Confirmed';
@@ -153,6 +302,7 @@ export const useGridStore = create<GridState>((set) => ({
   rejectAIEdits: (rowId) =>
     set(
       produce((state: GridState) => {
+        saveSnapshot(state);
         if (rowId) {
           state.rows = state.rows.filter((r) => r.id !== rowId);
         } else {
@@ -161,11 +311,46 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
+  undo: () =>
+    set(
+      produce((state: GridState) => {
+        if (undoStack.length === 0) return;
+        const currentSnap = {
+          columns: JSON.parse(JSON.stringify(state.columns)),
+          rows: JSON.parse(JSON.stringify(state.rows)),
+        };
+        redoStack.push(currentSnap);
+
+        const previousSnap = undoStack.pop()!;
+        state.columns = previousSnap.columns;
+        state.rows = previousSnap.rows;
+      })
+    ),
+
+  redo: () =>
+    set(
+      produce((state: GridState) => {
+        if (redoStack.length === 0) return;
+        const currentSnap = {
+          columns: JSON.parse(JSON.stringify(state.columns)),
+          rows: JSON.parse(JSON.stringify(state.rows)),
+        };
+        undoStack.push(currentSnap);
+
+        const nextSnap = redoStack.pop()!;
+        state.columns = nextSnap.columns;
+        state.rows = nextSnap.rows;
+      })
+    ),
+
   setSelectedRows: (rowIds) => set({ selectedRowIds: rowIds }),
+  setSelectedColumnField: (field) => set({ selectedColumnField: field }),
+  setFocusedCell: (cell) => set({ focusedCell: cell }),
 
   reorderRows: (sourceIndex, destinationIndex) =>
     set(
       produce((state: GridState) => {
+        saveSnapshot(state);
         const [movedRow] = state.rows.splice(sourceIndex, 1);
         state.rows.splice(destinationIndex, 0, movedRow);
       })

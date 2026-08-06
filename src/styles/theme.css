@@ -438,6 +438,22 @@ body {
   color: var(--accent-warning);
 }
 
+.pdf-evidence-box {
+  position: absolute;
+  background-color: rgba(249, 226, 175, 0.35);
+  border: 2px solid var(--accent-warning);
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 0 8px rgba(249, 226, 175, 0.4);
+}
+
+.ag-header-cell-selected {
+  background-color: rgba(137, 180, 250, 0.25) !important;
+  border-bottom: 2px solid var(--accent-primary) !important;
+  color: var(--accent-primary) !important;
+}
+
 .schema-card {
   background: var(--bg-tertiary);
   border: 1px dashed var(--border-subtle);

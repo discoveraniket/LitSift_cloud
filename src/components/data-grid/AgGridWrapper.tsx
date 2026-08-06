@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef, CellValueChangedEvent, CellFocusedEvent, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import { useGridStore } from '../../store/useGridStore';
@@ -11,15 +11,101 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 interface AgGridWrapperProps {
   filterPdfId?: string;
   activePdfTitle?: string;
+  isPreviewMode?: boolean;
 }
+
+const EditableHeader: React.FC<any> = (params) => {
+  const displayName = params.displayName || params.displayNameGetter?.() || params.column?.getColDef()?.headerName || '';
+  const field = params.field || params.column?.getColId() || '';
+  const onRename = params.onRename;
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [title, setTitle] = useState(displayName);
+
+  // Sync title if displayName prop updates from store
+  useEffect(() => {
+    setTitle(displayName);
+  }, [displayName]);
+
+  const handleFinish = () => {
+    setIsEditing(false);
+    if (title.trim() && title !== displayName) {
+      if (onRename) onRename(field, title.trim());
+    } else {
+      setTitle(displayName);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        style={{ width: '100%', display: 'flex', alignItems: 'center' }}
+      >
+        <input
+          type="text"
+          value={title}
+          autoFocus
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={handleFinish}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleFinish();
+            if (e.key === 'Escape') {
+              setTitle(displayName);
+              setIsEditing(false);
+            }
+          }}
+          style={{
+            width: '95%',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--accent-primary)',
+            color: 'var(--text-primary)',
+            fontSize: '11px',
+            padding: '2px 4px',
+            borderRadius: '3px',
+            outline: 'none',
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        setIsEditing(true);
+      }}
+      title="Double-click to rename column"
+      style={{ cursor: 'pointer', width: '100%', userSelect: 'none' }}
+    >
+      {displayName}
+    </div>
+  );
+};
 
 export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   filterPdfId,
+  isPreviewMode = false,
 }) => {
-  const { columns, rows, updateCell, confirmAIEdits, rejectAIEdits, addColumn } = useGridStore();
+  const {
+    columns,
+    rows,
+    updateCell,
+    addColumn,
+    renameColumn,
+    setSelectedRows,
+    selectedColumnField,
+    setSelectedColumnField,
+    setFocusedCell,
+  } = useGridStore();
+
   const [newColName, setNewColName] = useState('');
   const [showAddColInput, setShowAddColInput] = useState(false);
   const [focusedRowIndex, setFocusedRowIndex] = useState<number | null>(null);
+  const gridApiRef = useRef<any>(null);
 
   // Filter rows if in scoped view
   const rowData = useMemo(() => {
@@ -29,50 +115,72 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     return rows;
   }, [rows, filterPdfId]);
 
-  // Construct AG Grid column definitions
+  // Construct AG Grid column definitions using stable headerComponent reference
   const colDefs = useMemo<ColDef<GridRow>[]>(() => {
-    const dynamicCols: ColDef<GridRow>[] = columns.map((col) => ({
-      field: col.field,
-      headerName: col.headerName,
-      editable: true, // All cells are double-clickable and editable
-      sortable: true,
-      filter: true,
-      resizable: true,
-      autoHeight: true, // Allow cell height to expand for full content
-      cellStyle: (params) => {
-        const isFocusedRow = params.node.rowIndex === focusedRowIndex;
-        if (params.data?.aiStatus === 'Pending Review') {
-          return {
-            backgroundColor: 'rgba(249, 226, 175, 0.18)',
-            color: '#f9e2af',
-            opacity: 1,
-            fontStyle: 'normal',
-            whiteSpace: isFocusedRow ? 'normal' : 'nowrap',
-            wordBreak: isFocusedRow ? 'break-word' : 'normal',
-          };
-        }
-        if (params.data?.isDraftRow) {
+    const dynamicCols: ColDef<GridRow>[] = columns.map((col) => {
+      const isColSelected = isPreviewMode && selectedColumnField === col.field;
+      return {
+        field: col.field,
+        headerName: col.headerName,
+        headerComponent: EditableHeader,
+        headerComponentParams: {
+          displayName: col.headerName,
+          field: col.field,
+          onRename: renameColumn,
+        },
+        editable: true,
+        sortable: !isPreviewMode,
+        filter: !isPreviewMode,
+        suppressHeaderMenuButton: isPreviewMode,
+        resizable: true,
+        autoHeight: true,
+        headerClass: isColSelected ? 'ag-header-cell-selected' : '',
+        cellStyle: (params): any => {
+          const isFocusedRow = params.node.rowIndex === focusedRowIndex;
+          if (isColSelected) {
+            return {
+              backgroundColor: 'rgba(137, 180, 250, 0.18)',
+              color: 'var(--text-primary)',
+              borderLeft: '1px solid var(--accent-primary)',
+              borderRight: '1px solid var(--accent-primary)',
+              whiteSpace: isFocusedRow ? 'pre-wrap' : 'nowrap',
+              wordBreak: isFocusedRow ? 'break-word' : 'normal',
+              opacity: 1,
+              fontStyle: 'normal',
+            };
+          }
+          if (params.data?.aiStatus === 'Pending Review') {
+            return {
+              backgroundColor: 'rgba(249, 226, 175, 0.18)',
+              color: '#f9e2af',
+              opacity: 1,
+              fontStyle: 'normal',
+              whiteSpace: isFocusedRow ? 'pre-wrap' : 'nowrap',
+              wordBreak: isFocusedRow ? 'break-word' : 'normal',
+            };
+          }
+          if (params.data?.isDraftRow) {
+            return {
+              backgroundColor: 'transparent',
+              color: 'var(--text-secondary)',
+              opacity: 0.6,
+              fontStyle: 'italic',
+              whiteSpace: isFocusedRow ? 'pre-wrap' : 'nowrap',
+              wordBreak: isFocusedRow ? 'break-word' : 'normal',
+            };
+          }
           return {
             backgroundColor: 'transparent',
-            color: 'var(--text-secondary)',
-            opacity: 0.6,
-            fontStyle: 'italic',
-            whiteSpace: isFocusedRow ? 'normal' : 'nowrap',
+            color: 'var(--text-primary)',
+            opacity: 1,
+            fontStyle: 'normal',
+            whiteSpace: isFocusedRow ? 'pre-wrap' : 'nowrap',
             wordBreak: isFocusedRow ? 'break-word' : 'normal',
           };
-        }
-        return {
-          backgroundColor: 'transparent',
-          color: 'var(--text-primary)',
-          opacity: 1,
-          fontStyle: 'normal',
-          whiteSpace: isFocusedRow ? 'normal' : 'nowrap',
-          wordBreak: isFocusedRow ? 'break-word' : 'normal',
-        };
-      },
-    }));
+        },
+      };
+    });
 
-    // Slim, fixed & pinned row index column (#)
     const rowNumCol: ColDef<GridRow> = {
       headerName: '#',
       width: 50,
@@ -93,7 +201,6 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
       },
     };
 
-    // Add Column Header Button (Pinned at the far right of column headers)
     const addColCol: ColDef<GridRow> = {
       headerName: '+ Column',
       headerComponent: () => (
@@ -173,7 +280,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     };
 
     return [rowNumCol, ...dynamicCols, addColCol];
-  }, [columns, confirmAIEdits, rejectAIEdits, addColumn, showAddColInput, newColName, focusedRowIndex]);
+  }, [columns, addColumn, renameColumn, showAddColInput, newColName, focusedRowIndex, isPreviewMode, selectedColumnField]);
 
   const handleCellValueChanged = (event: CellValueChangedEvent<GridRow>) => {
     if (event.data && event.colDef.field) {
@@ -181,20 +288,48 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     }
   };
 
-  // Expand row height dynamically on selection/focus
-  const handleCellFocused = useCallback((event: CellFocusedEvent<GridRow>) => {
-    setFocusedRowIndex(event.rowIndex);
-  }, []);
+  const handleCellFocused = useCallback(
+    (event: CellFocusedEvent<GridRow>) => {
+      setFocusedRowIndex(event.rowIndex);
+      if (event.column && event.rowIndex !== null) {
+        const colId = typeof event.column === 'string' ? event.column : event.column.getColId();
+        const row = rowData[event.rowIndex];
+        if (row && colId) {
+          setFocusedCell({ rowId: row.id, field: colId });
+        }
+      }
+    },
+    [rowData, setFocusedCell]
+  );
 
   const getRowHeight = useCallback(
     (params: any) => {
       if (params.node.rowIndex === focusedRowIndex) {
-        return 60; // Expanded height for focused row so all content is readable
+        return 60;
       }
-      return 28; // Compact row height for unselected rows
+      return 28;
     },
     [focusedRowIndex]
   );
+
+  const onSelectionChanged = (event: any) => {
+    const selectedRows: GridRow[] = event.api.getSelectedRows();
+    const ids = selectedRows.map((r) => r.id);
+    setSelectedRows(ids);
+  };
+
+  // Header click handler for preview mode column selection
+  const onColumnHeaderClicked = (event: any) => {
+    if (!isPreviewMode) return;
+    const field = event.column?.getColId();
+    if (field && field !== 'pdfTitle' && field !== '#' && field !== '+ Column') {
+      if (selectedColumnField === field) {
+        setSelectedColumnField(undefined); // Toggle off if clicked twice
+      } else {
+        setSelectedColumnField(field);
+      }
+    }
+  };
 
   return (
     <div className="ag-theme-quartz-dark" style={{ height: '100%', width: '100%' }}>
@@ -202,18 +337,22 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         rowData={rowData}
         columnDefs={colDefs}
         defaultColDef={{
-          width: 180, // Standardized Excel cell width
+          width: 180,
           resizable: true,
-          sortable: true,
-          filter: true,
+          sortable: !isPreviewMode,
+          filter: !isPreviewMode,
           editable: true,
         }}
         rowDragManaged={true}
         suppressMoveWhenRowDragging={true}
         onCellValueChanged={handleCellValueChanged}
         onCellFocused={handleCellFocused}
+        onColumnHeaderClicked={onColumnHeaderClicked}
         getRowHeight={getRowHeight}
         animateRows={true}
+        rowSelection="multiple"
+        onSelectionChanged={onSelectionChanged}
+        ref={gridApiRef}
       />
     </div>
   );
