@@ -161,7 +161,7 @@ export const WorkspaceLayout: React.FC = () => {
                 onMouseDown={handleMouseDownRight}
               />
               <div className="layout-col-right" style={{ width: `${rightWidth}px` }}>
-                <RightAgentPanel />
+                <RightAgentPanel activePdfTitle={activePdfTitle} />
               </div>
             </>
           )}

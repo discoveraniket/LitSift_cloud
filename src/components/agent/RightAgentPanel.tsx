@@ -3,7 +3,11 @@ import { Send, Bot, User, Sparkles, Terminal, FileText, Lightbulb, Trash2 } from
 import { useAgentStore } from '../../store/useAgentStore';
 import { useGridStore } from '../../store/useGridStore';
 
-export const RightAgentPanel: React.FC = () => {
+interface RightAgentPanelProps {
+  activePdfTitle?: string;
+}
+
+export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle = 'Active Paper' }) => {
   const { messages, isThinking, sendMessage, selectOption, clearMessages } = useAgentStore();
   const { activeCitation, focusedCell, addCellDiscussionMessage } = useGridStore();
   const [inputPrompt, setInputPrompt] = useState('');
@@ -17,9 +21,9 @@ export const RightAgentPanel: React.FC = () => {
       // If a cell is focused, dispatch the discussion to the cell's citation & grid store
       addCellDiscussionMessage(focusedCell.rowId, focusedCell.field, inputPrompt.trim());
       // Also send message to the main chat stream for a unified conversation history
-      sendMessage(`[Cell: ${focusedCell.field}] ${inputPrompt.trim()}`);
+      sendMessage(`[Cell: ${focusedCell.field}] ${inputPrompt.trim()}`, activePdfTitle);
     } else {
-      sendMessage(inputPrompt.trim());
+      sendMessage(inputPrompt.trim(), activePdfTitle);
     }
 
     setInputPrompt('');
@@ -27,7 +31,7 @@ export const RightAgentPanel: React.FC = () => {
 
   const handleChipClick = (promptText: string) => {
     if (!isThinking) {
-      sendMessage(promptText);
+      sendMessage(promptText, activePdfTitle);
     }
   };
 

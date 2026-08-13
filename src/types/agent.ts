@@ -16,7 +16,7 @@ export interface AgentState {
   isThinking: boolean;
   
   // Actions
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string, activePdfTitle?: string) => void;
   selectOption: (optionText: string) => void;
   clearMessages: () => void;
 }

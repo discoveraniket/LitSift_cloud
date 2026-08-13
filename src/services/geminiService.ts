@@ -85,7 +85,7 @@ export interface AgentExecutionResult {
   };
 }
 
-export async function processAgentInteraction(userPrompt: string): Promise<AgentExecutionResult> {
+export async function processAgentInteraction(userPrompt: string, activePdfTitle: string = 'Active Paper'): Promise<AgentExecutionResult> {
   const apiKey = getGeminiApiKey();
   const selectedModel = getSelectedGeminiModel();
 
@@ -105,7 +105,7 @@ export async function processAgentInteraction(userPrompt: string): Promise<Agent
       ],
       config: {
         systemInstruction:
-          'You are LitSift Agent, an expert academic literature agent. You can execute function calls to update table cells, split sub-rows, add custom extraction schema columns, or extract structured PDF data into the open schema.',
+          `You are LitSift Agent, an intelligent academic literature assistant. The user is currently viewing the research paper "${activePdfTitle}". You excel at answering questions about the paper, summarizing abstracts, explaining findings, and executing function calls to extract structured data into the workspace data grid. Be helpful, concise, and academic in tone.`,
         temperature: 0.2,
         tools: [{ functionDeclarations: [updateCellDeclaration, splitRowDeclaration, addColumnDeclaration, extractPDFDataDeclaration] }],
       },

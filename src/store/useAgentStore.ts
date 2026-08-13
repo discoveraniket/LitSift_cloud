@@ -17,7 +17,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   messages: initialMessages,
   isThinking: false,
 
-  sendMessage: (text: string) => {
+  sendMessage: (text: string, activePdfTitle?: string) => {
     const userMsg: AgentMessage = {
       id: `msg-${Date.now()}`,
       sender: 'user',
@@ -32,8 +32,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       })
     );
 
-    // Execute Live Gemini 3.6 Interactions Engine
-    processAgentInteraction(text).then((result) => {
+    // Execute Live Gemini 3.6 Interactions Engine with active paper context
+    processAgentInteraction(text, activePdfTitle).then((result) => {
       const agentMsg: AgentMessage = {
         id: `msg-${Date.now() + 1}`,
         sender: 'agent',
