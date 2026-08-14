@@ -298,14 +298,20 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         const row = rowData[event.rowIndex];
         if (row && colId) {
           setFocusedCell({ rowId: row.id, field: colId });
-          if (row.evidenceMap && row.evidenceMap[colId]) {
+
+          const citation = row.citationMap ? row.citationMap[colId] : null;
+          if (citation) {
+            setActiveCitation(citation);
+            setActiveEvidence({
+              pageNumber: citation.pageNumber || 1,
+              snippetText: citation.snippetQuote || '',
+              bbox: citation.bbox,
+            });
+          } else if (row.evidenceMap && row.evidenceMap[colId]) {
             setActiveEvidence(row.evidenceMap[colId]);
+            setActiveCitation(null);
           } else {
             setActiveEvidence(null);
-          }
-          if (row.citationMap && row.citationMap[colId]) {
-            setActiveCitation(row.citationMap[colId]);
-          } else {
             setActiveCitation(null);
           }
         }

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useGridStore } from '../../store/useGridStore';
 import { useAgentStore } from '../../store/useAgentStore';
+import { usePdfStore } from '../../store/usePdfStore';
 import {
   ChevronDown,
   ChevronRight,
@@ -31,9 +32,7 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
-  const [availablePdfs, setAvailablePdfs] = useState<Array<{ id: string; name: string; status: string }>>([
-    { id: 'pdf-1', name: '38094623.pdf', status: 'Extracted' },
-  ]);
+  const { pdfs, addPdfFile, setActivePdf } = usePdfStore();
 
   // Handle PDF Upload
   const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -41,16 +40,10 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
     if (!files || files.length === 0) return;
 
     const file = files[0];
-    const newPdfId = `pdf-${Date.now()}`;
-    const newPdf = {
-      id: newPdfId,
-      name: file.name,
-      status: 'Pending',
-    };
-
-    setAvailablePdfs((prev) => [...prev, newPdf]);
-    onSelectPdf(newPdfId, file.name);
-    setActiveItem(newPdfId);
+    const newPdf = addPdfFile(file);
+    onSelectPdf(newPdf.id, newPdf.name);
+    setActiveItem(newPdf.id);
+    e.target.value = '';
   };
 
   // Handle CSV Upload (Custom Schema or Existing Dataset)
@@ -223,7 +216,7 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
         <div style={{ marginTop: '8px' }}>
           <div className="vscode-tree-header" onClick={() => setPapersOpen(!papersOpen)}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {papersOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} RESEARCH PAPERS ({availablePdfs.length})
+              {papersOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} RESEARCH PAPERS ({pdfs.length})
             </span>
             <span
               className="vscode-action-icon"
@@ -239,11 +232,12 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
 
           {papersOpen && (
             <div>
-              {availablePdfs.map((file) => (
+              {pdfs.map((file) => (
                 <div
                   key={file.id}
                   className={`vscode-tree-item ${activeItem === file.id ? 'active' : ''}`}
                   onClick={() => {
+                    setActivePdf(file.id);
                     onSelectPdf(file.id, file.name);
                     setActiveItem(file.id);
                   }}

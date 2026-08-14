@@ -16,6 +16,10 @@ const initialMessages: AgentMessage[] = [
 export const useAgentStore = create<AgentState>((set, get) => ({
   messages: initialMessages,
   isThinking: false,
+  mode: 'human_in_loop',
+  lastInteractionId: undefined,
+
+  setExecutionMode: (mode) => set({ mode }),
 
   sendMessage: (text: string, activePdfTitle?: string) => {
     const userMsg: AgentMessage = {

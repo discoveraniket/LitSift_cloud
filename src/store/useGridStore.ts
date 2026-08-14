@@ -2,9 +2,26 @@ import { create } from 'zustand';
 import { produce } from 'immer';
 import { GridState, SchemaColumn, GridRow } from '../types/grid';
 
-const initialColumns: SchemaColumn[] = [];
+const loadSavedColumns = (): SchemaColumn[] => {
+  try {
+    const saved = localStorage.getItem('LITSIFT_GRID_COLS');
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+};
 
-const initialRows: GridRow[] = [];
+const loadSavedRows = (): GridRow[] => {
+  try {
+    const saved = localStorage.getItem('LITSIFT_GRID_ROWS');
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+};
+
+const initialColumns: SchemaColumn[] = loadSavedColumns();
+const initialRows: GridRow[] = loadSavedRows();
 
 interface GridSnapshot {
   columns: SchemaColumn[];
@@ -13,6 +30,15 @@ interface GridSnapshot {
 
 const undoStack: GridSnapshot[] = [];
 const redoStack: GridSnapshot[] = [];
+
+const persistToStorage = (columns: SchemaColumn[], rows: GridRow[]) => {
+  try {
+    localStorage.setItem('LITSIFT_GRID_COLS', JSON.stringify(columns));
+    localStorage.setItem('LITSIFT_GRID_ROWS', JSON.stringify(rows));
+  } catch (err) {
+    console.warn('Failed to save grid state to localStorage:', err);
+  }
+};
 
 const saveSnapshot = (state: GridState) => {
   if (undoStack.length >= 25) {
@@ -23,6 +49,9 @@ const saveSnapshot = (state: GridState) => {
     rows: JSON.parse(JSON.stringify(state.rows)),
   });
   redoStack.length = 0; // Clear redo stack on new edit action
+
+  // Persist latest state asynchronously
+  setTimeout(() => persistToStorage(state.columns, state.rows), 50);
 };
 
 export const useGridStore = create<GridState>((set) => ({

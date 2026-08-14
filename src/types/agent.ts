@@ -14,9 +14,12 @@ export interface AgentMessage {
 export interface AgentState {
   messages: AgentMessage[];
   isThinking: boolean;
+  mode: 'human_in_loop' | 'autonomous_autopilot';
+  lastInteractionId?: string;
   
   // Actions
   sendMessage: (text: string, activePdfTitle?: string) => void;
   selectOption: (optionText: string) => void;
   clearMessages: () => void;
+  setExecutionMode: (mode: 'human_in_loop' | 'autonomous_autopilot') => void;
 }

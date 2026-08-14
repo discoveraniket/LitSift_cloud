@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, Terminal, FileText, Lightbulb, Trash2 } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Terminal, FileText, Lightbulb, Trash2, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { useAgentStore } from '../../store/useAgentStore';
 import { useGridStore } from '../../store/useGridStore';
+import { useLogStore } from '../../store/useLogStore';
 
 interface RightAgentPanelProps {
   activePdfTitle?: string;
@@ -10,17 +11,34 @@ interface RightAgentPanelProps {
 export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle = 'Active Paper' }) => {
   const { messages, isThinking, sendMessage, selectOption, clearMessages } = useAgentStore();
   const { activeCitation, focusedCell, addCellDiscussionMessage } = useGridStore();
+  const { logs, activeStep, isOpen: isLogOpen, toggleOpen, clearLogs } = useLogStore();
+
   const [inputPrompt, setInputPrompt] = useState('');
+  const [elapsed, setElapsed] = useState(0);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const logsBottomRef = useRef<HTMLDivElement>(null);
+
+  // Live timer during thinking / tool execution
+  useEffect(() => {
+    let interval: any;
+    if (isThinking) {
+      const start = Date.now();
+      interval = setInterval(() => {
+        setElapsed(Number(((Date.now() - start) / 1000).toFixed(1)));
+      }, 100);
+    } else {
+      setElapsed(0);
+    }
+    return () => clearInterval(interval);
+  }, [isThinking]);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputPrompt.trim() || isThinking) return;
 
     if (focusedCell) {
-      // If a cell is focused, dispatch the discussion to the cell's citation & grid store
       addCellDiscussionMessage(focusedCell.rowId, focusedCell.field, inputPrompt.trim());
-      // Also send message to the main chat stream for a unified conversation history
       sendMessage(`[Cell: ${focusedCell.field}] ${inputPrompt.trim()}`, activePdfTitle);
     } else {
       sendMessage(inputPrompt.trim(), activePdfTitle);
@@ -41,34 +59,135 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
     }
   }, [messages, isThinking]);
 
+  useEffect(() => {
+    if (isLogOpen && logsBottomRef.current && typeof logsBottomRef.current.scrollIntoView === 'function') {
+      logsBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs, isLogOpen]);
+
   return (
-    <aside className="panel right-agent">
+    <aside className="panel right-agent" style={{ display: 'flex', flexDirection: 'column', position: 'relative', height: '100%' }}>
+      {/* Panel Header */}
       <div className="panel-header" style={{ justifyContent: 'space-between' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Bot size={14} color="var(--accent-primary)" /> AGENTIC AI COMMAND CENTER
         </span>
-        <button
-          onClick={() => clearMessages()}
-          title="Clear Chat History & Start Fresh Session"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--text-secondary)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            fontSize: '11px',
-            padding: '2px 6px',
-            borderRadius: '4px',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-danger)')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
-        >
-          <Trash2 size={13} />
-          <span>Clear Chat</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            onClick={toggleOpen}
+            title="Toggle Live Debug & Execution Logs"
+            style={{
+              background: isLogOpen ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+              color: isLogOpen ? 'var(--bg-secondary)' : 'var(--text-secondary)',
+              border: '1px solid var(--border-subtle)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '10px',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              fontWeight: 600,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <Terminal size={11} />
+            <span>Logs ({logs.length})</span>
+          </button>
+
+          <button
+            onClick={() => clearMessages()}
+            title="Clear Chat History & Start Fresh Session"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '11px',
+              padding: '2px 4px',
+              borderRadius: '4px',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-danger)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
       </div>
+
+      {/* Embedded Live Execution Console Drawer */}
+      {isLogOpen && (
+        <div
+          style={{
+            maxHeight: '220px',
+            minHeight: '140px',
+            background: '#11111b',
+            borderBottom: '2px solid var(--accent-primary)',
+            padding: '8px',
+            overflowY: 'auto',
+            fontFamily: 'monospace',
+            fontSize: '10px',
+            color: '#cdd6f4',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.6)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', borderBottom: '1px solid #313244', paddingBottom: '4px' }}>
+            <span style={{ color: 'var(--accent-primary)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Terminal size={11} /> LIVE EXECUTION LOGS
+            </span>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                onClick={clearLogs}
+                style={{ background: 'transparent', border: 'none', color: '#6c7086', cursor: 'pointer', fontSize: '9px' }}
+                title="Clear Logs"
+              >
+                Clear
+              </button>
+              <button
+                onClick={toggleOpen}
+                style={{ background: 'transparent', border: 'none', color: '#a6adc8', cursor: 'pointer' }}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          </div>
+
+          {logs.length === 0 ? (
+            <div style={{ color: '#6c7086', fontStyle: 'italic', padding: '6px 0' }}>No execution events logged yet. Trigger an extraction or query.</div>
+          ) : (
+            logs.map((log) => (
+              <div key={log.id} style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: `2px solid ${log.level === 'error' ? '#f38ba8' : log.level === 'success' ? '#a6e3a1' : log.level === 'warn' ? '#f9e2af' : '#89b4fa'}`, paddingLeft: '6px', margin: '2px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ color: log.level === 'error' ? '#f38ba8' : log.level === 'success' ? '#a6e3a1' : log.level === 'warn' ? '#f9e2af' : '#89b4fa', fontWeight: 600 }}>
+                    [{log.timestamp}] {log.message}
+                  </span>
+                  {log.details && (
+                    <button
+                      onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
+                      style={{ background: 'transparent', border: 'none', color: '#89b4fa', cursor: 'pointer', fontSize: '9px', display: 'flex', alignItems: 'center' }}
+                    >
+                      {expandedLogId === log.id ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                      <span>payload</span>
+                    </button>
+                  )}
+                </div>
+                {log.details && expandedLogId === log.id && (
+                  <pre style={{ background: '#181825', padding: '4px', borderRadius: '4px', overflowX: 'auto', color: '#bac2de', fontSize: '9px', margin: '2px 0' }}>
+                    {JSON.stringify(log.details, null, 2)}
+                  </pre>
+                )}
+              </div>
+            ))
+          )}
+          <div ref={logsBottomRef} />
+        </div>
+      )}
 
       {/* Minimal Read-Only AI Cell Reasoning Card */}
       {focusedCell && activeCitation && (
@@ -133,6 +252,7 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
         </div>
       )}
 
+      {/* Main Chat Stream */}
       <div className="agent-stream-container" style={{ flex: 1, padding: '12px', overflowY: 'auto' }}>
         {messages.map((msg) => (
           <div
@@ -230,19 +350,51 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
           </div>
         ))}
 
-        {isThinking && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--accent-primary)', fontStyle: 'italic', padding: '6px 0' }}>
-            <Sparkles size={14} className="spin-icon" /> Agent is reasoning & executing tools...
-          </div>
-        )}
-
         <div ref={chatBottomRef} />
       </div>
+
+      {/* Live Execution Progress Banner with Live Timer */}
+      {isThinking && (
+        <div
+          style={{
+            margin: '0 8px 8px 8px',
+            background: 'rgba(137, 180, 250, 0.12)',
+            border: '1px solid var(--accent-primary)',
+            borderRadius: '8px',
+            padding: '8px 12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '11px',
+            color: 'var(--accent-primary)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
+            <Sparkles size={14} className="spin-icon" />
+            <span>{activeStep || 'Agent is executing & querying Gemini...'}</span>
+          </div>
+          <span
+            style={{
+              fontSize: '10px',
+              background: 'var(--bg-secondary)',
+              color: 'var(--text-primary)',
+              padding: '2px 8px',
+              borderRadius: '12px',
+              border: '1px solid var(--border-subtle)',
+              fontFamily: 'monospace',
+              fontWeight: 700,
+            }}
+          >
+            ⏱️ {elapsed}s
+          </span>
+        </div>
+      )}
 
       {/* Suggested Quick Prompt Chips */}
       <div style={{ padding: '0 8px 6px 8px', display: 'flex', gap: '6px', overflowX: 'auto' }}>
         <button
-          onClick={() => handleChipClick('Extract paper data into table')}
+          onClick={() => handleChipClick('Extract paper data')}
           disabled={isThinking}
           style={{
             background: 'var(--bg-tertiary)',
@@ -336,3 +488,5 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
     </aside>
   );
 };
+
+export default RightAgentPanel;
