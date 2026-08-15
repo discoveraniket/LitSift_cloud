@@ -21,9 +21,9 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
   const handleZoomOut = () => setZoomScale((prev) => Math.max(prev - 0.2, 0.6));
   const handleFitWidth = () => setZoomScale(1.1);
 
-  // Retrieve matching PDF url from usePdfStore or fallback to sample PDF
+  // Retrieve matching PDF url from usePdfStore
   const foundPdf = pdfs.find((p) => p.id === activePdfId || p.name === activePdfTitle);
-  const pdfUrl = foundPdf?.url || '/sample-pdfs/38094623.pdf';
+  const pdfUrl = foundPdf?.url || '';
 
   if (activeView === 'master_grid') {
     return (
@@ -42,17 +42,43 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
     <main className="panel central-viewer pdf-mode">
       <div className="viewer-header">
         <span>DOCUMENT VIEWER: {activePdfTitle}</span>
-        <div className="viewer-controls">
-          <button className="control-btn" onClick={handleZoomOut}>Zoom Out (-)</button>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', padding: '0 4px' }}>
-            {Math.round(zoomScale * 100)}%
-          </span>
-          <button className="control-btn" onClick={handleZoomIn}>Zoom In (+)</button>
-          <button className="control-btn" onClick={handleFitWidth}>Fit Width</button>
-        </div>
+        {pdfUrl && (
+          <div className="viewer-controls">
+            <button className="control-btn" onClick={handleZoomOut}>Zoom Out (-)</button>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', padding: '0 4px' }}>
+              {Math.round(zoomScale * 100)}%
+            </span>
+            <button className="control-btn" onClick={handleZoomIn}>Zoom In (+)</button>
+            <button className="control-btn" onClick={handleFitWidth}>Fit Width</button>
+          </div>
+        )}
       </div>
       <div className="viewer-placeholder-content" style={{ padding: 0, height: 'calc(100% - 32px)' }}>
-        <PdfReader key={activePdfTitle} pdfUrl={pdfUrl} zoomScale={zoomScale} />
+        {pdfUrl ? (
+          <PdfReader key={activePdfTitle} pdfUrl={pdfUrl} zoomScale={zoomScale} />
+        ) : (
+          <div
+            style={{
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--text-secondary)',
+              gap: '12px',
+              padding: '24px',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '32px' }}>📄</div>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+              No Research Paper Selected
+            </div>
+            <div style={{ fontSize: '12px', maxWidth: '360px', lineHeight: 1.5 }}>
+              Upload a research PDF using the <strong>+</strong> button under <strong>RESEARCH PAPERS</strong> in the left explorer panel to begin synthesis.
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );

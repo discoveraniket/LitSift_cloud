@@ -25,16 +25,9 @@ interface PdfState {
   getActivePdf: () => PdfDocumentInfo | undefined;
 }
 
-const defaultPdf: PdfDocumentInfo = {
-  id: 'pdf-1',
-  name: '38094623.pdf',
-  url: '/sample-pdfs/38094623.pdf',
-  status: 'Ready',
-};
-
 export const usePdfStore = create<PdfState>((set, get) => ({
-  pdfs: [defaultPdf],
-  activePdfId: 'pdf-1',
+  pdfs: [],
+  activePdfId: '',
   isHydrated: false,
 
   hydrateFromDb: async () => {

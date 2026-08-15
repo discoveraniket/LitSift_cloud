@@ -6,10 +6,13 @@ import { RightAgentPanel } from '../agent/RightAgentPanel';
 import { BottomGridPanel } from '../data-grid/BottomGridPanel';
 import { SettingsModal } from '../settings/SettingsModal';
 
+import { usePdfStore } from '../../store/usePdfStore';
+
 export const WorkspaceLayout: React.FC = () => {
   const [activeView, setActiveView] = useState<'pdf' | 'master_grid'>('pdf');
-  const [activePdfId, setActivePdfId] = useState('pdf-1');
-  const [activePdfTitle, setActivePdfTitle] = useState('38094623.pdf');
+  const activePdf = usePdfStore((state) => state.getActivePdf());
+  const activePdfId = activePdf?.id || '';
+  const activePdfTitle = activePdf?.name || 'No Paper Selected';
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Side Panel Toggle States
@@ -24,9 +27,8 @@ export const WorkspaceLayout: React.FC = () => {
 
   const [isDragging, setIsDragging] = useState<string | null>(null);
 
-  const handleSelectPdf = (id: string, title: string) => {
-    setActivePdfId(id);
-    setActivePdfTitle(title);
+  const handleSelectPdf = (id: string) => {
+    usePdfStore.getState().setActivePdf(id);
     setActiveView('pdf');
   };
 

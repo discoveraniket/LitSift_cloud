@@ -28,7 +28,24 @@ A comprehensive guide explaining the implemented capabilities, architecture, and
 
 ---
 
-## 3. Active Cell Focus & Contextual Follow-Up Q&A
+## 3. Dual-Scope Switching: Paper-Scoped Views vs. Master Dataset
+
+### Q: If PDF A has 6 rows and PDF B has 2 rows in the master table, how does the app maintain switching?
+**A:** LitSift Cloud provides a dynamic dual-scope architecture:
+1. **Paper-to-Paper Scoped Switching (Explorer Panel)**:
+   * Clicking **PDF A** in the left explorer loads PDF A in the viewer, auto-filters the bottom table to show only PDF A's 6 rows, and grounds the chat agent in PDF A.
+   * Clicking **PDF B** instantly switches the viewer to PDF B, auto-filters the table to show PDF B's 2 rows, and re-grounds the chat agent in PDF B.
+2. **Global Master Table View (Header Bar / Views Menu)**:
+   * Clicking **`📊 Master Data Grid`** expands the central panel to display all consolidated rows (8 total across all uploaded papers) for cross-paper comparative analysis and unified CSV export.
+3. **Bi-Directional Cell Selection Navigation**:
+   * Selecting any cell in the table (whether in Master view or Scoped view) automatically resolves the originating paper ID (`pdfId`), loads that specific PDF, navigates to the cited page, and highlights the evidence passage.
+
+### Q: Does filtering down to a single paper delete the other papers' rows?
+**A:** No. Row filtering is purely a non-destructive view filter (`filterPdfId`). All rows and per-row `citationMap` structures remain persistently saved in `LitSiftCloudDB`.
+
+---
+
+## 4. Active Cell Focus & Contextual Follow-Up Q&A
 
 ### Q: What happens when I select a table cell and ask a follow-up question in the chat?
 **A:** When a cell is selected, LitSift Cloud dynamically captures and injects the complete cell context into the prompt:
@@ -43,7 +60,7 @@ A comprehensive guide explaining the implemented capabilities, architecture, and
 
 ---
 
-## 4. Bi-Directional Evidence Grounding & PDF Highlighting
+## 5. Bi-Directional Evidence Grounding & PDF Highlighting
 
 ### Q: How does clicking a cell highlight evidence in the PDF viewer?
 **A:** Every extracted cell contains a `citationMap` entry with the page number and text quote. Clicking a cell triggers:
@@ -53,7 +70,7 @@ A comprehensive guide explaining the implemented capabilities, architecture, and
 
 ---
 
-## 5. Human-in-the-Loop AI Review & Diff Badges
+## 6. Human-in-the-Loop AI Review & Diff Badges
 
 ### Q: How are AI-generated changes vetted before committing?
 **A:** All AI operations (`extractPDFData`, `updateCell`, `splitRow`) stage changes with an `aiStatus: 'Pending Review'` flag, rendering yellow diff badges in the table:
@@ -62,7 +79,7 @@ A comprehensive guide explaining the implemented capabilities, architecture, and
 
 ---
 
-## 6. Table Grid Operations
+## 7. Table Grid Operations
 
 ### Q: What table manipulation tools are available?
 * **Inline Cell Editing**: Double-click any cell to manually edit text.
@@ -75,7 +92,10 @@ A comprehensive guide explaining the implemented capabilities, architecture, and
 
 ---
 
-## 7. Live Execution Logging & Diagnostics
+## 8. Live Execution Logging & Markdown Chat
 
 ### Q: How do I monitor long extractions or debug errors?
 **A:** Click the **`📜 Logs`** button in the Right Agent Panel header to open the embedded Live Execution Console. It displays real-time timestamps, network latency (e.g. `⏱️ 3.4s`), stage progress indicators (`[1/3] Reading PDF... [2/3] Calling Gemini... [3/3] Populating Grid...`), and expandable JSON request/response payloads.
+
+### Q: How are agent messages formatted in the chat interface?
+**A:** All agent messages are rendered using GitHub Flavored Markdown (`marked`), supporting bold typography, numbered/bulleted lists, inline code chips, syntax blocks, and styled Markdown tables.

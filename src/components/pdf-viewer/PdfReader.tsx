@@ -96,27 +96,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({ pdfUrl, zoomScale }) => {
             const context = canvas.getContext('2d');
             canvas.height = viewport.height;
             canvas.width = viewport.width;
-            canvas.style.display = 'block';
-
             pageWrapper.appendChild(canvas);
-
-            // Default evidence highlight bounding box overlay on Page 1
-            if (pageNum === 1) {
-              const highlightBox = document.createElement('div');
-              highlightBox.className = 'pdf-evidence-box';
-              highlightBox.style.position = 'absolute';
-              highlightBox.style.top = `${viewport.height * 0.22}px`;
-              highlightBox.style.left = `${viewport.width * 0.12}px`;
-              highlightBox.style.width = `${viewport.width * 0.76}px`;
-              highlightBox.style.height = `${viewport.height * 0.08}px`;
-              highlightBox.style.background = 'rgba(249, 226, 175, 0.25)';
-              highlightBox.style.border = '2px solid #f9e2af';
-              highlightBox.style.borderRadius = '4px';
-              highlightBox.style.pointerEvents = 'none';
-              highlightBox.title = 'Extracted Snippet Evidence';
-
-              pageWrapper.appendChild(highlightBox);
-            }
 
             if (containerRef.current) {
               containerRef.current.appendChild(pageWrapper);

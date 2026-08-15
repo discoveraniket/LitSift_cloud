@@ -67,8 +67,8 @@ export const useGridStore = create<GridState>((set) => ({
             // Spawn next blank draft row at bottom
             const newDraftRow: GridRow = {
               id: `draft-row-${Date.now()}`,
-              pdfId: row.pdfId || 'pdf-1',
-              pdfTitle: row.pdfTitle || 'Attention_Is_All_You_Need.pdf',
+              pdfId: row.pdfId || '',
+              pdfTitle: row.pdfTitle || 'Research_Paper.pdf',
               methodology: '',
               sampleSize: '',
               keyResults: '',
@@ -84,7 +84,7 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
-  addRow: (pdfId = 'pdf-1', pdfTitle = 'Attention_Is_All_You_Need.pdf') =>
+  addRow: (pdfId = '', pdfTitle = 'Research_Paper.pdf') =>
     set(
       produce((state: GridState) => {
         saveSnapshot(state);

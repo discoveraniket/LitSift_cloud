@@ -21,12 +21,14 @@ Follow this step-by-step checklist to test and verify every aspect of your LitSi
 
 ---
 
-### 3. Gemini AI Extractions & Direct Document Processing
+### 3. Gemini AI Extractions & Multi-Row Matrix Structuring
 
 - [ ] **3.1 API Key & Model Setup**: Click **Settings (⚙️)** in top header bar, enter/verify your `GEMINI_API_KEY`, select `Gemini 3.6 Flash` (or `Gemini 3.6 Pro`), and click **Save Settings**.
 - [ ] **3.2 Schema Columns Setup**: Add extraction columns (e.g. click `+ Column` to add *Methodology*, *Sample Size*, *Key Results*, *Limitations*).
-- [ ] **3.3 Trigger Live Extraction**: Click **⚡ Extract Data** on the bottom toolbar (or type in Agent Chat: *"Extract data from this paper"*). Verify Gemini reads the attached PDF and adds a new row to the table.
-- [ ] **3.4 Natural Language Document Q&A**: In the Right Agent Command Center, type *"Summarize the main objective of this paper"* or *"What experimental sample size was used?"*. Verify accurate answers grounded directly in the paper.
+- [ ] **3.3 Trigger Multi-Row Extraction**: Click **⚡ Extract Data** on the bottom toolbar (or type in Agent Chat: *"Extract data from this paper"*). Verify Gemini analyzes the paper and automatically emits **distinct, unambiguous rows** for each tested variable/phage/cohort with actual measured results.
+- [ ] **3.4 Live Timer & Step Banner**: Notice the live progress banner showing ticking milliseconds (`⏱️ 3.2s`) and step indicators (`[1/3] Reading PDF... [2/3] Calling Gemini... [3/3] Populating Grid...`).
+- [ ] **3.5 Formatted Markdown Chat**: Ask a general question (e.g. *"Summarize the methodology"*). Verify the agent responds with beautifully formatted Markdown (bold headers, bullet lists, code badges, and tables).
+- [ ] **3.6 Live Execution Console (`📜 Logs`)**: Click `📜 Logs` in the Right Panel header to inspect real-time timestamps, network latency, and expandable JSON payloads.
 
 ---
 
@@ -38,11 +40,11 @@ Follow this step-by-step checklist to test and verify every aspect of your LitSi
 
 ---
 
-### 5. Evidence Citation Grounding & Bi-Directional Linking
+### 5. Evidence Citation Grounding & Focused Cell Follow-Up Q&A
 
 - [ ] **5.1 AI Reasoning Card**: Click on any extracted table cell. Verify the **Right Agent Panel** displays the AI Reasoning Card with confidence score, section name, and exact quote snippet.
 - [ ] **5.2 Auto-Scroll & Evidence Highlight**: Watch the Central PDF Viewer when focusing a cell. Verify it automatically scrolls to the cited page and renders a glowing bounding-box evidence highlight over the passage.
-- [ ] **5.3 Cell Discussion & Live Refinement**: With a cell selected, type a clarification in the prompt input (e.g. *"Page 3 mentions Illumina NovaSeq"*). Verify the AI refines the cell value and reasoning explanation.
+- [ ] **5.3 Grounded Cell Follow-Up Discussion**: With a specific cell focused, ask a question or provide a correction in the chat (e.g. *"Why was 10^8 PFU/mL chosen here?"* or *"Note: Page 3 mentions Illumina NovaSeq"*). Verify Gemini answers with full awareness of the row, column, current cell value, and citation quote, invoking `updateCell` to refine the cell live.
 
 ---
 
@@ -57,8 +59,16 @@ Follow this step-by-step checklist to test and verify every aspect of your LitSi
 
 ---
 
-### 7. CSV Import / Export & Workspace State Persistence
+### 7. CSV Import / Export & Local-First IndexedDB Resumption
 
 - [ ] **7.1 CSV Export**: Click **Export CSV Dataset** in the left explorer. Verify a clean `LitSift_Extracted_Dataset.csv` downloads with all current table data.
 - [ ] **7.2 CSV Import**: Click **Import CSV Dataset** in the left explorer and upload a `.csv` file. Verify the interactive "Append vs. Replace" agent options work as expected.
-- [ ] **7.3 Browser Reload Test**: Refresh the browser page (`F5` / `Ctrl+R`). Verify your table schema, rows, and citations persist from `localStorage`.
+- [ ] **7.3 True Workspace Resumption (IndexedDB Reload Test)**:
+  - Upload a real PDF research paper.
+  - Extract structured rows and verify citations.
+  - Refresh the browser tab (`F5` / `Ctrl+R`).
+  - **Verify 100% Resumption**:
+    1. The uploaded PDF is still in the explorer and opens in the Central Viewer.
+    2. Table columns and rows are intact.
+    3. Clicking cells re-opens their AI Reasoning Cards and scrolls to the highlighted evidence.
+    4. Previous chat conversation history and tool execution logs are preserved.
