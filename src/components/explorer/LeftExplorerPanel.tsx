@@ -35,12 +35,12 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   const { pdfs, addPdfFile, setActivePdf } = usePdfStore();
 
   // Handle PDF Upload
-  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     const file = files[0];
-    const newPdf = addPdfFile(file);
+    const newPdf = await addPdfFile(file);
     onSelectPdf(newPdf.id, newPdf.name);
     setActiveItem(newPdf.id);
     e.target.value = '';

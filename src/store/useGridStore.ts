@@ -1,27 +1,7 @@
 import { create } from 'zustand';
 import { produce } from 'immer';
 import { GridState, SchemaColumn, GridRow } from '../types/grid';
-
-const loadSavedColumns = (): SchemaColumn[] => {
-  try {
-    const saved = localStorage.getItem('LITSIFT_GRID_COLS');
-    return saved ? JSON.parse(saved) : [];
-  } catch {
-    return [];
-  }
-};
-
-const loadSavedRows = (): GridRow[] => {
-  try {
-    const saved = localStorage.getItem('LITSIFT_GRID_ROWS');
-    return saved ? JSON.parse(saved) : [];
-  } catch {
-    return [];
-  }
-};
-
-const initialColumns: SchemaColumn[] = loadSavedColumns();
-const initialRows: GridRow[] = loadSavedRows();
+import { db } from '../db/litsiftDb';
 
 interface GridSnapshot {
   columns: SchemaColumn[];
@@ -31,12 +11,16 @@ interface GridSnapshot {
 const undoStack: GridSnapshot[] = [];
 const redoStack: GridSnapshot[] = [];
 
-const persistToStorage = (columns: SchemaColumn[], rows: GridRow[]) => {
+const persistToStorage = async (columns: SchemaColumn[], rows: GridRow[]) => {
   try {
-    localStorage.setItem('LITSIFT_GRID_COLS', JSON.stringify(columns));
-    localStorage.setItem('LITSIFT_GRID_ROWS', JSON.stringify(rows));
+    await db.gridTable.put({
+      id: 'current',
+      columns,
+      rows,
+      updatedAt: Date.now(),
+    });
   } catch (err) {
-    console.warn('Failed to save grid state to localStorage:', err);
+    console.warn('Failed to save grid state to IndexedDB:', err);
   }
 };
 
@@ -52,9 +36,23 @@ const saveSnapshot = (state: GridState) => {
 };
 
 export const useGridStore = create<GridState>((set) => ({
-  columns: initialColumns,
-  rows: initialRows,
+  columns: [],
+  rows: [],
   selectedRowIds: [],
+
+  hydrateFromDb: async () => {
+    try {
+      const stored = await db.gridTable.get('current');
+      if (stored && stored.columns && stored.rows) {
+        set({
+          columns: stored.columns,
+          rows: stored.rows,
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to hydrate grid from IndexedDB:', err);
+    }
+  },
 
   updateCell: (rowId, field, value) =>
     set(

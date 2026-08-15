@@ -7,7 +7,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-export const AVAILABLE_MODELS = [
+const AVAILABLE_MODELS = [
   {
     id: 'gemini-3.6-flash',
     name: 'Gemini 3.6 Flash (Recommended)',

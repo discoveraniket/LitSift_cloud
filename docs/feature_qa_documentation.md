@@ -12,8 +12,8 @@ A comprehensive guide explaining the implemented capabilities, architecture, and
 ### Q: How are PDFs processed by the AI? Does it parse text locally first?
 **A:** No. LitSift Cloud uses direct multimodal binary attachment (`application/pdf` inline base64). Gemini 3.6/3.7 natively reads the full visual layout of the PDF—including tables, figures, footnotes, and multi-column structures—eliminating client-side OCR or text extraction failures.
 
-### Q: How is user state preserved?
-**A:** The entire workspace state (columns, extracted rows, cell citation maps, discussion histories, active PDF selections, and Gemini settings) is automatically synchronized and persisted in `localStorage`.
+### Q: How is user state and uploaded data preserved?
+**A:** LitSift Cloud uses a unified **Local-First IndexedDB database (`LitSiftCloudDB` via Dexie.js)**. Unlike `localStorage` (which is capped at 5MB and cannot store binary files), IndexedDB stores actual uploaded PDF binary blobs, extraction table rows, column schemas, cell citation maps, and agent conversation histories directly on your machine. When you refresh the browser (`F5`), all PDFs, tables, reasonings, and chat sessions resume automatically without data loss.
 
 ---
 

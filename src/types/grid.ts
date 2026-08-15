@@ -47,6 +47,7 @@ export interface GridState {
   activeCitation?: CellCitation | null;
   
   // Actions
+  hydrateFromDb: () => Promise<void>;
   updateCell: (rowId: string, field: string, value: any) => void;
   addRow: (pdfId?: string, pdfTitle?: string) => void;
   deleteRow: (rowId: string) => void;

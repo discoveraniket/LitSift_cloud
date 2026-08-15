@@ -18,6 +18,7 @@ export interface AgentState {
   lastInteractionId?: string;
   
   // Actions
+  hydrateFromDb: () => Promise<void>;
   sendMessage: (text: string, activePdfTitle?: string) => void;
   selectOption: (optionText: string) => void;
   clearMessages: () => void;

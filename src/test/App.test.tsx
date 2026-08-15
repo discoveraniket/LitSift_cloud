@@ -1,11 +1,15 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import App from '../App';
 
 describe('LitSift Cloud Workspace Layout', () => {
-  it('renders the application header, toggle controls, and layout panels', () => {
+  it('renders the application header, toggle controls, and layout panels', async () => {
     render(<App />);
-    expect(screen.getByText('LitSift Cloud')).toBeInTheDocument();
+    
+    await waitFor(() => {
+      expect(screen.getByText('LitSift Cloud')).toBeInTheDocument();
+    });
+
     expect(screen.getByText('EXPLORER')).toBeInTheDocument();
     expect(screen.getByText('AGENTIC AI COMMAND CENTER')).toBeInTheDocument();
     expect(screen.getByTitle('Toggle Left Explorer (Ctrl+B)')).toBeInTheDocument();
