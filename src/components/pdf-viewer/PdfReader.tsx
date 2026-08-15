@@ -1,16 +1,24 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useGridStore } from '../../store/useGridStore';
 
 // Set pdfjs worker source using CDN fallback for browser runtime compatibility
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
+export interface PdfReaderRef {
+  search: (query: string) => void;
+  nextMatch: () => void;
+  prevMatch: () => void;
+  clearSearch: () => void;
+}
+
 interface PdfReaderProps {
   pdfUrl: string;
   zoomScale: number;
+  onMatchCountChange?: (current: number, total: number) => void;
 }
 
-export const PdfReader: React.FC<PdfReaderProps> = ({ pdfUrl, zoomScale }) => {
+export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoomScale, onMatchCountChange }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
@@ -18,7 +26,11 @@ export const PdfReader: React.FC<PdfReaderProps> = ({ pdfUrl, zoomScale }) => {
 
   const activeEvidence = useGridStore((state) => state.activeEvidence);
 
-  // Auto-scroll to activeEvidence page and highlight passage
+  // Search matches tracking state
+  const searchMatchesRef = useRef<HTMLElement[]>([]);
+  const currentMatchIndexRef = useRef<number>(-1);
+
+  // Auto-scroll to activeEvidence page when a cell is selected
   useEffect(() => {
     if (!activeEvidence || !containerRef.current) return;
 
@@ -28,28 +40,142 @@ export const PdfReader: React.FC<PdfReaderProps> = ({ pdfUrl, zoomScale }) => {
 
     if (pageWrapper) {
       pageWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-      // Clean up previous highlights and render fresh box for the active cell
-      const existingBoxes = pageWrapper.querySelectorAll('.pdf-active-cell-box');
-      existingBoxes.forEach((b) => b.remove());
-
-      const highlightBox = document.createElement('div');
-      highlightBox.className = 'pdf-evidence-box pdf-active-cell-box';
-      highlightBox.style.position = 'absolute';
-      highlightBox.style.top = activeEvidence.bbox ? `${activeEvidence.bbox.y}px` : '20%';
-      highlightBox.style.left = activeEvidence.bbox ? `${activeEvidence.bbox.x}px` : '10%';
-      highlightBox.style.width = activeEvidence.bbox ? `${activeEvidence.bbox.width}px` : '80%';
-      highlightBox.style.height = activeEvidence.bbox ? `${activeEvidence.bbox.height}px` : '40px';
-      highlightBox.style.background = 'rgba(137, 180, 250, 0.28)';
-      highlightBox.style.border = '2px solid var(--accent-primary)';
-      highlightBox.style.borderRadius = '4px';
-      highlightBox.style.pointerEvents = 'none';
-      highlightBox.style.boxShadow = '0 0 16px rgba(137, 180, 250, 0.9)';
-      highlightBox.style.transition = 'all 0.3s ease';
-
-      pageWrapper.appendChild(highlightBox);
     }
   }, [activeEvidence]);
+
+  // Render text layers with selectable and searchable spans
+  const renderTextLayerForPage = async (page: any, viewport: any, pageWrapper: HTMLElement) => {
+    try {
+      const textContent = await page.getTextContent();
+      
+      const textLayerDiv = document.createElement('div');
+      textLayerDiv.className = 'pdf-text-layer';
+      textLayerDiv.style.position = 'absolute';
+      textLayerDiv.style.top = '0';
+      textLayerDiv.style.left = '0';
+      textLayerDiv.style.height = `${viewport.height}px`;
+      textLayerDiv.style.width = `${viewport.width}px`;
+      textLayerDiv.style.overflow = 'hidden';
+      textLayerDiv.style.lineHeight = '1.0';
+      textLayerDiv.style.pointerEvents = 'auto';
+      textLayerDiv.style.userSelect = 'text';
+
+      for (const item of textContent.items) {
+        if (!item.str || item.str.trim().length === 0) continue;
+
+        const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+        const fontHeight = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]);
+
+        const textSpan = document.createElement('span');
+        textSpan.textContent = item.str;
+        textSpan.className = 'pdf-text-item';
+        textSpan.style.position = 'absolute';
+        textSpan.style.left = `${tx[4]}px`;
+        textSpan.style.top = `${tx[5] - fontHeight}px`;
+        textSpan.style.fontSize = `${fontHeight}px`;
+        textSpan.style.fontFamily = item.fontName || 'sans-serif';
+        textSpan.style.color = 'transparent';
+        textSpan.style.transformOrigin = '0% 0%';
+        textSpan.style.whiteSpace = 'pre';
+        textSpan.style.cursor = 'text';
+
+        textLayerDiv.appendChild(textSpan);
+      }
+
+      pageWrapper.appendChild(textLayerDiv);
+    } catch (err) {
+      console.warn('Text layer rendering note:', err);
+    }
+  };
+
+  // Perform search highlighting across text spans
+  const performSearch = (query: string) => {
+    clearSearch();
+    if (!query || !query.trim() || !containerRef.current) {
+      onMatchCountChange?.(0, 0);
+      return;
+    }
+
+    const lowerQuery = query.toLowerCase().trim();
+    const textItems = containerRef.current.querySelectorAll('.pdf-text-item');
+    const matchedSpans: HTMLElement[] = [];
+
+    textItems.forEach((el) => {
+      const text = el.textContent || '';
+      if (text.toLowerCase().includes(lowerQuery)) {
+        (el as HTMLElement).style.background = 'rgba(249, 226, 175, 0.65)';
+        (el as HTMLElement).style.color = '#11111b';
+        (el as HTMLElement).style.borderRadius = '2px';
+        (el as HTMLElement).style.boxShadow = '0 0 4px rgba(249, 226, 175, 0.9)';
+        matchedSpans.push(el as HTMLElement);
+      }
+    });
+
+    searchMatchesRef.current = matchedSpans;
+    if (matchedSpans.length > 0) {
+      currentMatchIndexRef.current = 0;
+      focusMatch(0);
+      onMatchCountChange?.(1, matchedSpans.length);
+    } else {
+      currentMatchIndexRef.current = -1;
+      onMatchCountChange?.(0, 0);
+    }
+  };
+
+  const focusMatch = (index: number) => {
+    const matches = searchMatchesRef.current;
+    if (index < 0 || index >= matches.length) return;
+
+    // Reset previous active match styling
+    matches.forEach((m, idx) => {
+      if (idx === index) {
+        m.style.background = 'rgba(137, 180, 250, 0.9)';
+        m.style.color = '#11111b';
+        m.style.boxShadow = '0 0 8px rgba(137, 180, 250, 1)';
+        m.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        m.style.background = 'rgba(249, 226, 175, 0.65)';
+        m.style.color = '#11111b';
+        m.style.boxShadow = '0 0 4px rgba(249, 226, 175, 0.9)';
+      }
+    });
+  };
+
+  const nextMatch = () => {
+    const matches = searchMatchesRef.current;
+    if (matches.length === 0) return;
+    const nextIdx = (currentMatchIndexRef.current + 1) % matches.length;
+    currentMatchIndexRef.current = nextIdx;
+    focusMatch(nextIdx);
+    onMatchCountChange?.(nextIdx + 1, matches.length);
+  };
+
+  const prevMatch = () => {
+    const matches = searchMatchesRef.current;
+    if (matches.length === 0) return;
+    const prevIdx = (currentMatchIndexRef.current - 1 + matches.length) % matches.length;
+    currentMatchIndexRef.current = prevIdx;
+    focusMatch(prevIdx);
+    onMatchCountChange?.(prevIdx + 1, matches.length);
+  };
+
+  const clearSearch = () => {
+    searchMatchesRef.current.forEach((el) => {
+      el.style.background = 'transparent';
+      el.style.color = 'transparent';
+      el.style.boxShadow = 'none';
+    });
+    searchMatchesRef.current = [];
+    currentMatchIndexRef.current = -1;
+    onMatchCountChange?.(0, 0);
+  };
+
+  useImperativeHandle(ref, () => ({
+    search: performSearch,
+    nextMatch,
+    prevMatch,
+    clearSearch,
+  }));
 
   useEffect(() => {
     let isMounted = true;
@@ -57,10 +183,14 @@ export const PdfReader: React.FC<PdfReaderProps> = ({ pdfUrl, zoomScale }) => {
     setError(null);
 
     const loadPdf = async () => {
-      // In JSDOM test environments (Node.js), render simplified mock representation
       if (typeof window !== 'undefined' && navigator.userAgent.includes('jsdom')) {
         if (!isMounted) return;
         setNumPages(1);
+        setLoading(false);
+        return;
+      }
+
+      if (!pdfUrl) {
         setLoading(false);
         return;
       }
@@ -81,7 +211,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({ pdfUrl, zoomScale }) => {
 
             const viewport = page.getViewport({ scale: zoomScale });
 
-            // Create wrapper container for page & highlight overlay
+            // Create wrapper container for page
             const pageWrapper = document.createElement('div');
             pageWrapper.className = 'pdf-page-wrapper';
             pageWrapper.setAttribute('data-page-number', String(pageNum));
@@ -97,6 +227,9 @@ export const PdfReader: React.FC<PdfReaderProps> = ({ pdfUrl, zoomScale }) => {
             canvas.height = viewport.height;
             canvas.width = viewport.width;
             pageWrapper.appendChild(canvas);
+
+            // Render selectable / searchable text layer
+            await renderTextLayerForPage(page, viewport, pageWrapper);
 
             if (containerRef.current) {
               containerRef.current.appendChild(pageWrapper);
@@ -178,4 +311,4 @@ export const PdfReader: React.FC<PdfReaderProps> = ({ pdfUrl, zoomScale }) => {
       <div ref={containerRef} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }} />
     </div>
   );
-};
+});
