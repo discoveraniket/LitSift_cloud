@@ -21,6 +21,7 @@
     "clsx": "^2.1.1",
     "immer": "^10.1.1",
     "lucide-react": "^0.474.0",
+    "marked": "^18.0.9",
     "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

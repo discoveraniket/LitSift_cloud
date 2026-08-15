@@ -49,9 +49,6 @@ const saveSnapshot = (state: GridState) => {
     rows: JSON.parse(JSON.stringify(state.rows)),
   });
   redoStack.length = 0; // Clear redo stack on new edit action
-
-  // Persist latest state asynchronously
-  setTimeout(() => persistToStorage(state.columns, state.rows), 50);
 };
 
 export const useGridStore = create<GridState>((set) => ({
@@ -462,6 +459,13 @@ export const useGridStore = create<GridState>((set) => ({
             aiStatus: 'Confirmed',
           };
 
+          if (r.citationMap) {
+            rowObj.citationMap = r.citationMap;
+          }
+          if (r.aiStatus) {
+            rowObj.aiStatus = r.aiStatus;
+          }
+
           state.columns.forEach((col) => {
             if (r[col.headerName] !== undefined) {
               rowObj[col.field] = r[col.headerName];
@@ -500,3 +504,8 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 }));
+
+// Robust automatic localStorage synchronization on EVERY state update
+useGridStore.subscribe((state) => {
+  persistToStorage(state.columns, state.rows);
+});

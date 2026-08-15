@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { usePdfStore } from '../store/usePdfStore';
+import { useGridStore } from '../store/useGridStore';
 import { getPdfBase64 } from './pdfUtils';
 
 // Retrieve API key from environment variable (GEMINI_API_KEY) or localStorage fallback
@@ -81,7 +82,39 @@ export async function processAgentInteraction(userPrompt: string, activePdfTitle
       }
     }
 
-    contentsParts.push({ text: userPrompt });
+    // Inject focused cell metadata if a cell is currently selected
+    const gridStore = useGridStore.getState();
+    const focusedCell = gridStore.focusedCell;
+    let finalPromptText = userPrompt;
+
+    if (focusedCell) {
+      const row = gridStore.rows.find((r) => r.id === focusedCell.rowId);
+      const col = gridStore.columns.find((c) => c.field === focusedCell.field);
+      const cellValue = row ? row[focusedCell.field] || 'Empty' : 'Unknown';
+      const citation = row?.citationMap?.[focusedCell.field] || gridStore.activeCitation;
+
+      logStore.addLog('info', `Injecting active cell context for column "${col?.headerName || focusedCell.field}"`, {
+        rowId: focusedCell.rowId,
+        field: focusedCell.field,
+        cellValue,
+        citation,
+      });
+
+      finalPromptText = `[ACTIVE CELL CONTEXT]
+- Selected Row: "${row?.pdfTitle || activePdfTitle}" (Row ID: ${focusedCell.rowId})
+- Target Column: "${col?.headerName || focusedCell.field}" (Field: ${focusedCell.field})
+- Current Extracted Value: "${cellValue}"
+- Grounded Evidence Quote: "${citation?.snippetQuote || 'N/A'}"
+- Source Location: Page ${citation?.pageNumber || 'N/A'}, Section: ${citation?.sectionName || 'N/A'}
+- Existing AI Reasoning: "${citation?.reasoning || 'N/A'}"
+
+[USER QUESTION / INSTRUCTION]:
+${userPrompt}
+
+(Note: If the user asks you to revise, correct, or refine this specific cell value based on their feedback or the attached paper, invoke the updateCell tool with the new value, explanation, and cited evidence.)`;
+    }
+
+    contentsParts.push({ text: finalPromptText });
 
     logStore.setActiveStep(`Querying Gemini ${selectedModel}...`);
     const ai = new GoogleGenAI({ apiKey });

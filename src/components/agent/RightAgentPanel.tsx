@@ -3,6 +3,13 @@ import { Send, Bot, User, Sparkles, Terminal, FileText, Lightbulb, Trash2, X, Ch
 import { useAgentStore } from '../../store/useAgentStore';
 import { useGridStore } from '../../store/useGridStore';
 import { useLogStore } from '../../store/useLogStore';
+import { marked } from 'marked';
+
+// Configure marked options
+marked.setOptions({
+  gfm: true,
+  breaks: true,
+});
 
 interface RightAgentPanelProps {
   activePdfTitle?: string;
@@ -320,7 +327,14 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
                 </div>
               )}
 
-              {msg.text}
+              {msg.sender === 'agent' ? (
+                <div
+                  className="chat-markdown"
+                  dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) as string }}
+                />
+              ) : (
+                <div>{msg.text}</div>
+              )}
 
               {msg.options && (
                 <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>

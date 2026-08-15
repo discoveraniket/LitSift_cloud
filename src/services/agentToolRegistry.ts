@@ -192,19 +192,23 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
 Extract concise values for the following schema columns:
 ${headers.map((h, i) => `${i + 1}. "${h}"`).join('\n')}
 
-Return your response strictly as a JSON object with this exact key-value format:
+If the paper tests multiple distinct variables, experimental groups, treatments, or pairwise combinations (e.g., Sample A × C = E, Sample A × D = F), emit a DISTINCT ROW for each tested subject/observation that has actual experimental results, ignoring background mentions, so that every finding is represented as an atomic, unambiguous entry.
+
+Return your response strictly as a JSON object with this format:
 {
-  "extractions": {
-    ${headers.map((h) => `"${h}": "<Extracted value from paper>"`).join(',\n    ')}
-  },
-  "citations": {
-    "${headers[0]}": {
-      "pageNumber": 1,
-      "sectionName": "<Section Name>",
-      "snippetQuote": "<Exact quote from paper>",
-      "reasoning": "<Explanation of extracted value>"
+  "rows": [
+    {
+      ${headers.map((h) => `"${h}": "<Extracted value from paper>"`).join(',\n      ')},
+      "citations": {
+        "${headers[0]}": {
+          "pageNumber": 1,
+          "sectionName": "<Section Name>",
+          "snippetQuote": "<Exact quote from paper>",
+          "reasoning": "<Explanation of extracted value>"
+        }
+      }
     }
-  }
+  ]
 }`;
 
       contentsParts.push({ text: schemaPrompt });
@@ -234,37 +238,69 @@ Return your response strictly as a JSON object with this exact key-value format:
 
       logStore.setActiveStep(`[3/3] Parsing JSON payload & populating table grid...`);
       const parsed = JSON.parse(text);
-      const extractions = parsed.extractions || {};
-      const citations = parsed.citations || {};
+      
+      // Normalize rows: support both multi-row "rows" array and legacy "extractions" single object
+      let rawRows: any[] = [];
+      if (Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+        rawRows = parsed.rows;
+      } else if (parsed.extractions && typeof parsed.extractions === 'object') {
+        rawRows = [{ ...parsed.extractions, citations: parsed.citations || {} }];
+      } else if (Array.isArray(parsed)) {
+        rawRows = parsed;
+      } else {
+        rawRows = [parsed];
+      }
 
-      logStore.addLog('info', 'Parsed structured extractions', { extractions, citations });
+      const rowsToAppend = rawRows.map((r: any) => {
+        const rowData: Record<string, any> = {
+          pdfId: pdfInfo?.id || 'pdf-1',
+          pdfTitle: pdfInfo?.name || targetPdfTitle,
+          aiStatus: mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed',
+        };
 
-      gridStore.appendCsvDataset(headers, [extractions]);
+        const citations = r.citations || parsed.citations || {};
+        rowData.citationMap = citations;
 
+        headers.forEach((h) => {
+          if (r[h] !== undefined) {
+            rowData[h] = r[h];
+          }
+        });
+
+        // Ensure citationMap maps to column field keys as well
+        activeCols.forEach((col) => {
+          if (citations[col.headerName] && !rowData.citationMap[col.field]) {
+            rowData.citationMap[col.field] = citations[col.headerName];
+          }
+        });
+
+        return rowData;
+      });
+
+      logStore.addLog('info', `Parsed ${rowsToAppend.length} structured row(s)`, rowsToAppend);
+
+      gridStore.appendCsvDataset(headers, rowsToAppend);
+
+      // Set active citation to the first extracted cell of the newest row
       useGridStore.setState(
         produce((state: any) => {
-          const lastRow = state.rows[state.rows.length - 1];
-          if (lastRow) {
-            lastRow.pdfId = pdfInfo?.id || 'pdf-1';
-            lastRow.pdfTitle = pdfInfo?.name || targetPdfTitle;
-            lastRow.aiStatus = mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed';
-            lastRow.citationMap = citations;
-            const firstField = activeCols[0].field;
-            if (citations[activeCols[0].headerName]) {
-              lastRow.citationMap[firstField] = citations[activeCols[0].headerName];
-              state.activeCitation = lastRow.citationMap[firstField];
+          const newestRow = state.rows[state.rows.length - 1];
+          if (newestRow && newestRow.citationMap) {
+            const firstField = activeCols[0]?.field;
+            if (firstField && newestRow.citationMap[firstField]) {
+              state.activeCitation = newestRow.citationMap[firstField];
             }
           }
         })
       );
 
       logStore.setActiveStep(null);
-      logStore.addLog('success', `Extraction completed in ${elapsed}s. Row staged for review.`);
+      logStore.addLog('success', `Extraction completed in ${elapsed}s. ${rowsToAppend.length} row(s) staged for review.`);
 
       return {
-        replyText: `✅ Gemini ${selectedModel} extracted findings from "${pdfInfo?.name || targetPdfTitle}" in ${elapsed}s! Extracted row added to table (Pending Review).`,
-        summary: `extractPDFData(${pdfInfo?.name || targetPdfTitle})`,
-        resultData: { extractions, citations },
+        replyText: `✅ Gemini ${selectedModel} extracted ${rowsToAppend.length} structured finding row(s) from "${pdfInfo?.name || targetPdfTitle}" in ${elapsed}s! Staged in table (Pending Review).`,
+        summary: `extractPDFData(${pdfInfo?.name || targetPdfTitle}) -> ${rowsToAppend.length} rows`,
+        resultData: rowsToAppend,
       };
     },
   },
