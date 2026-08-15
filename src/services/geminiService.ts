@@ -2,6 +2,9 @@ import { GoogleGenAI } from '@google/genai';
 import { usePdfStore } from '../store/usePdfStore';
 import { useGridStore } from '../store/useGridStore';
 import { getPdfBase64 } from './pdfUtils';
+import { getToolsForMode, agentToolsRegistry, AgentExecutionMode } from './agentToolRegistry';
+import { useAgentStore } from '../store/useAgentStore';
+import { useLogStore } from '../store/useLogStore';
 
 // Retrieve API key from environment variable (GEMINI_API_KEY) or localStorage fallback
 export function getGeminiApiKey(): string {
@@ -22,11 +25,6 @@ export function getSelectedGeminiModel(): string {
 export function setSelectedGeminiModel(modelId: string): void {
   localStorage.setItem('LITSIFT_SELECTED_MODEL', modelId);
 }
-
-import { getToolsForMode, agentToolsRegistry, AgentExecutionMode } from './agentToolRegistry';
-import { useAgentStore } from '../store/useAgentStore';
-
-import { useLogStore } from '../store/useLogStore';
 
 export interface AgentExecutionResult {
   replyText: string;
@@ -63,24 +61,13 @@ export async function processAgentInteraction(userPrompt: string, activePdfTitle
   try {
     const pdfStore = usePdfStore.getState();
     const activePdf = pdfStore.getActivePdf() || pdfStore.pdfs.find((p) => p.name === activePdfTitle || p.id === activePdfTitle);
+    const agentStore = useAgentStore.getState();
 
-    const contentsParts: any[] = [];
-
-    // Attach PDF binary directly as an inlineData Part if available
-    if (activePdf) {
-      try {
-        logStore.setActiveStep(`Loading attached PDF "${activePdf.name}"...`);
-        const base64Data = await getPdfBase64(activePdf);
-        contentsParts.push({
-          inlineData: {
-            mimeType: 'application/pdf',
-            data: base64Data,
-          },
-        });
-      } catch (e: any) {
-        logStore.addLog('warn', `PDF attachment notice: ${e.message}`);
-      }
-    }
+    // Determine if this is a follow-up turn in an active conversation for this paper
+    const pastNonWelcomeMessages = agentStore.messages.filter(
+      (m) => m.id !== 'msg-1' && !m.text.startsWith('**Now viewing') && !m.text.startsWith('LitSift Agent is online')
+    );
+    const isFollowup = pastNonWelcomeMessages.length > 1;
 
     // Inject focused cell metadata if a cell is currently selected
     const gridStore = useGridStore.getState();
@@ -114,19 +101,74 @@ ${userPrompt}
 (Note: If the user asks you to revise, correct, or refine this specific cell value based on their feedback or the attached paper, invoke the updateCell tool with the new value, explanation, and cited evidence.)`;
     }
 
-    contentsParts.push({ text: finalPromptText });
+    // Build multi-turn contents array with history
+    const contents: any[] = [];
+
+    // On Turn 1 (or standalone), attach the PDF binary
+    if (activePdf) {
+      try {
+        logStore.setActiveStep(`Loading attached PDF "${activePdf.name}"...`);
+        const base64Data = await getPdfBase64(activePdf);
+        
+        // Push initial user message with attached PDF
+        const firstUserMsg = pastNonWelcomeMessages.find((m) => m.sender === 'user');
+        const firstTurnText = firstUserMsg ? firstUserMsg.text : finalPromptText;
+
+        contents.push({
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: base64Data,
+              },
+            },
+            { text: isFollowup ? firstTurnText : finalPromptText },
+          ],
+        });
+
+        // Add intermediate conversation history turns if in follow-up mode
+        if (isFollowup) {
+          // Add subsequent turns (excluding the very first user message and the current prompt)
+          const remainingHistory = pastNonWelcomeMessages.slice(1, -1);
+          for (const msg of remainingHistory) {
+            contents.push({
+              role: msg.sender === 'user' ? 'user' : 'model',
+              parts: [{ text: msg.text }],
+            });
+          }
+
+          // Add the current prompt as the latest user turn
+          contents.push({
+            role: 'user',
+            parts: [{ text: finalPromptText }],
+          });
+        }
+      } catch (e: any) {
+        logStore.addLog('warn', `PDF attachment notice: ${e.message}`);
+        contents.push({
+          role: 'user',
+          parts: [{ text: finalPromptText }],
+        });
+      }
+    } else {
+      contents.push({
+        role: 'user',
+        parts: [{ text: finalPromptText }],
+      });
+    }
 
     logStore.setActiveStep(`Querying Gemini ${selectedModel}...`);
     const ai = new GoogleGenAI({ apiKey });
     const tools = getToolsForMode(agentMode);
 
-    // Call Gemini with tools
+    // Call Gemini with multi-turn history and tools
     const response = await ai.models.generateContent({
       model: selectedModel,
-      contents: contentsParts,
+      contents,
       config: {
         systemInstruction:
-          `You are LitSift Agent, an intelligent academic literature assistant. The user is currently viewing the research paper "${activePdfTitle}". The PDF document file is directly attached to this interaction. You excel at answering questions about the paper, summarizing abstracts, and calling functions when requested. Be concise, factual, and academic in tone.`,
+          `You are LitSift Agent, an intelligent academic literature assistant. The user is currently viewing the research paper "${activePdfTitle}". The PDF document file is directly attached to this conversation. You excel at answering questions about the paper, summarizing abstracts, and calling functions when requested. Be concise, factual, and academic in tone.`,
         temperature: 0.2,
         tools,
       },
