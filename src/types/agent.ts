@@ -1,5 +1,6 @@
 export interface AgentMessage {
   id: string;
+  pdfId?: string; // Associated PDF ID or 'master-grid'
   sender: 'user' | 'agent';
   text: string;
   timestamp: string;
@@ -13,12 +14,14 @@ export interface AgentMessage {
 
 export interface AgentState {
   messages: AgentMessage[];
+  activePdfId: string;
   isThinking: boolean;
   mode: 'human_in_loop' | 'autonomous_autopilot';
   lastInteractionId?: string;
   
   // Actions
   hydrateFromDb: () => Promise<void>;
+  setActivePdfId: (pdfId: string, pdfTitle?: string) => Promise<void>;
   sendMessage: (text: string, activePdfTitle?: string) => void;
   selectOption: (optionText: string) => void;
   clearMessages: () => void;

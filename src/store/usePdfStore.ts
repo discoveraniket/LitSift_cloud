@@ -19,6 +19,7 @@ interface PdfState {
   hydrateFromDb: () => Promise<void>;
   addPdfFile: (file: File) => Promise<PdfDocumentInfo>;
   addPdfUrl: (id: string, name: string, url: string) => Promise<void>;
+  removePdf: (id: string) => Promise<void>;
   setActivePdf: (id: string) => void;
   setPdfBase64: (id: string, base64: string) => Promise<void>;
   getPdf: (id: string) => PdfDocumentInfo | undefined;
@@ -106,6 +107,24 @@ export const usePdfStore = create<PdfState>((set, get) => ({
         pdfs: [...state.pdfs, { id, name, url, status: 'Ready' }],
       };
     });
+  },
+
+  removePdf: async (id: string) => {
+    const remaining = get().pdfs.filter((p) => p.id !== id);
+    const nextActiveId = remaining.length > 0 ? remaining[0].id : '';
+
+    set({
+      pdfs: remaining,
+      activePdfId: nextActiveId,
+    });
+
+    try {
+      await db.pdfs.delete(id);
+      await db.chatMessages.where('pdfId').equals(id).delete();
+      await db.settings.put({ key: 'activePdfId', value: nextActiveId });
+    } catch (err) {
+      console.warn('Error deleting PDF from IndexedDB:', err);
+    }
   },
 
   setActivePdf: (id) => {

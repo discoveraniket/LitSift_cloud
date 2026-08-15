@@ -40,6 +40,13 @@ A comprehensive guide explaining the implemented capabilities, architecture, and
 3. **Bi-Directional Cell Selection Navigation**:
    * Selecting any cell in the table (whether in Master view or Scoped view) automatically resolves the originating paper ID (`pdfId`), loads that specific PDF, navigates to the cited page, and highlights the evidence passage.
 
+### Q: When switching to a new paper, are previous table rows, chat history, and highlights cleaned up?
+**A:** Yes, while **preserving the defined column schema**:
+1. **Clean Scoped Table (0 Rows for New Papers)**: The scoped table strictly filters rows by `r.pdfId === activePdfId`. A newly uploaded paper starts with 0 rows, ready for fresh extraction against your established schema columns.
+2. **Schema Preservation**: The defined master column headers (e.g. *Methodology*, *Host Range*, *Sample Size*, *Key Results*, *Limitations*) are fully preserved across all papers.
+3. **Dedicated Per-Paper Chat Streams**: Each PDF maintains its own isolated conversation history in IndexedDB. Switching to a new paper gives a clean greeting for that document; switching back restores previous Q&A.
+4. **Context & Overlay Reset**: Active cell selections, AI reasoning cards, and bounding-box highlight overlays are automatically reset upon switching papers to prevent ghost context from leaking across documents.
+
 ### Q: Does filtering down to a single paper delete the other papers' rows?
 **A:** No. Row filtering is purely a non-destructive view filter (`filterPdfId`). All rows and per-row `citationMap` structures remain persistently saved in `LitSiftCloudDB`.
 

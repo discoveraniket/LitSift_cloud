@@ -88,6 +88,7 @@ const EditableHeader: React.FC<any> = (params) => {
 
 export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   filterPdfId,
+  activePdfTitle,
   isPreviewMode = false,
 }) => {
   const {
@@ -109,13 +110,13 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   const [focusedRowIndex, setFocusedRowIndex] = useState<number | null>(null);
   const gridApiRef = useRef<any>(null);
 
-  // Filter rows if in scoped view (show rows matching active PDF OR global/imported rows)
+  // Filter rows if in scoped view (show rows strictly matching active PDF)
   const rowData = useMemo(() => {
     if (filterPdfId) {
-      return rows.filter((r) => !r.pdfId || r.pdfId === filterPdfId || r.pdfId.startsWith('pdf-imported'));
+      return rows.filter((r) => r.pdfId === filterPdfId || (activePdfTitle && r.pdfTitle === activePdfTitle));
     }
-    return rows;
-  }, [rows, filterPdfId]);
+    return rows; // Master view shows all
+  }, [rows, filterPdfId, activePdfTitle]);
 
   // Construct AG Grid column definitions using stable headerComponent reference
   const colDefs = useMemo<ColDef<GridRow>[]>(() => {

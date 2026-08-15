@@ -32,7 +32,7 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
-  const { pdfs, addPdfFile, setActivePdf } = usePdfStore();
+  const { pdfs, addPdfFile, setActivePdf, removePdf } = usePdfStore();
 
   // Handle PDF Upload
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -241,9 +241,10 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                     onSelectPdf(file.id, file.name);
                     setActiveItem(file.id);
                   }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
                 >
-                  <FileText size={13} color="var(--accent-secondary)" />
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <FileText size={13} color="var(--accent-secondary)" style={{ flexShrink: 0 }} />
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>
                     {file.name}
                   </span>
                   <span
@@ -254,10 +255,45 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                       background: file.status === 'Extracted' ? 'rgba(166, 227, 161, 0.2)' : 'var(--bg-tertiary)',
                       color: file.status === 'Extracted' ? 'var(--accent-success)' : 'var(--text-secondary)',
                       border: file.status === 'Extracted' ? '1px solid var(--accent-success)' : '1px solid var(--border-subtle)',
+                      flexShrink: 0,
                     }}
                   >
                     {file.status}
                   </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`Delete paper "${file.name}" from your workspace?`)) {
+                        removePdf(file.id);
+                        if (activeItem === file.id) {
+                          onOpenMasterGrid();
+                          setActiveItem('master-grid');
+                        }
+                      }
+                    }}
+                    title={`Delete ${file.name}`}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      borderRadius: '3px',
+                      opacity: 0.7,
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.color = 'var(--accent-danger, #f38ba8)';
+                      (e.currentTarget as HTMLElement).style.opacity = '1';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
+                      (e.currentTarget as HTMLElement).style.opacity = '0.7';
+                    }}
+                  >
+                    <Trash2 size={12} />
+                  </button>
                 </div>
               ))}
             </div>

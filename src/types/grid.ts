@@ -48,6 +48,7 @@ export interface GridState {
   
   // Actions
   hydrateFromDb: () => Promise<void>;
+  resetActiveSelection: () => void;
   updateCell: (rowId: string, field: string, value: any) => void;
   addRow: (pdfId?: string, pdfTitle?: string) => void;
   deleteRow: (rowId: string) => void;

@@ -54,6 +54,15 @@ export const useGridStore = create<GridState>((set) => ({
     }
   },
 
+  resetActiveSelection: () =>
+    set({
+      focusedCell: null,
+      activeCitation: null,
+      activeEvidence: null,
+      selectedRowIds: [],
+      selectedColumnField: undefined,
+    }),
+
   updateCell: (rowId, field, value) =>
     set(
       produce((state: GridState) => {

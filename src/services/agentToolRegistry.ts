@@ -251,9 +251,10 @@ Return your response strictly as a JSON object with this format:
         rawRows = [parsed];
       }
 
+      const activePdfId = usePdfStore.getState().activePdfId;
       const rowsToAppend = rawRows.map((r: any) => {
         const rowData: Record<string, any> = {
-          pdfId: pdfInfo?.id || 'pdf-1',
+          pdfId: pdfInfo?.id || activePdfId || `pdf-${Date.now()}`,
           pdfTitle: pdfInfo?.name || targetPdfTitle,
           aiStatus: mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed',
         };

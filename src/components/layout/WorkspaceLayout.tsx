@@ -7,6 +7,8 @@ import { BottomGridPanel } from '../data-grid/BottomGridPanel';
 import { SettingsModal } from '../settings/SettingsModal';
 
 import { usePdfStore } from '../../store/usePdfStore';
+import { useGridStore } from '../../store/useGridStore';
+import { useAgentStore } from '../../store/useAgentStore';
 
 export const WorkspaceLayout: React.FC = () => {
   const [activeView, setActiveView] = useState<'pdf' | 'master_grid'>('pdf');
@@ -27,12 +29,17 @@ export const WorkspaceLayout: React.FC = () => {
 
   const [isDragging, setIsDragging] = useState<string | null>(null);
 
-  const handleSelectPdf = (id: string) => {
+  const handleSelectPdf = (id: string, title?: string) => {
+    useGridStore.getState().resetActiveSelection();
     usePdfStore.getState().setActivePdf(id);
+    const resolvedTitle = title || usePdfStore.getState().getPdf(id)?.name;
+    useAgentStore.getState().setActivePdfId(id, resolvedTitle);
     setActiveView('pdf');
   };
 
   const handleOpenMasterGrid = () => {
+    useGridStore.getState().resetActiveSelection();
+    useAgentStore.getState().setActivePdfId('', 'Master Workspace');
     setActiveView('master_grid');
   };
 
@@ -123,7 +130,13 @@ export const WorkspaceLayout: React.FC = () => {
         showLeftPanel={showLeftPanel}
         showBottomPanel={showBottomPanel}
         showRightPanel={showRightPanel}
-        onToggleView={setActiveView}
+        onToggleView={(view) => {
+          if (view === 'master_grid') {
+            handleOpenMasterGrid();
+          } else {
+            handleSelectPdf(activePdfId, activePdfTitle);
+          }
+        }}
         onToggleLeftPanel={() => setShowLeftPanel(!showLeftPanel)}
         onToggleBottomPanel={() => setShowBottomPanel(!showBottomPanel)}
         onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}

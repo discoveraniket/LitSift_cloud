@@ -34,7 +34,7 @@ export class LitSiftDatabase extends Dexie {
     this.version(1).stores({
       pdfs: 'id, name, status, uploadedAt',
       gridTable: 'id, updatedAt',
-      chatMessages: 'id, timestamp',
+      chatMessages: 'id, pdfId, timestamp',
       settings: 'key',
     });
   }
