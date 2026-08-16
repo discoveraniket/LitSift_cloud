@@ -350,10 +350,19 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     }
   };
 
+  // Ensure AG Grid reactively updates and repaints all modified cells & new columns
+  useEffect(() => {
+    if (gridApiRef.current?.api) {
+      gridApiRef.current.api.redrawRows();
+      gridApiRef.current.api.refreshCells({ force: true });
+    }
+  }, [rows, columns]);
+
   return (
     <div className="ag-theme-quartz-dark" style={{ height: '100%', width: '100%' }}>
       <AgGridReact
         rowData={rowData}
+        getRowId={(params) => params.data.id}
         columnDefs={colDefs}
         defaultColDef={{
           width: 180,
@@ -371,6 +380,11 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         animateRows={true}
         rowSelection="multiple"
         onSelectionChanged={onSelectionChanged}
+        rowClassRules={{
+          'row-pending-review': (params) => params.data?.aiStatus === 'Pending Review',
+          'row-confirmed': (params) => params.data?.aiStatus === 'Confirmed',
+          'row-draft': (params) => !!params.data?.isDraftRow,
+        }}
         ref={gridApiRef}
       />
     </div>

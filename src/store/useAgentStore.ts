@@ -10,8 +10,8 @@ const createDefaultGreeting = (pdfTitle?: string): AgentMessage => ({
   pdfId: pdfTitle ? undefined : 'master-grid',
   sender: 'agent',
   text: pdfTitle
-    ? `**Now viewing "${pdfTitle}".**\n\nLitSift Agent is online. Ask me to extract findings, generate custom schemas, or ask specific questions about this paper!`
-    : 'LitSift Agent is online. Ask me to extract paper data, generate custom schemas, or edit grid table cells!',
+    ? `**Now viewing "${pdfTitle}".**\n\nLitSift Agent is online. Ask me to extract paper findings, verify citations, or edit table cells!`
+    : 'LitSift Agent is online. Ask me to extract findings, verify citations, or query the data grid!',
   timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
 });
 
@@ -20,6 +20,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   activePdfId: '',
   isThinking: false,
   mode: 'human_in_loop',
+  abortController: null,
   lastInteractionId: undefined,
 
   hydrateFromDb: async () => {
@@ -27,7 +28,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const activeId = get().activePdfId;
       let stored: AgentMessage[] = [];
       if (activeId) {
-        stored = await db.chatMessages.where('pdfId').equals(activeId).toArray();
+        stored = await db.chatMessages.where('pdfId').equals(activeId).sortBy('timestamp');
       } else {
         stored = await db.chatMessages.toArray();
       }
@@ -67,6 +68,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   sendMessage: (text: string, activePdfTitle?: string) => {
     const currentPdfId = get().activePdfId || (activePdfTitle ? `pdf-active` : 'master-grid');
+    const controller = new AbortController();
+
     const userMsg: AgentMessage = {
       id: `msg-${Date.now()}`,
       pdfId: currentPdfId,
@@ -79,37 +82,71 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       produce((state: AgentState) => {
         state.messages.push(userMsg);
         state.isThinking = true;
+        state.abortController = controller;
       })
     );
 
     db.chatMessages.put(userMsg).catch(console.warn);
 
-    // Execute Live Gemini Interactions Engine with active paper context
-    processAgentInteraction(text, activePdfTitle).then((result) => {
-      const agentMsg: AgentMessage = {
-        id: `msg-${Date.now() + 1}`,
-        pdfId: currentPdfId,
-        sender: 'agent',
-        text: result.replyText,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        toolCall: result.toolExecuted
-          ? {
-              name: result.toolExecuted.name,
-              description: result.toolExecuted.description,
-              status: 'completed',
-            }
-          : undefined,
-      };
+    // Execute Multi-Step ReAct Agent Loop
+    processAgentInteraction(text, activePdfTitle, controller.signal)
+      .then((result) => {
+        const agentMsg: AgentMessage = {
+          id: `msg-${Date.now() + 1}`,
+          pdfId: currentPdfId,
+          sender: 'agent',
+          text: result.replyText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          toolsExecuted: result.toolsExecuted,
+          toolCall:
+            result.toolsExecuted.length > 0
+              ? {
+                  name: result.toolsExecuted.map((t) => t.name).join(', '),
+                  description: result.toolsExecuted.map((t) => t.summary).join(' | '),
+                  status: result.toolsExecuted.every((t) => t.status === 'completed')
+                    ? 'completed'
+                    : 'failed',
+                }
+              : undefined,
+        };
 
-      set(
-        produce((state: AgentState) => {
-          state.messages.push(agentMsg);
-          state.isThinking = false;
-        })
-      );
+        set(
+          produce((state: AgentState) => {
+            state.messages.push(agentMsg);
+            state.isThinking = false;
+            state.abortController = null;
+          })
+        );
 
-      db.chatMessages.put(agentMsg).catch(console.warn);
-    });
+        db.chatMessages.put(agentMsg).catch(console.warn);
+      })
+      .catch((err) => {
+        const errMsg: AgentMessage = {
+          id: `msg-${Date.now() + 1}`,
+          pdfId: currentPdfId,
+          sender: 'agent',
+          text: `⚠️ Agent Error: ${err.message || 'Execution failed.'}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+
+        set(
+          produce((state: AgentState) => {
+            state.messages.push(errMsg);
+            state.isThinking = false;
+            state.abortController = null;
+          })
+        );
+
+        db.chatMessages.put(errMsg).catch(console.warn);
+      });
+  },
+
+  cancelInteraction: () => {
+    const controller = get().abortController;
+    if (controller) {
+      controller.abort();
+      set({ isThinking: false, abortController: null });
+    }
   },
 
   selectOption: (optionText: string) => {
@@ -142,7 +179,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         id: `msg-${Date.now()}`,
         pdfId: currentPdfId,
         sender: 'agent',
-        text: `Replaced open table with ${pendingCsv.parsedRows.length} rows from "${pendingCsv.filename}". (Previous table saved to Undo stack).`,
+        text: `Replaced open table with ${pendingCsv.parsedRows.length} rows from "${pendingCsv.filename}".`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       set(
@@ -172,7 +209,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     });
 
     if (currentPdfId) {
-      db.chatMessages.where('pdfId').equals(currentPdfId).delete()
+      db.chatMessages
+        .where('pdfId')
+        .equals(currentPdfId)
+        .delete()
         .then(() => db.chatMessages.put(freshMsg))
         .catch(console.warn);
     } else {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { PanelLeft, PanelBottom, PanelRight, Maximize2, Settings, RotateCcw } from 'lucide-react';
 import { getSelectedGeminiModel } from '../../services/geminiService';
+import { useAgentStore } from '../../store/useAgentStore';
 
 interface HeaderBarProps {
   activeView: 'pdf' | 'master_grid';
@@ -32,6 +33,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onResetWorkspace,
 }) => {
   const currentModel = getSelectedGeminiModel();
+  const mode = useAgentStore((state) => state.mode);
 
   return (
     <header className="header-bar">
@@ -88,9 +90,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           <span style={{ fontSize: '11px', fontWeight: 600 }}>{currentModel}</span>
         </button>
 
-        <div className="status-indicator">
+        <div className="status-indicator" title={`Agent Execution Mode: ${mode === 'human_in_loop' ? 'Human-in-the-Loop (Staged Review)' : 'Autonomous Autopilot'}`}>
           <span className="status-dot online"></span>
-          AI Ready
+          {mode === 'human_in_loop' ? 'HITL Mode' : 'Autopilot'}
         </div>
 
         <div className="layout-toggle-group">

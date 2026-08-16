@@ -300,6 +300,22 @@ body {
   color: var(--text-secondary) !important;
 }
 
+/* Staged AI Pending Review Row Highlighting */
+.ag-root-wrapper .ag-row.row-pending-review,
+.ag-root-wrapper .ag-row.row-pending-review .ag-cell {
+  background-color: rgba(249, 226, 175, 0.16) !important;
+  color: #f9e2af !important;
+}
+
+.ag-root-wrapper .ag-row.row-pending-review .ag-cell:first-child {
+  border-left: 3px solid #f9e2af !important;
+}
+
+.ag-root-wrapper .ag-row.row-pending-review:hover,
+.ag-root-wrapper .ag-row.row-pending-review:hover .ag-cell {
+  background-color: rgba(249, 226, 175, 0.24) !important;
+}
+
 .panel {
   height: 100%;
   background: var(--bg-secondary);
