@@ -25,13 +25,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   hydrateFromDb: async () => {
     try {
-      const activeId = get().activePdfId;
-      let stored: AgentMessage[] = [];
-      if (activeId) {
-        stored = await db.chatMessages.where('pdfId').equals(activeId).sortBy('timestamp');
-      } else {
-        stored = await db.chatMessages.toArray();
-      }
+      const activeId = get().activePdfId || 'master-grid';
+      const stored = await db.chatMessages.where('pdfId').equals(activeId).sortBy('timestamp');
 
       if (stored.length > 0) {
         set({ messages: stored });
@@ -44,18 +39,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   setActivePdfId: async (pdfId: string, pdfTitle?: string) => {
     set({ activePdfId: pdfId });
     try {
-      let paperMessages: AgentMessage[] = [];
-      if (pdfId) {
-        paperMessages = await db.chatMessages.where('pdfId').equals(pdfId).sortBy('timestamp');
-      } else {
-        paperMessages = await db.chatMessages.where('pdfId').equals('master-grid').sortBy('timestamp');
-      }
+      const targetId = pdfId || 'master-grid';
+      const paperMessages = await db.chatMessages.where('pdfId').equals(targetId).sortBy('timestamp');
 
       if (paperMessages.length > 0) {
         set({ messages: paperMessages });
       } else {
         const greeting = createDefaultGreeting(pdfTitle);
-        greeting.pdfId = pdfId || 'master-grid';
+        greeting.pdfId = targetId;
         set({ messages: [greeting] });
         await db.chatMessages.put(greeting);
       }
@@ -67,7 +58,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   setExecutionMode: (mode) => set({ mode }),
 
   sendMessage: (text: string, activePdfTitle?: string) => {
-    const currentPdfId = get().activePdfId || (activePdfTitle ? `pdf-active` : 'master-grid');
+    const currentPdfId = get().activePdfId || 'master-grid';
     const controller = new AbortController();
 
     const userMsg: AgentMessage = {
@@ -194,7 +185,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     get().sendMessage(optionText);
   },
 
-  clearMessages: () => {
+  clearMessages: async () => {
     const currentPdfId = get().activePdfId || 'master-grid';
     const freshMsg: AgentMessage = {
       id: `msg-${Date.now()}`,
@@ -208,15 +199,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       messages: [freshMsg],
     });
 
-    if (currentPdfId) {
-      db.chatMessages
-        .where('pdfId')
-        .equals(currentPdfId)
-        .delete()
-        .then(() => db.chatMessages.put(freshMsg))
-        .catch(console.warn);
-    } else {
-      db.chatMessages.clear().then(() => db.chatMessages.put(freshMsg)).catch(console.warn);
+    try {
+      if (currentPdfId === 'master-grid') {
+        await db.chatMessages.clear();
+      } else {
+        await db.chatMessages.where('pdfId').equals(currentPdfId).delete();
+      }
+      await db.chatMessages.put(freshMsg);
+    } catch (err) {
+      console.warn('Failed to clear chat messages in IndexedDB:', err);
     }
   },
 }));
