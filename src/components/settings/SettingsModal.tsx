@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, X, Key, Cpu, Check, ShieldCheck } from 'lucide-react';
+import { Settings, X, Key, Cpu, Check, ShieldCheck, Plus } from 'lucide-react';
 import { getGeminiApiKey, getSelectedGeminiModel, setSelectedGeminiModel } from '../../services/geminiService';
 
 interface SettingsModalProps {
@@ -7,27 +7,50 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-const AVAILABLE_MODELS = [
+export interface ModelOption {
+  id: string;
+  name: string;
+  speed: string;
+  reasoning: string;
+  badge?: string;
+  isCustom?: boolean;
+}
+
+const DEFAULT_MODELS: ModelOption[] = [
+  {
+    id: 'gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash',
+    speed: 'Hybrid Reasoning',
+    reasoning: 'State-of-the-Art Speed & Reasoning',
+    badge: 'Latest',
+  },
   {
     id: 'gemini-3.6-flash',
-    name: 'Gemini 3.6 Flash (Recommended)',
+    name: 'Gemini 3.6 Flash',
     speed: 'Ultra Fast',
     reasoning: 'High Efficacy & Tool Calling',
-    badge: 'Default',
+    badge: 'Recommended',
   },
   {
     id: 'gemini-3.6-pro',
     name: 'Gemini 3.6 Pro',
     speed: 'Deep Reasoning',
-    reasoning: 'Complex Schema Synthesis',
+    reasoning: 'Complex Schema Synthesis & Verification',
     badge: 'Pro Reasoning',
   },
   {
     id: 'gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
     speed: 'Fast',
-    reasoning: 'Standard Extraction',
-    badge: 'Legacy',
+    reasoning: 'Standard Extraction & Summary',
+    badge: 'Stable',
+  },
+  {
+    id: 'gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro',
+    speed: 'High Capacity',
+    reasoning: 'Large Context & Multi-turn Depth',
+    badge: 'Stable Pro',
   },
 ];
 
@@ -35,8 +58,60 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [currentModel, setCurrentModel] = useState<string>(getSelectedGeminiModel());
   const [apiKeyInput, setApiKeyInput] = useState<string>(getGeminiApiKey());
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [customModelInput, setCustomModelInput] = useState<string>('');
+  const [showCustomInput, setShowCustomInput] = useState(false);
+
+  // Load custom models from localStorage
+  const [customModels, setCustomModels] = useState<ModelOption[]>(() => {
+    try {
+      const stored = localStorage.getItem('LITSIFT_CUSTOM_MODELS');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
 
   if (!isOpen) return null;
+
+  const allModels: ModelOption[] = [...DEFAULT_MODELS, ...customModels];
+
+  const handleAddCustomModel = () => {
+    const trimmed = customModelInput.trim();
+    if (!trimmed) return;
+
+    if (allModels.some((m) => m.id.toLowerCase() === trimmed.toLowerCase())) {
+      setCurrentModel(trimmed);
+      setCustomModelInput('');
+      setShowCustomInput(false);
+      return;
+    }
+
+    const newOption: ModelOption = {
+      id: trimmed,
+      name: trimmed,
+      speed: 'Custom Model',
+      reasoning: 'User Specified Endpoint',
+      badge: 'Custom',
+      isCustom: true,
+    };
+
+    const updated = [...customModels, newOption];
+    setCustomModels(updated);
+    localStorage.setItem('LITSIFT_CUSTOM_MODELS', JSON.stringify(updated));
+    setCurrentModel(trimmed);
+    setCustomModelInput('');
+    setShowCustomInput(false);
+  };
+
+  const handleRemoveCustomModel = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = customModels.filter((m) => m.id !== id);
+    setCustomModels(updated);
+    localStorage.setItem('LITSIFT_CUSTOM_MODELS', JSON.stringify(updated));
+    if (currentModel === id) {
+      setCurrentModel('gemini-3.7-flash');
+    }
+  };
 
   const handleSave = () => {
     setSelectedGeminiModel(currentModel);
@@ -55,8 +130,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.65)',
-        backdropFilter: 'blur(4px)',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        backdropFilter: 'blur(5px)',
         zIndex: 9999,
         display: 'flex',
         alignItems: 'center',
@@ -69,18 +144,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           background: 'var(--bg-secondary)',
           border: '1px solid var(--border-subtle)',
           borderRadius: '12px',
-          width: '460px',
-          maxWidth: '90vw',
-          padding: '20px 24px',
-          boxShadow: '0 16px 40px rgba(0, 0, 0, 0.5)',
+          width: '500px',
+          maxWidth: '92vw',
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6)',
           color: 'var(--text-primary)',
+          overflow: 'hidden',
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '15px' }}>
-            <Settings size={18} color="var(--accent-primary)" />
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '16px 20px',
+            borderBottom: '1px solid var(--border-subtle)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '14px' }}>
+            <Settings size={17} color="var(--accent-primary)" />
             <span>Workspace Settings & AI Model Configuration</span>
           </div>
           <button
@@ -91,129 +177,233 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               color: 'var(--text-secondary)',
               cursor: 'pointer',
               padding: '4px',
+              display: 'flex',
             }}
           >
             <X size={16} />
           </button>
         </div>
 
-        {/* Model Selection */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-            <Cpu size={14} color="var(--accent-primary)" />
-            SELECT GEMINI AI MODEL
-          </label>
+        {/* Scrollable Body */}
+        <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+          {/* Model Selection */}
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Cpu size={14} color="var(--accent-primary)" />
+                SELECT OR ENTER GEMINI MODEL
+              </label>
+              <button
+                onClick={() => setShowCustomInput(!showCustomInput)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--accent-primary)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <Plus size={12} /> {showCustomInput ? 'Hide Input' : 'Enter Custom Model'}
+              </button>
+            </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {AVAILABLE_MODELS.map((model) => {
-              const isSelected = currentModel === model.id;
-              return (
-                <div
-                  key={model.id}
-                  onClick={() => setCurrentModel(model.id)}
+            {/* Custom Model Input Row */}
+            {showCustomInput && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '6px',
+                  marginBottom: '10px',
+                  padding: '8px',
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-subtle)',
+                }}
+              >
+                <input
+                  type="text"
+                  placeholder="e.g. gemini-2.5-flash-lite, gemini-experimental..."
+                  value={customModelInput}
+                  onChange={(e) => setCustomModelInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddCustomModel()}
                   style={{
-                    border: isSelected ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
-                    background: isSelected ? 'rgba(137, 180, 250, 0.1)' : 'var(--bg-tertiary)',
-                    borderRadius: '8px',
-                    padding: '10px 12px',
+                    flex: 1,
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-primary)',
+                    borderRadius: '4px',
+                    padding: '5px 8px',
+                    fontSize: '11px',
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={handleAddCustomModel}
+                  style={{
+                    background: 'var(--accent-primary)',
+                    color: 'var(--bg-secondary)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '5px 12px',
+                    fontSize: '11px',
+                    fontWeight: 600,
                     cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    transition: 'all 0.2s ease',
                   }}
                 >
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {model.name}
-                      <span
-                        style={{
-                          fontSize: '9px',
-                          padding: '1px 6px',
-                          borderRadius: '10px',
-                          background: isSelected ? 'var(--accent-primary)' : 'var(--bg-secondary)',
-                          color: isSelected ? 'var(--bg-secondary)' : 'var(--text-secondary)',
-                          fontWeight: 700,
-                        }}
-                      >
-                        {model.badge}
-                      </span>
+                  Add Model
+                </button>
+              </div>
+            )}
+
+            {/* Model Card Grid */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {allModels.map((model) => {
+                const isSelected = currentModel === model.id;
+                return (
+                  <div
+                    key={model.id}
+                    onClick={() => setCurrentModel(model.id)}
+                    style={{
+                      border: isSelected ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+                      background: isSelected ? 'rgba(137, 180, 250, 0.12)' : 'var(--bg-tertiary)',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {model.name}
+                        {model.badge && (
+                          <span
+                            style={{
+                              fontSize: '9px',
+                              padding: '1px 6px',
+                              borderRadius: '10px',
+                              background: isSelected ? 'var(--accent-primary)' : 'var(--bg-secondary)',
+                              color: isSelected ? 'var(--bg-secondary)' : 'var(--text-secondary)',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {model.badge}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        ⚡ {model.speed} • {model.reasoning}
+                      </div>
                     </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      ⚡ {model.speed} • {model.reasoning}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {model.isCustom && (
+                        <button
+                          onClick={(e) => handleRemoveCustomModel(model.id, e)}
+                          title="Remove custom model"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                      {isSelected && <Check size={16} color="var(--accent-primary)" />}
                     </div>
                   </div>
-
-                  {isSelected && <Check size={16} color="var(--accent-primary)" />}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
 
-        {/* API Key Input */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-            <Key size={14} color="var(--accent-primary)" />
-            GEMINI API KEY (ENV / LOCAL)
-          </label>
-          <input
-            type="password"
-            value={apiKeyInput}
-            onChange={(e) => setApiKeyInput(e.target.value)}
-            placeholder="Paste your GEMINI_API_KEY here..."
-            style={{
-              width: '100%',
-              background: 'var(--bg-tertiary)',
-              border: '1px solid var(--border-subtle)',
-              color: 'var(--text-primary)',
-              borderRadius: '6px',
-              padding: '8px 10px',
-              fontSize: '12px',
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
-          <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <ShieldCheck size={12} color="var(--accent-success)" />
-            Key detected from environment variable `GEMINI_API_KEY` or local storage.
+          {/* API Key Input */}
+          <div style={{ marginBottom: '10px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+              <Key size={14} color="var(--accent-primary)" />
+              GEMINI API KEY (ENV / LOCAL)
+            </label>
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder="Paste your GEMINI_API_KEY here..."
+              style={{
+                width: '100%',
+                background: 'var(--bg-tertiary)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-primary)',
+                borderRadius: '6px',
+                padding: '8px 10px',
+                fontSize: '12px',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <ShieldCheck size={12} color="var(--accent-success)" />
+              Key detected from environment variable `GEMINI_API_KEY` or local storage.
+            </div>
           </div>
         </div>
 
         {/* Footer Buttons */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'var(--bg-tertiary)',
-              border: '1px solid var(--border-subtle)',
-              color: 'var(--text-secondary)',
-              borderRadius: '6px',
-              padding: '6px 14px',
-              fontSize: '12px',
-              cursor: 'pointer',
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            style={{
-              background: savedSuccess ? 'var(--accent-success)' : 'var(--accent-primary)',
-              color: 'var(--bg-secondary)',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '6px 16px',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            {savedSuccess ? 'Saved ✓' : 'Save Settings'}
-          </button>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '12px 20px',
+            borderTop: '1px solid var(--border-subtle)',
+            background: 'var(--bg-secondary)',
+          }}
+        >
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+            Active: <strong style={{ color: 'var(--accent-primary)' }}>{currentModel}</strong>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'var(--bg-tertiary)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-secondary)',
+                borderRadius: '6px',
+                padding: '6px 14px',
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              style={{
+                background: savedSuccess ? 'var(--accent-success)' : 'var(--accent-primary)',
+                color: 'var(--bg-secondary)',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '6px 16px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              {savedSuccess ? 'Saved ✓' : 'Save Settings'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
