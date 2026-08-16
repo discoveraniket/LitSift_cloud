@@ -110,18 +110,22 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   const [focusedRowIndex, setFocusedRowIndex] = useState<number | null>(null);
   const gridApiRef = useRef<any>(null);
 
-  // Filter rows if in scoped view (show rows matching active PDF with safe fallback)
+  // Filter rows if in scoped view (show rows strictly matching active PDF)
   const rowData = useMemo(() => {
     if (filterPdfId && filterPdfId !== 'master-grid') {
-      const filtered = rows.filter(
-        (r) =>
-          r.pdfId === filterPdfId ||
-          (activePdfTitle &&
-            activePdfTitle !== 'No Paper Selected' &&
-            activePdfTitle !== 'Master Workspace' &&
-            r.pdfTitle.toLowerCase() === activePdfTitle.toLowerCase())
-      );
-      return filtered.length > 0 ? filtered : rows;
+      return rows.filter((r) => {
+        if (r.pdfId && r.pdfId === filterPdfId) return true;
+        if (
+          activePdfTitle &&
+          activePdfTitle !== 'No Paper Selected' &&
+          activePdfTitle !== 'Master Workspace' &&
+          r.pdfTitle &&
+          r.pdfTitle.trim().toLowerCase() === activePdfTitle.trim().toLowerCase()
+        ) {
+          return true;
+        }
+        return false;
+      });
     }
     return rows; // Master view shows all
   }, [rows, filterPdfId, activePdfTitle]);
