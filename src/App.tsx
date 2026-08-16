@@ -9,14 +9,21 @@ export const App: React.FC = () => {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    // Hydrate all stores in parallel from IndexedDB
-    Promise.all([
-      usePdfStore.getState().hydrateFromDb(),
-      useGridStore.getState().hydrateFromDb(),
-      useAgentStore.getState().hydrateFromDb(),
-    ])
-      .catch((err) => console.warn('IndexedDB initial hydration notice:', err))
-      .finally(() => setIsReady(true));
+    // Sequential store hydration to ensure chat history loads for the restored active PDF
+    const hydrateStores = async () => {
+      try {
+        await usePdfStore.getState().hydrateFromDb();
+        await useGridStore.getState().hydrateFromDb();
+        const activePdf = usePdfStore.getState().getActivePdf();
+        await useAgentStore.getState().setActivePdfId(activePdf?.id || '', activePdf?.name);
+      } catch (err) {
+        console.warn('IndexedDB initial hydration notice:', err);
+      } finally {
+        setIsReady(true);
+      }
+    };
+
+    hydrateStores();
   }, []);
 
   if (!isReady) {

@@ -192,7 +192,7 @@ Reasoning: The paper explicitly names the isolated bacteriophage as Klebsiella p
 ---
 
 ## Step 8: Document Search Across Paper (`searchDocument`)
-- [ ] **Status:** [ ] Pass / [ ] Fail / [ ] Needs Improvement
+- [x] **Status:** [x] Pass / [ ] Fail / [ ] Needs Improvement
 
 ### Instructions:
 1. In the chat box, type:
@@ -212,7 +212,7 @@ Reasoning: The paper explicitly names the isolated bacteriophage as Klebsiella p
 ---
 
 ## Step 9: Row Splitting & Merging (`splitRow` & `mergeRows`)
-- [ ] **Status:** [ ] Pass / [ ] Fail / [ ] Needs Improvement
+- [x] **Status:** [x] Pass / [ ] Fail / [ ] Needs Improvement
 
 ### Instructions:
 1. **Split Row:** Type `Split row 1 into separate sub-rows`.
@@ -229,7 +229,7 @@ Reasoning: The paper explicitly names the isolated bacteriophage as Klebsiella p
 ---
 
 ## Step 10: Analytical Table Querying (`queryGridData`)
-- [ ] **Status:** [ ] Pass / [ ] Fail / [ ] Needs Improvement
+- [x] **Status:** [x] Pass / [ ] Fail / [ ] Needs Improvement
 
 ### Instructions:
 1. Click the **📊 Query Table** quick chip (or type: `Query the table and summarize all rows`).
@@ -246,7 +246,7 @@ Reasoning: The paper explicitly names the isolated bacteriophage as Klebsiella p
 ---
 
 ## Step 11: Human-in-the-Loop (HITL) Review vs Autopilot
-- [ ] **Status:** [ ] Pass / [ ] Fail / [ ] Needs Improvement
+- [x] **Status:** [x] Pass / [ ] Fail / [ ] Needs Improvement
 
 ### Instructions:
 1. **HITL Review Mode Test:**
@@ -266,7 +266,7 @@ Reasoning: The paper explicitly names the isolated bacteriophage as Klebsiella p
 ---
 
 ## Step 12: Agent Cancellation (`Stop` Button)
-- [ ] **Status:** [ ] Pass / [ ] Fail / [ ] Needs Improvement
+- [x] **Status:** [x] Pass / [ ] Fail / [ ] Needs Improvement
 
 ### Instructions:
 1. Type a long multi-step prompt:

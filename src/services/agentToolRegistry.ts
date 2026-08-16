@@ -5,6 +5,7 @@ import { useLogStore } from '../store/useLogStore';
 import { getGeminiApiKey, getSelectedGeminiModel } from './geminiService';
 import { getPdfBase64 } from './pdfUtils';
 import { GoogleGenAI, Type } from '@google/genai';
+import { GridRow } from '../types/grid';
 
 export type AgentExecutionMode = 'human_in_loop' | 'autonomous_autopilot';
 
@@ -661,36 +662,46 @@ Return your response strictly as a JSON object with this format:
       }
 
       const activePdfId = usePdfStore.getState().activePdfId;
-      const rowsToAppend = rawRows.map((r: any) => {
-        const rowData: Record<string, any> = {
+      const rowsToAppend: GridRow[] = rawRows.map((r: any, i: number) => {
+        const rowId = `extracted-${Date.now()}-${i}`;
+        const rowData: GridRow = {
+          id: rowId,
           pdfId: pdfInfo?.id || activePdfId || `pdf-${Date.now()}`,
           pdfTitle: pdfInfo?.name || targetPdfTitle,
           aiStatus: mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed',
+          citationMap: r.citations || parsed.citations || {},
         };
 
-        const citations = r.citations || parsed.citations || {};
-        rowData.citationMap = citations;
-
-        headers.forEach((h) => {
-          if (r[h] !== undefined) {
-            rowData[h] = r[h];
-          }
+        gridStore.columns.forEach((col) => {
+          const val =
+            r[col.field] ??
+            r[col.headerName] ??
+            Object.entries(r).find(
+              ([k]) =>
+                k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                col.field.toLowerCase().replace(/[^a-z0-9]/g, '') ||
+                k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
+            )?.[1];
+          rowData[col.field] = val !== undefined && val !== null ? String(val) : '-';
         });
 
         // Ensure citationMap maps to column field keys
-        Object.keys(citations).forEach((key) => {
-          const matchingCol = gridStore.columns.find(
-            (c) => c.headerName.toLowerCase() === key.toLowerCase() || c.field.toLowerCase() === key.toLowerCase()
-          );
-          if (matchingCol && !rowData.citationMap[matchingCol.field]) {
-            rowData.citationMap[matchingCol.field] = citations[key];
-          }
-        });
+        if (rowData.citationMap) {
+          Object.keys(rowData.citationMap).forEach((key) => {
+            const matchingCol = gridStore.columns.find(
+              (c) => c.headerName.toLowerCase() === key.toLowerCase() || c.field.toLowerCase() === key.toLowerCase()
+            );
+            if (matchingCol && rowData.citationMap && !rowData.citationMap[matchingCol.field]) {
+              rowData.citationMap[matchingCol.field] = (rowData.citationMap as any)[key];
+            }
+          });
+        }
 
         return rowData;
       });
 
-      gridStore.appendCsvDataset(headers, rowsToAppend);
+      gridStore.appendRows(rowsToAppend);
 
       // Auto-focus first citation
       useGridStore.setState(

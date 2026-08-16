@@ -70,6 +70,7 @@ export interface GridState {
   addCellDiscussionMessage: (rowId: string, field: string, userText: string) => void;
   importCsvDataset: (headers: string[], parsedRows: Record<string, any>[]) => void;
   appendCsvDataset: (headers: string[], parsedRows: Record<string, any>[]) => void;
+  appendRows: (rows: GridRow[]) => void;
   clearTable: () => void;
   reorderRows: (sourceIndex: number, destinationIndex: number) => void;
 }

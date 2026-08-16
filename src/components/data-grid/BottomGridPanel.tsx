@@ -5,10 +5,10 @@ import { useAgentStore } from '../../store/useAgentStore';
 
 interface BottomGridPanelProps {
   activePdfId?: string;
-  activePdfTitle: string;
+  activePdfTitle?: string;
 }
 
-export const BottomGridPanel: React.FC<BottomGridPanelProps> = ({ activePdfId = 'pdf-1', activePdfTitle }) => {
+export const BottomGridPanel: React.FC<BottomGridPanelProps> = ({ activePdfId, activePdfTitle }) => {
   const { sendMessage } = useAgentStore();
   const {
     rows,

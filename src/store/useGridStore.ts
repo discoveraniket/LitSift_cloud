@@ -35,6 +35,17 @@ const saveSnapshot = (state: GridState) => {
   redoStack.length = 0; // Clear redo stack on new edit action
 };
 
+export const sanitizeField = (name: string): string => {
+  const clean = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (!clean) return `col_${Math.random().toString(36).substring(2, 6)}`;
+  if (clean === 'document' || clean === 'title' || clean === 'pdf') return 'pdfTitle';
+  return clean;
+};
+
 export const useGridStore = create<GridState>((set) => ({
   columns: [],
   rows: [],
@@ -138,9 +149,10 @@ export const useGridStore = create<GridState>((set) => ({
     set(
       produce((state: GridState) => {
         saveSnapshot(state);
-        const field = headerName.toLowerCase().replace(/\s+/g, '_');
+        const cleanName = headerName.trim();
+        const field = sanitizeField(cleanName);
         if (!state.columns.some((c) => c.field === field)) {
-          state.columns.push({ field, headerName, editable: true });
+          state.columns.push({ field, headerName: cleanName, editable: true });
           state.rows.forEach((row) => {
             row[field] = '-';
           });
@@ -412,17 +424,20 @@ export const useGridStore = create<GridState>((set) => ({
       produce((state: GridState) => {
         saveSnapshot(state);
 
-        // Convert CSV headers to SchemaColumn format strictly as defined in the CSV
-        const newCols: SchemaColumn[] = headers.map((h) => {
+        const newCols: SchemaColumn[] = [];
+        const seenFields = new Set<string>();
+
+        headers.forEach((h) => {
           const cleanHeader = h.trim();
-          let field = cleanHeader.toLowerCase().replace(/[^a-z0-9]/g, '');
-          if (!field) field = `col_${Math.random().toString(36).substring(2, 6)}`;
-          if (field === 'document' || field === 'title' || field === 'pdf') field = 'pdfTitle';
-          return {
-            field,
-            headerName: cleanHeader,
-            editable: true,
-          };
+          const field = sanitizeField(cleanHeader);
+          if (!seenFields.has(field)) {
+            seenFields.add(field);
+            newCols.push({
+              field,
+              headerName: cleanHeader,
+              editable: true,
+            });
+          }
         });
 
         // Map parsed CSV rows into GridRow structure
@@ -455,14 +470,11 @@ export const useGridStore = create<GridState>((set) => ({
       produce((state: GridState) => {
         saveSnapshot(state);
 
-        // Check for new headers and add missing columns to schema
-        const existingHeaders = state.columns.map((c) => c.headerName.toLowerCase());
-
+        // Check for new headers and add missing columns to schema without duplicate fields
         headers.forEach((h) => {
           const cleanHeader = h.trim();
-          if (!existingHeaders.includes(cleanHeader.toLowerCase())) {
-            let field = cleanHeader.toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (!field) field = `col_${Math.random().toString(36).substring(2, 6)}`;
+          const field = sanitizeField(cleanHeader);
+          if (!state.columns.some((c) => c.field === field)) {
             state.columns.push({
               field,
               headerName: cleanHeader,
@@ -499,6 +511,14 @@ export const useGridStore = create<GridState>((set) => ({
         });
 
         state.rows.push(...appendedRows);
+      })
+    ),
+
+  appendRows: (newRows) =>
+    set(
+      produce((state: GridState) => {
+        saveSnapshot(state);
+        state.rows.push(...newRows);
       })
     ),
 
