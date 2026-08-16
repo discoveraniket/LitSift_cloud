@@ -55,6 +55,20 @@ export const WorkspaceLayout: React.FC = () => {
     }
   };
 
+  const handleResetWorkspace = async () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to start a fresh project?\n\nThis will clear all uploaded PDFs, extracted table rows, and chat histories from your workspace.'
+    );
+    if (!confirmed) return;
+
+    // Reset stores and IndexedDB
+    useGridStore.getState().resetActiveSelection();
+    useGridStore.getState().clearTable();
+    await usePdfStore.getState().clearAllPdfs();
+    useAgentStore.getState().clearMessages();
+    setActiveView('pdf');
+  };
+
   // Custom Mouse Drag Handlers
   const handleMouseDownLeft = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -142,6 +156,7 @@ export const WorkspaceLayout: React.FC = () => {
         onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
         onToggleZenMode={handleToggleZenMode}
         onOpenSettings={() => setShowSettingsModal(true)}
+        onResetWorkspace={handleResetWorkspace}
       />
 
       <div className="workspace-body">

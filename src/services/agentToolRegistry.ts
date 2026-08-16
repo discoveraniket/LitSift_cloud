@@ -24,58 +24,93 @@ export interface AgentToolSpec {
 export const agentToolsRegistry: Record<string, AgentToolSpec> = {
   updateCell: {
     name: 'updateCell',
-    description: 'Update the text content, reasoning, section name, and evidence box location of a specific table cell',
+    description: 'Update the text content, reasoning, section name, and evidence location of a specific table cell',
     parameters: {
       type: 'OBJECT',
       properties: {
-        rowId: { type: 'STRING', description: 'Target row ID (e.g. 1, 2)' },
-        field: { type: 'STRING', description: 'Column field name (e.g. Methodology, Sample Size, Key Results)' },
+        rowId: { type: 'STRING', description: 'Target row ID. If modifying the currently focused row, leave empty.' },
+        field: { type: 'STRING', description: 'Target column field key to update (e.g. methodology, sampleSize, keyResults, limitations)' },
         newValue: { type: 'STRING', description: 'New extracted text value for the cell' },
         reasoning: { type: 'STRING', description: 'Explanation of why this value was chosen from the paper' },
-        sectionName: { type: 'STRING', description: 'Paper section name (e.g. Section 2.1)' },
+        sectionName: { type: 'STRING', description: 'Paper section name (e.g. Section 2.1, Table 3)' },
         pageNumber: { type: 'NUMBER', description: 'PDF page number containing the evidence' },
         snippetQuote: { type: 'STRING', description: 'Exact quote passage from the document' },
       },
-      required: ['rowId', 'field', 'newValue', 'reasoning'],
+      required: ['newValue', 'reasoning'],
     },
     execute: async (args: any, mode: AgentExecutionMode) => {
       const gridStore = useGridStore.getState();
       const logStore = useLogStore.getState();
       const { rowId, field, newValue, reasoning, sectionName, pageNumber, snippetQuote } = args;
-      const targetRowId = String(rowId || '1');
-      const row = gridStore.rows.find((r) => r.id === targetRowId) || gridStore.rows[0];
 
-      logStore.addLog('info', `Executing updateCell on row "${targetRowId}", column "${field}"`, { newValue, reasoning });
-
-      if (row) {
-        gridStore.updateCell(row.id, field || 'Methodology', newValue);
-        useGridStore.setState(
-          produce((state: any) => {
-            const target = state.rows.find((r: any) => r.id === row.id);
-            if (target) {
-              if (mode === 'human_in_loop') {
-                target.aiStatus = 'Pending Review';
-              } else {
-                target.aiStatus = 'Confirmed';
-              }
-              if (!target.citationMap) target.citationMap = {};
-              target.citationMap[field] = {
-                pageNumber: pageNumber || 1,
-                sectionName: sectionName || 'Section 2.1',
-                snippetQuote: snippetQuote || newValue,
-                reasoning: reasoning || 'Updated by Gemini Agent',
-                confidence: 0.96,
-              };
-              state.activeCitation = target.citationMap[field];
-            }
-          })
-        );
+      // Deterministic target resolution: bind to focusedCell if available
+      const focused = gridStore.focusedCell;
+      let targetRow = gridStore.rows.find((r) => r.id === rowId);
+      if (!targetRow && focused) {
+        targetRow = gridStore.rows.find((r) => r.id === focused.rowId);
+      }
+      if (!targetRow && gridStore.rows.length > 0) {
+        targetRow = gridStore.rows[0];
       }
 
-      logStore.addLog('success', `Cell "${field}" updated successfully`);
+      if (!targetRow) {
+        throw new Error('No table row found to update. Extract data from a paper first.');
+      }
+
+      // Deterministic column field resolution:
+      // Match exact field, or case-insensitive match, or fallback to focusedCell.field
+      const allCols = gridStore.columns;
+      let targetCol = allCols.find((c) => c.field === field || c.headerName.toLowerCase() === (field || '').toLowerCase());
+      if (!targetCol && field) {
+        const cleanField = field.toLowerCase().replace(/[^a-z0-9]/g, '');
+        targetCol = allCols.find((c) => c.field.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanField);
+      }
+      if (!targetCol && focused) {
+        targetCol = allCols.find((c) => c.field === focused.field);
+      }
+      const targetField = targetCol?.field || field || allCols[0]?.field || 'methodology';
+      const colHeader = targetCol?.headerName || targetField;
+
+      logStore.addLog('info', `Executing updateCell on row "${targetRow.pdfTitle}" [${targetRow.id}], column "${colHeader}"`, {
+        newValue,
+        reasoning,
+      });
+
+      // 1. Update cell value in gridStore
+      gridStore.updateCell(targetRow.id, targetField, newValue);
+
+      // 2. Update rich citation and AI review status
+      useGridStore.setState(
+        produce((state: any) => {
+          const row = state.rows.find((r: any) => r.id === targetRow.id);
+          if (row) {
+            row[targetField] = newValue;
+            row.aiStatus = mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed';
+            if (!row.citationMap) row.citationMap = {};
+            row.citationMap[targetField] = {
+              pageNumber: pageNumber || 1,
+              sectionName: sectionName || 'Verified Section',
+              snippetQuote: snippetQuote || newValue,
+              reasoning: reasoning || 'Updated by Gemini Agent',
+              confidence: 0.98,
+            };
+            if (state.focusedCell?.rowId === row.id && state.focusedCell?.field === targetField) {
+              state.activeCitation = row.citationMap[targetField];
+            }
+          }
+        })
+      );
+
+      logStore.addLog('success', `Cell "${colHeader}" updated to "${newValue}"`);
       return {
-        replyText: `Updated cell "${field}" in row ${targetRowId} to: "${newValue}". Reasoning & citations recorded!`,
-        summary: `updateCell(${field} -> "${newValue}")`,
+        replyText: `Updated cell **"${colHeader}"** in row *"${targetRow.pdfTitle}"* to: **"${newValue}"**.\n\n💡 *Reasoning:* ${reasoning}`,
+        summary: `updateCell(${colHeader} -> "${newValue}")`,
+        resultData: {
+          rowId: targetRow.id,
+          field: targetField,
+          newValue,
+          reasoning,
+        },
       };
     },
   },
@@ -86,20 +121,22 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
     parameters: {
       type: 'OBJECT',
       properties: {
-        rowId: { type: 'STRING', description: 'Target row ID to split' },
+        rowId: { type: 'STRING', description: 'Target row ID to split. Defaults to focused row.' },
         field: { type: 'STRING', description: 'Target column field to split by' },
       },
-      required: ['rowId'],
     },
     execute: async (args: any) => {
       const gridStore = useGridStore.getState();
       const logStore = useLogStore.getState();
-      logStore.addLog('info', `Splitting row ${args.rowId} by field ${args.field || 'auto'}`);
-      gridStore.splitSelectedRow(args.rowId || '1', args.field);
-      logStore.addLog('success', `Row ${args.rowId} split into distinct sub-rows`);
+      const targetRowId = args.rowId || gridStore.focusedCell?.rowId || gridStore.rows[0]?.id;
+      if (!targetRowId) throw new Error('No row available to split.');
+
+      logStore.addLog('info', `Splitting row ${targetRowId} by field ${args.field || 'auto'}`);
+      gridStore.splitSelectedRow(targetRowId, args.field);
+      logStore.addLog('success', `Row ${targetRowId} split into distinct sub-rows`);
       return {
-        replyText: `Successfully split row ${args.rowId} into distinct sub-rows!`,
-        summary: `splitRow(rowId: ${args.rowId})`,
+        replyText: `Successfully split row into distinct sub-rows!`,
+        summary: `splitRow(rowId: ${targetRowId})`,
       };
     },
   },
@@ -129,11 +166,11 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
 
   extractPDFData: {
     name: 'extractPDFData',
-    description: 'Extract structured paper findings (Title, Methodology, Sample Size, Key Results, Limitations) from PDF into the data grid',
+    description: 'Extract structured paper findings from PDF into the data grid',
     parameters: {
       type: 'OBJECT',
       properties: {
-        pdfId: { type: 'STRING', description: 'PDF ID to extract (e.g. 38094623.pdf)' },
+        pdfId: { type: 'STRING', description: 'PDF title or ID to extract' },
       },
     },
     execute: async (args: any, mode: AgentExecutionMode) => {
@@ -143,39 +180,26 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
       const apiKey = getGeminiApiKey();
       const selectedModel = getSelectedGeminiModel();
 
-      logStore.addLog('info', `Starting extraction workflow for: "${targetPdfTitle}" using model "${selectedModel}"`);
-
-      // Auto-initialize standard columns if grid is currently empty
-      if (gridStore.columns.length === 0) {
-        logStore.addLog('info', 'No schema columns found. Auto-initializing default columns: Methodology, Sample Size, Key Results, Limitations');
-        gridStore.addColumn('Methodology');
-        gridStore.addColumn('Sample Size');
-        gridStore.addColumn('Key Results');
-        gridStore.addColumn('Limitations');
-      }
-
-      const activeCols = useGridStore.getState().columns;
-      const headers = activeCols.map((c) => c.headerName);
-
       if (!apiKey) {
-        const err = 'GEMINI_API_KEY is missing. Please set your API key in Settings (⚙️).';
-        logStore.addLog('error', err);
-        throw new Error(err);
+        throw new Error('GEMINI_API_KEY is not configured in settings or environment.');
       }
+
+      logStore.setActiveStep(`[1/3] Reading PDF document & schema columns...`);
+      logStore.addLog('info', `Starting extraction for "${targetPdfTitle}" using ${selectedModel}`);
 
       const pdfStore = usePdfStore.getState();
-      let pdfInfo = pdfStore.getActivePdf() || pdfStore.pdfs.find((p) => p.name === targetPdfTitle || p.id === targetPdfTitle);
-      if (!pdfInfo && pdfStore.pdfs.length > 0) {
-        pdfInfo = pdfStore.pdfs[0];
+      const pdfInfo = pdfStore.pdfs.find((p) => p.id === targetPdfTitle || p.name === targetPdfTitle) || pdfStore.getActivePdf();
+
+      const headers = gridStore.columns.map((c) => c.field);
+      if (headers.length === 0) {
+        throw new Error('No schema columns defined in the table.');
       }
 
       const contentsParts: any[] = [];
+
       if (pdfInfo) {
         try {
-          logStore.setActiveStep(`[1/3] Reading & encoding PDF "${pdfInfo.name}" to Base64...`);
           const base64Data = await getPdfBase64(pdfInfo);
-          const sizeKb = Math.round(base64Data.length * 0.75 / 1024);
-          logStore.addLog('info', `PDF encoded successfully (${sizeKb} KB)`);
           contentsParts.push({
             inlineData: {
               mimeType: 'application/pdf',
@@ -239,7 +263,6 @@ Return your response strictly as a JSON object with this format:
       logStore.setActiveStep(`[3/3] Parsing JSON payload & populating table grid...`);
       const parsed = JSON.parse(text);
       
-      // Normalize rows: support both multi-row "rows" array and legacy "extractions" single object
       let rawRows: any[] = [];
       if (Array.isArray(parsed.rows) && parsed.rows.length > 0) {
         rawRows = parsed.rows;
@@ -269,24 +292,27 @@ Return your response strictly as a JSON object with this format:
         });
 
         // Ensure citationMap maps to column field keys as well
-        activeCols.forEach((col) => {
-          if (citations[col.headerName] && !rowData.citationMap[col.field]) {
-            rowData.citationMap[col.field] = citations[col.headerName];
+        Object.keys(citations).forEach((key) => {
+          const matchingCol = gridStore.columns.find(
+            (c) => c.headerName.toLowerCase() === key.toLowerCase() || c.field.toLowerCase() === key.toLowerCase()
+          );
+          if (matchingCol && !rowData.citationMap[matchingCol.field]) {
+            rowData.citationMap[matchingCol.field] = citations[key];
           }
         });
 
         return rowData;
       });
 
-      logStore.addLog('info', `Parsed ${rowsToAppend.length} structured row(s)`, rowsToAppend);
-
+      // Append extracted rows to gridStore
       gridStore.appendCsvDataset(headers, rowsToAppend);
 
-      // Set active citation to the first extracted cell of the newest row
+      // Auto-focus first citation of first extracted row
       useGridStore.setState(
         produce((state: any) => {
-          const newestRow = state.rows[state.rows.length - 1];
+          const newestRow = state.rows[state.rows.length - rowsToAppend.length];
           if (newestRow && newestRow.citationMap) {
+            const activeCols = state.columns;
             const firstField = activeCols[0]?.field;
             if (firstField && newestRow.citationMap[firstField]) {
               state.activeCitation = newestRow.citationMap[firstField];
@@ -308,12 +334,23 @@ Return your response strictly as a JSON object with this format:
 };
 
 export function getToolsForMode(mode: AgentExecutionMode = 'human_in_loop') {
+  const activeCols = useGridStore.getState().columns;
+  const activeFields = activeCols.map((c) => c.field);
+
   return Object.values(agentToolsRegistry).map((tool) => {
+    const parameters = JSON.parse(JSON.stringify(tool.parameters));
+    
+    // Dynamically inject active column fields as an enum for updateCell
+    if (tool.name === 'updateCell' && activeFields.length > 0 && parameters.properties?.field) {
+      parameters.properties.field.enum = activeFields;
+      parameters.properties.field.description = `Target column field key. Must be one of: ${activeFields.join(', ')}`;
+    }
+
     const spec: any = {
       type: 'function',
       name: tool.name,
       description: tool.description,
-      parameters: tool.parameters,
+      parameters,
     };
 
     if (mode === 'autonomous_autopilot') {

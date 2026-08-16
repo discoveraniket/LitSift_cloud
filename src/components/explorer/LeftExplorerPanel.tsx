@@ -11,6 +11,7 @@ import {
   Table,
   Download,
   Trash2,
+  FolderOpen,
 } from 'lucide-react';
 
 interface LeftExplorerPanelProps {
@@ -30,19 +31,36 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   const [activeItem, setActiveItem] = useState<string>('master-grid');
 
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   const { pdfs, addPdfFile, setActivePdf, removePdf } = usePdfStore();
 
-  // Handle PDF Upload
+  // Handle PDF Upload (Single or Batch Folder Upload)
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const file = files[0];
-    const newPdf = await addPdfFile(file);
-    onSelectPdf(newPdf.id, newPdf.name);
-    setActiveItem(newPdf.id);
+    // Filter only PDF files from the selected files / directory
+    const pdfFiles = Array.from(files).filter(
+      (f) => f.name.toLowerCase().endsWith('.pdf') || f.type === 'application/pdf'
+    );
+
+    if (pdfFiles.length === 0) {
+      alert('No PDF documents found in the selected folder.');
+      e.target.value = '';
+      return;
+    }
+
+    let lastAddedPdf: any = null;
+    for (const file of pdfFiles) {
+      lastAddedPdf = await addPdfFile(file);
+    }
+
+    if (lastAddedPdf) {
+      onSelectPdf(lastAddedPdf.id, lastAddedPdf.name);
+      setActiveItem(lastAddedPdf.id);
+    }
     e.target.value = '';
   };
 
@@ -166,20 +184,30 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
 
   return (
     <aside className="panel left-explorer">
-      {/* Hidden File Inputs for Native Picker */}
+      {/* Hidden File / Folder Inputs */}
       <input
         type="file"
         ref={pdfInputRef}
+        onChange={handlePdfUpload}
         accept="application/pdf"
         style={{ display: 'none' }}
+      />
+      <input
+        type="file"
+        ref={folderInputRef}
         onChange={handlePdfUpload}
+        // @ts-ignore
+        webkitdirectory="true"
+        directory="true"
+        multiple
+        style={{ display: 'none' }}
       />
       <input
         type="file"
         ref={csvInputRef}
+        onChange={handleCsvUpload}
         accept=".csv"
         style={{ display: 'none' }}
-        onChange={handleCsvUpload}
       />
 
       <div className="panel-header" style={{ justifyContent: 'space-between' }}>
@@ -218,16 +246,28 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               {papersOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} RESEARCH PAPERS ({pdfs.length})
             </span>
-            <span
-              className="vscode-action-icon"
-              title="Add / Upload PDF Paper"
-              onClick={(e) => {
-                e.stopPropagation();
-                pdfInputRef.current?.click();
-              }}
-            >
-              <Plus size={14} />
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span
+                className="vscode-action-icon"
+                title="Select Folder (Auto-scans & uploads all PDFs)"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  folderInputRef.current?.click();
+                }}
+              >
+                <FolderOpen size={13} color="var(--accent-warning, #f9e2af)" />
+              </span>
+              <span
+                className="vscode-action-icon"
+                title="Upload Single PDF File"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  pdfInputRef.current?.click();
+                }}
+              >
+                <Plus size={14} />
+              </span>
+            </div>
           </div>
 
           {papersOpen && (

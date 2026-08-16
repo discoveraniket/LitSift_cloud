@@ -93,6 +93,20 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
+  updateCellCitation: (rowId, field, citation) =>
+    set(
+      produce((state: GridState) => {
+        const row = state.rows.find((r) => r.id === rowId);
+        if (row) {
+          if (!row.citationMap) row.citationMap = {};
+          row.citationMap[field] = citation;
+          if (state.focusedCell?.rowId === rowId && state.focusedCell?.field === field) {
+            state.activeCitation = citation;
+          }
+        }
+      })
+    ),
+
   addRow: (pdfId = '', pdfTitle = 'Research_Paper.pdf') =>
     set(
       produce((state: GridState) => {

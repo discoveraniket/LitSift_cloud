@@ -1,5 +1,5 @@
 import React from 'react';
-import { PanelLeft, PanelBottom, PanelRight, Maximize2, Settings } from 'lucide-react';
+import { PanelLeft, PanelBottom, PanelRight, Maximize2, Settings, RotateCcw } from 'lucide-react';
 import { getSelectedGeminiModel } from '../../services/geminiService';
 
 interface HeaderBarProps {
@@ -14,6 +14,7 @@ interface HeaderBarProps {
   onToggleRightPanel: () => void;
   onToggleZenMode: () => void;
   onOpenSettings: () => void;
+  onResetWorkspace: () => void;
 }
 
 export const HeaderBar: React.FC<HeaderBarProps> = ({
@@ -28,6 +29,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onToggleRightPanel,
   onToggleZenMode,
   onOpenSettings,
+  onResetWorkspace,
 }) => {
   const currentModel = getSelectedGeminiModel();
 
@@ -55,6 +57,27 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       </div>
 
       <div className="header-controls">
+        <button
+          className="layout-toggle-btn reset-workspace-btn"
+          onClick={onResetWorkspace}
+          title="Reset Workspace & Start Fresh Project (Clears all PDFs, table rows, and chat history)"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '3px 8px',
+            fontSize: '11px',
+            color: 'var(--text-secondary)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '4px',
+            background: 'var(--bg-secondary)',
+            cursor: 'pointer',
+          }}
+        >
+          <RotateCcw size={13} color="var(--accent-warning, #f9e2af)" />
+          <span style={{ fontSize: '11px', fontWeight: 600 }}>New Project</span>
+        </button>
+
         <button
           className="layout-toggle-btn"
           onClick={onOpenSettings}

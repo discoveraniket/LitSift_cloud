@@ -63,7 +63,7 @@ export async function processAgentInteraction(userPrompt: string, activePdfTitle
     const activePdf = pdfStore.getActivePdf() || pdfStore.pdfs.find((p) => p.name === activePdfTitle || p.id === activePdfTitle);
     const agentStore = useAgentStore.getState();
 
-    // Determine if this is a follow-up turn in an active conversation for this paper
+    // Determine past conversation turns
     const pastNonWelcomeMessages = agentStore.messages.filter(
       (m) => m.id !== 'msg-1' && !m.text.startsWith('**Now viewing') && !m.text.startsWith('LitSift Agent is online')
     );
@@ -98,7 +98,7 @@ export async function processAgentInteraction(userPrompt: string, activePdfTitle
 [USER QUESTION / INSTRUCTION]:
 ${userPrompt}
 
-(Note: If the user asks you to revise, correct, or refine this specific cell value based on their feedback or the attached paper, invoke the updateCell tool with the new value, explanation, and cited evidence.)`;
+(Note: If the user asks you to modify, correct, refine, or update this cell or any table value, invoke the updateCell tool with the new value, reasoning, and citation quote.)`;
     }
 
     // Build multi-turn contents array with history
@@ -129,7 +129,6 @@ ${userPrompt}
 
         // Add intermediate conversation history turns if in follow-up mode
         if (isFollowup) {
-          // Add subsequent turns (excluding the very first user message and the current prompt)
           const remainingHistory = pastNonWelcomeMessages.slice(1, -1);
           for (const msg of remainingHistory) {
             contents.push({
@@ -162,13 +161,16 @@ ${userPrompt}
     const ai = new GoogleGenAI({ apiKey });
     const tools = getToolsForMode(agentMode);
 
-    // Call Gemini with multi-turn history and tools
+    const systemInstruction = `You are LitSift Agent, an intelligent academic literature synthesis assistant for research paper "${activePdfTitle}".
+The PDF document file is directly attached to this conversation. You excel at extracting data, verifying claims, and modifying table cells.
+IMPORTANT: When the user asks you to update, correct, modify, or refine a table cell value, you MUST invoke the updateCell tool rather than merely describing the change in text.`;
+
+    // 1. Send conversation turn with registered tools
     const response = await ai.models.generateContent({
       model: selectedModel,
       contents,
       config: {
-        systemInstruction:
-          `You are LitSift Agent, an intelligent academic literature assistant. The user is currently viewing the research paper "${activePdfTitle}". The PDF document file is directly attached to this conversation. You excel at answering questions about the paper, summarizing abstracts, and calling functions when requested. Be concise, factual, and academic in tone.`,
+        systemInstruction,
         temperature: 0.2,
         tools,
       },
@@ -180,19 +182,74 @@ ${userPrompt}
     const parts = candidate?.content?.parts || [];
     const functionCalls = parts.filter((p) => p.functionCall);
 
+    // 2. Closed-Loop Tool Execution (ReAct Feedback Loop)
     if (functionCalls && functionCalls.length > 0) {
       const fc = functionCalls[0].functionCall!;
       const toolSpec = agentToolsRegistry[fc.name || ''];
+
       if (toolSpec) {
         logStore.addLog('info', `Gemini requested tool call: ${fc.name}`, fc.args);
         const toolResult = await toolSpec.execute(fc.args || {}, agentMode);
-        return {
-          replyText: toolResult.replyText,
-          toolExecuted: {
-            name: fc.name || 'toolCall',
-            description: toolResult.summary,
-          },
-        };
+
+        // 3. Append model's functionCall turn to conversation
+        contents.push({
+          role: 'model',
+          parts: [{ functionCall: fc }],
+        });
+
+        // 4. FEEDBACK LOOP: Send functionResponse back to Gemini
+        contents.push({
+          role: 'user',
+          parts: [
+            {
+              functionResponse: {
+                name: fc.name,
+                response: {
+                  status: 'success',
+                  result: toolResult.summary,
+                  details: toolResult.resultData || {},
+                },
+              },
+            },
+          ],
+        });
+
+        // 5. Query Gemini for final natural language confirmation turn
+        try {
+          logStore.setActiveStep(`Finalizing response with Gemini...`);
+          const finalResponse = await ai.models.generateContent({
+            model: selectedModel,
+            contents,
+            config: {
+              systemInstruction,
+              temperature: 0.2,
+            },
+          });
+
+          logStore.setActiveStep(null);
+          const finalReplyText = finalResponse.candidates?.[0]?.content?.parts?.find((p) => p.text)?.text 
+            || toolResult.replyText;
+
+          logStore.addLog('info', 'Received feedback confirmation from Gemini', { finalReplySnippet: finalReplyText.slice(0, 120) });
+
+          return {
+            replyText: finalReplyText,
+            toolExecuted: {
+              name: fc.name || 'toolCall',
+              description: toolResult.summary,
+            },
+          };
+        } catch (finalErr: any) {
+          logStore.setActiveStep(null);
+          logStore.addLog('warn', `Feedback loop finalization notice: ${finalErr.message}`);
+          return {
+            replyText: toolResult.replyText,
+            toolExecuted: {
+              name: fc.name || 'toolCall',
+              description: toolResult.summary,
+            },
+          };
+        }
       }
     }
 
