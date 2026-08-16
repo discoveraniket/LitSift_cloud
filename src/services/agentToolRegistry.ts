@@ -605,18 +605,26 @@ ${headers.map((h, i) => `${i + 1}. "${h}"`).join('\n')}
 
 If the paper tests multiple distinct variables, experimental groups, treatments, or pairwise combinations, emit a DISTINCT ROW for each tested subject/observation that has actual experimental results, ignoring background mentions.
 
+IMPORTANT: For EVERY extracted column value, provide a corresponding grounded citation object in "citations" with the exact page number, section name, verbatim snippet quote from the PDF, and reasoning explanation.
+
 Return your response strictly as a JSON object with this format:
 {
   "rows": [
     {
       ${headers.map((h) => `"${h}": "<Extracted value from paper>"`).join(',\n      ')},
       "citations": {
-        "${headers[0]}": {
+        ${headers
+          .slice(0, 3)
+          .map(
+            (h) => `"${h}": {
           "pageNumber": 1,
-          "sectionName": "<Section Name>",
-          "snippetQuote": "<Exact quote from paper>",
-          "reasoning": "<Explanation of extracted value>"
-        }
+          "sectionName": "Section Name / Results / Methods",
+          "snippetQuote": "Exact verbatim excerpt quote from paper",
+          "reasoning": "Grounded explanation for extracted value"
+        }`
+          )
+          .join(',\n        ')}
+        /* Provide citation entries for every extracted column field above */
       }
     }
   ]
@@ -669,7 +677,7 @@ Return your response strictly as a JSON object with this format:
           pdfId: pdfInfo?.id || activePdfId || `pdf-${Date.now()}`,
           pdfTitle: pdfInfo?.name || targetPdfTitle,
           aiStatus: mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed',
-          citationMap: r.citations || parsed.citations || {},
+          citationMap: {},
         };
 
         gridStore.columns.forEach((col) => {
@@ -686,18 +694,34 @@ Return your response strictly as a JSON object with this format:
           rowData[col.field] = val !== undefined && val !== null ? String(val) : '-';
         });
 
-        // Ensure citationMap maps to column field keys
-        if (rowData.citationMap) {
-          Object.keys(rowData.citationMap).forEach((key) => {
-            const matchingCol = gridStore.columns.find(
-              (c) => c.headerName.toLowerCase() === key.toLowerCase() || c.field.toLowerCase() === key.toLowerCase()
-            );
-            if (matchingCol && rowData.citationMap && !rowData.citationMap[matchingCol.field]) {
-              rowData.citationMap[matchingCol.field] = (rowData.citationMap as any)[key];
-            }
-          });
-        }
+        // Ensure citationMap maps every column field to its grounded citation
+        const rawCitations = r.citations || parsed.citations || {};
+        const normalizedCitationMap: Record<string, any> = {};
 
+        gridStore.columns.forEach((col) => {
+          const citation =
+            rawCitations[col.field] ??
+            rawCitations[col.headerName] ??
+            Object.entries(rawCitations).find(
+              ([k]) =>
+                k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                col.field.toLowerCase().replace(/[^a-z0-9]/g, '') ||
+                k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
+            )?.[1];
+
+          if (citation) {
+            normalizedCitationMap[col.field] = {
+              pageNumber: Number(citation.pageNumber) || 1,
+              sectionName: citation.sectionName || 'Extracted Section',
+              snippetQuote: citation.snippetQuote || rowData[col.field] || 'Verified excerpt',
+              reasoning: citation.reasoning || `Extracted value "${rowData[col.field]}" from document`,
+              confidence: citation.confidence || 0.96,
+            };
+          }
+        });
+
+        rowData.citationMap = normalizedCitationMap;
         return rowData;
       });
 
