@@ -24,7 +24,7 @@ export const WorkspaceLayout: React.FC = () => {
 
   // Pixel Width/Height State for perfect, non-squashing dragging
   const [leftWidth, setLeftWidth] = useState(260);
-  const [rightWidth, setRightWidth] = useState(300);
+  const [rightWidth, setRightWidth] = useState(420);
   const [bottomHeight, setBottomHeight] = useState(240);
 
   const [isDragging, setIsDragging] = useState<string | null>(null);
@@ -100,7 +100,7 @@ export const WorkspaceLayout: React.FC = () => {
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = startX - moveEvent.clientX;
-      const newWidth = Math.max(220, Math.min(600, startWidth + deltaX));
+      const newWidth = Math.max(280, Math.min(850, startWidth + deltaX));
       setRightWidth(newWidth);
     };
 
