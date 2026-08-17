@@ -51,13 +51,15 @@ export interface GridState {
   resetActiveSelection: () => void;
   updateCell: (rowId: string, field: string, value: any) => void;
   updateCellCitation: (rowId: string, field: string, citation: CellCitation) => void;
+  updateRow: (rowId: string, fields: Record<string, any>, citations?: Record<string, any>) => void;
   addRow: (pdfId?: string, pdfTitle?: string) => void;
   deleteRow: (rowId: string) => void;
-  addColumn: (headerName: string) => void;
+  addColumn: (headerName: string, initialValues?: Record<string, any>, citations?: Record<string, any>) => void;
   renameColumn: (field: string, newHeaderName: string) => void;
   deleteColumn: (field: string) => void;
-  mergeSelectedRows: (rowIds: string[]) => void;
+  mergeSelectedRows: (rowIds: string[], consolidatedRow?: Record<string, any>, citations?: Record<string, any>) => void;
   splitSelectedRow: (rowId: string, targetField?: string) => void;
+  disaggregateRow: (targetRowId: string, replacementRows: Array<Record<string, any>>, citations?: Record<string, any>) => void;
   confirmAIEdits: (rowId?: string) => void;
   rejectAIEdits: (rowId?: string) => void;
   undo: () => void;

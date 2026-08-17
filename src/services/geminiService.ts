@@ -176,10 +176,10 @@ Understand the user's high-level objective and autonomously break it down into a
 When an objective involves dependent steps (such as creating schema structure before populating data, or querying findings before updating cells), execute the prerequisite actions first, and continue calling the dependent tools in subsequent turns until the complete user goal is fully realized.
 If rows are already present in the data grid, perform the requested updates, column additions, or refinements directly on the existing rows rather than re-extracting unless explicitly instructed.
 
-You have access to a rich tool suite:
-- Cell editing: updateCell, batchUpdateCells
-- Schema management: addColumn, renameColumn, deleteColumn
-- Row structuring: splitRow, mergeRows, deleteRows
+You have access to a rich declarative tool suite:
+- Cell & row editing: updateCell, batchUpdateCells, updateRow
+- Schema management: addColumn (supports optional initialValues), renameColumn, deleteColumn
+- Row structuring & disaggregation: disaggregateRow (to expand composite multi-variable rows into atomic observation rows with structured column values), mergeRows (to synthesize unified rows), deleteRows
 - Document synthesis & verification: extractPDFData, verifyEvidenceCitation, searchDocument, queryGridData
 Execute all required tool actions to fulfill the user's instructions and summarize your reasoning and findings clearly.`;
 

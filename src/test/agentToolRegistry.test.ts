@@ -41,10 +41,11 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     const names = tools[0].functionDeclarations.map((d: any) => d.name);
     expect(names).toContain('updateCell');
     expect(names).toContain('batchUpdateCells');
+    expect(names).toContain('updateRow');
     expect(names).toContain('addColumn');
     expect(names).toContain('renameColumn');
     expect(names).toContain('deleteColumn');
-    expect(names).toContain('splitRow');
+    expect(names).toContain('disaggregateRow');
     expect(names).toContain('mergeRows');
     expect(names).toContain('deleteRows');
     expect(names).toContain('extractPDFData');
@@ -55,6 +56,48 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     const updateCellDecl = tools[0].functionDeclarations.find((d: any) => d.name === 'updateCell');
     expect(updateCellDecl?.parameters?.type).toBe('OBJECT');
     expect(updateCellDecl?.parameters?.properties?.field?.enum).toEqual(['methodology', 'sampleSize']);
+  });
+
+  it('executes disaggregateRow to expand composite observations into atomic rows', async () => {
+    const result = await agentToolsRegistry.disaggregateRow.execute(
+      {
+        targetRowId: 'row-1',
+        replacementRows: [
+          { methodology: 'Phage A Assay', sampleSize: '25' },
+          { methodology: 'Phage B Assay', sampleSize: '35' },
+        ],
+        reasoning: 'Separated testing into 2 distinct assays',
+      },
+      'human_in_loop'
+    );
+
+    expect(result.success).toBe(true);
+    const state = useGridStore.getState();
+    expect(state.rows).toHaveLength(3); // row-1 was replaced by 2 rows + row-2
+    expect(state.rows[0].methodology).toBe('Phage A Assay');
+    expect(state.rows[0].sampleSize).toBe('25');
+    expect(state.rows[1].methodology).toBe('Phage B Assay');
+    expect(state.rows[1].sampleSize).toBe('35');
+    expect(state.rows[0].pdfTitle).toBe('Test Paper.pdf'); // inherited metadata
+  });
+
+  it('executes updateRow to update multiple fields on a row in a single atomic transaction', async () => {
+    const result = await agentToolsRegistry.updateRow.execute(
+      {
+        rowId: 'row-1',
+        fields: {
+          methodology: 'Combined Genomic Protocol',
+          sampleSize: '500',
+        },
+      },
+      'human_in_loop'
+    );
+
+    expect(result.success).toBe(true);
+    const state = useGridStore.getState();
+    const row = state.rows.find((r) => r.id === 'row-1');
+    expect(row?.methodology).toBe('Combined Genomic Protocol');
+    expect(row?.sampleSize).toBe('500');
   });
 
   it('executes updateCell tool and updates the grid store with reasoning and citation', async () => {

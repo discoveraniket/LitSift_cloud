@@ -293,15 +293,71 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
     },
   },
 
+  updateRow: {
+    name: 'updateRow',
+    description: 'Update multiple fields on a specific row at once in a single atomic transaction.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        rowId: {
+          type: Type.STRING,
+          description: 'Target row ID to update. If modifying the currently focused row, leave empty.',
+        },
+        fields: {
+          type: Type.OBJECT,
+          description: 'Key-value map of column fields or header names to their new updated values (e.g. {"latent_period_min": "~7 min", "burst_size": "105 PFU/cell"}).',
+        },
+        reasoning: {
+          type: Type.STRING,
+          description: 'Explanation of the updates performed on this row.',
+        },
+      },
+      required: ['fields'],
+    },
+    execute: async (args: any): Promise<ToolExecutionResult> => {
+      try {
+        const gridStore = useGridStore.getState();
+        const logStore = useLogStore.getState();
+        const targetRowId = args.rowId || gridStore.focusedCell?.rowId || gridStore.rows[0]?.id;
+
+        if (!targetRowId) throw new Error('No target row specified or available to update.');
+        if (!args.fields || typeof args.fields !== 'object') throw new Error('Parameter "fields" must be an object.');
+
+        logStore.addLog('info', `Updating row ${targetRowId} with ${Object.keys(args.fields).length} field(s)`);
+        gridStore.updateRow(targetRowId, args.fields);
+        logStore.addLog('success', `Row ${targetRowId} updated`);
+
+        return {
+          success: true,
+          replyText: `Successfully updated row **${targetRowId}** with new values.`,
+          summary: `updateRow(${targetRowId}: ${Object.keys(args.fields).join(', ')})`,
+          resultData: { rowId: targetRowId, fields: args.fields },
+        };
+      } catch (err: any) {
+        useLogStore.getState().addLog('error', `updateRow failed: ${err.message}`);
+        return {
+          success: false,
+          replyText: `Failed to update row: ${err.message}`,
+          summary: `updateRow(failed: ${err.message})`,
+          error: err.message,
+        };
+      }
+    },
+  },
+
   addColumn: {
     name: 'addColumn',
-    description: 'Add a new extraction schema column to the master table.',
+    description: 'Add a new extraction schema column to the master table, with optional initial values for existing rows.',
     parameters: {
       type: Type.OBJECT,
       properties: {
         headerName: {
           type: Type.STRING,
           description: 'Title of the new column (e.g. Host Range, Phage Morphology, Genome Size).',
+        },
+        initialValues: {
+          type: Type.OBJECT,
+          description: 'Optional map of rowId (or global field value) to the value for that row in the new column.',
         },
       },
       required: ['headerName'],
@@ -316,7 +372,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         }
 
         logStore.addLog('info', `Adding column "${args.headerName}" to schema`);
-        gridStore.addColumn(args.headerName);
+        gridStore.addColumn(args.headerName, args.initialValues);
         logStore.addLog('success', `Column "${args.headerName}" added`);
 
         return {
@@ -447,48 +503,58 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
     },
   },
 
-  splitRow: {
-    name: 'splitRow',
-    description: 'Split a composite row with multiple findings or bulleted items into distinct sub-rows.',
+  disaggregateRow: {
+    name: 'disaggregateRow',
+    description: 'Disaggregate / split a composite row into multiple distinct atomic rows (e.g. expanding multiple tested host strains, experimental conditions, or timepoints into individual rows).',
     parameters: {
       type: Type.OBJECT,
       properties: {
-        rowId: {
+        targetRowId: {
           type: Type.STRING,
-          description: 'Target row ID to split. Defaults to the currently focused row.',
+          description: 'Target composite row ID to expand. Defaults to the currently focused row if empty.',
         },
-        field: {
+        replacementRows: {
+          type: Type.ARRAY,
+          description: 'List of atomic replacement rows. Each item is an object mapping column field names to their specific values for that experimental observation.',
+          items: {
+            type: Type.OBJECT,
+            description: 'Atomic row object mapping column fields to values.',
+          },
+        },
+        reasoning: {
           type: Type.STRING,
-          description: 'Target column field key containing the multi-part content to split by.',
+          description: 'Scientific rationale for disaggregating this row.',
         },
       },
+      required: ['replacementRows'],
     },
     execute: async (args: any): Promise<ToolExecutionResult> => {
       try {
         const gridStore = useGridStore.getState();
         const logStore = useLogStore.getState();
-        const targetRowId = args.rowId || gridStore.focusedCell?.rowId || gridStore.rows[0]?.id;
+        const targetRowId = args.targetRowId || args.rowId || gridStore.focusedCell?.rowId || gridStore.rows[0]?.id;
 
-        if (!targetRowId) {
-          throw new Error('No row available to split.');
+        if (!targetRowId) throw new Error('No target row available to disaggregate.');
+        if (!Array.isArray(args.replacementRows) || args.replacementRows.length === 0) {
+          throw new Error('Parameter "replacementRows" must be a non-empty array of atomic row objects.');
         }
 
-        logStore.addLog('info', `Splitting row ${targetRowId} by field ${args.field || 'auto'}`);
-        gridStore.splitSelectedRow(targetRowId, args.field);
-        logStore.addLog('success', `Row ${targetRowId} split into distinct sub-rows`);
+        logStore.addLog('info', `Disaggregating row ${targetRowId} into ${args.replacementRows.length} atomic sub-rows`);
+        gridStore.disaggregateRow(targetRowId, args.replacementRows);
+        logStore.addLog('success', `Row ${targetRowId} disaggregated into ${args.replacementRows.length} atomic rows`);
 
         return {
           success: true,
-          replyText: `Successfully split row into distinct sub-rows!`,
-          summary: `splitRow(rowId: ${targetRowId})`,
-          resultData: { rowId: targetRowId, field: args.field },
+          replyText: `Successfully disaggregated row into **${args.replacementRows.length} atomic sub-rows**!\n\n${args.reasoning ? `*Rationale:* ${args.reasoning}` : ''}`,
+          summary: `disaggregateRow(${targetRowId} -> ${args.replacementRows.length} rows)`,
+          resultData: { targetRowId, rowCount: args.replacementRows.length },
         };
       } catch (err: any) {
-        useLogStore.getState().addLog('error', `splitRow failed: ${err.message}`);
+        useLogStore.getState().addLog('error', `disaggregateRow failed: ${err.message}`);
         return {
           success: false,
-          replyText: `Failed to split row: ${err.message}`,
-          summary: `splitRow(failed: ${err.message})`,
+          replyText: `Failed to disaggregate row: ${err.message}`,
+          summary: `disaggregateRow(failed: ${err.message})`,
           error: err.message,
         };
       }
@@ -497,7 +563,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
 
   mergeRows: {
     name: 'mergeRows',
-    description: 'Merge multiple specified rows into a single deduplicated row with formatted findings.',
+    description: 'Merge multiple specified rows into a single deduplicated or synthesized consolidated row.',
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -505,6 +571,14 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
           type: Type.ARRAY,
           description: 'List of row IDs to merge together (minimum 2 rows).',
           items: { type: Type.STRING },
+        },
+        consolidatedRow: {
+          type: Type.OBJECT,
+          description: 'Optional synthesized values for the merged row columns.',
+        },
+        reasoning: {
+          type: Type.STRING,
+          description: 'Explanation for merging these rows.',
         },
       },
       required: ['rowIds'],
@@ -520,12 +594,12 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         }
 
         logStore.addLog('info', `Merging ${rowIds.length} rows: ${rowIds.join(', ')}`);
-        gridStore.mergeSelectedRows(rowIds);
+        gridStore.mergeSelectedRows(rowIds, args.consolidatedRow);
         logStore.addLog('success', `Merged ${rowIds.length} rows into a single row`);
 
         return {
           success: true,
-          replyText: `Successfully merged ${rowIds.length} rows into a single unified row!`,
+          replyText: `Successfully merged **${rowIds.length} rows** into a single unified row!`,
           summary: `mergeRows(${rowIds.length} rows)`,
           resultData: { rowIds },
         };

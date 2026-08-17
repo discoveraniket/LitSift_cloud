@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { produce } from 'immer';
-import { GridState, SchemaColumn, GridRow } from '../types/grid';
+import { GridState, SchemaColumn, GridRow, CellCitation } from '../types/grid';
 import { db } from '../db/litsiftDb';
 
 interface GridSnapshot {
@@ -118,6 +118,37 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
+  updateRow: (rowId, fields, citations) =>
+    set(
+      produce((state: GridState) => {
+        saveSnapshot(state);
+        const row = state.rows.find((r) => r.id === rowId);
+        if (row) {
+          Object.entries(fields).forEach(([k, v]) => {
+            const matchingCol = state.columns.find(
+              (c) => c.field === k || c.headerName.toLowerCase() === k.toLowerCase()
+            );
+            if (matchingCol) {
+              row[matchingCol.field] = v;
+            } else {
+              row[k] = v;
+            }
+          });
+          if (citations) {
+            if (!row.citationMap) row.citationMap = {};
+            Object.entries(citations).forEach(([k, cit]) => {
+              const matchingCol = state.columns.find(
+                (c) => c.field === k || c.headerName.toLowerCase() === k.toLowerCase()
+              );
+              const fieldKey = matchingCol ? matchingCol.field : k;
+              row.citationMap![fieldKey] = cit;
+            });
+          }
+          row.aiStatus = 'Confirmed';
+        }
+      })
+    ),
+
   addRow: (pdfId = '', pdfTitle = 'Research_Paper.pdf') =>
     set(
       produce((state: GridState) => {
@@ -145,7 +176,7 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
-  addColumn: (headerName) =>
+  addColumn: (headerName, initialValues, citations) =>
     set(
       produce((state: GridState) => {
         saveSnapshot(state);
@@ -154,7 +185,12 @@ export const useGridStore = create<GridState>((set) => ({
         if (!state.columns.some((c) => c.field === field)) {
           state.columns.push({ field, headerName: cleanName, editable: true });
           state.rows.forEach((row) => {
-            row[field] = '-';
+            const val = initialValues?.[row.id] ?? initialValues?.[row.pdfId] ?? initialValues?.[field] ?? '-';
+            row[field] = val;
+            if (citations && citations[row.id]) {
+              if (!row.citationMap) row.citationMap = {};
+              row.citationMap[field] = citations[row.id];
+            }
           });
         }
       })
@@ -187,7 +223,7 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
-  mergeSelectedRows: (rowIds) =>
+  mergeSelectedRows: (rowIds, consolidatedRow, citations) =>
     set(
       produce((state: GridState) => {
         if (rowIds.length < 2) return;
@@ -201,42 +237,52 @@ export const useGridStore = create<GridState>((set) => ({
           pdfId: targetRows[0].pdfId,
           pdfTitle: targetRows[0].pdfTitle,
           aiStatus: 'Pending Review',
+          citationMap: citations || {},
         };
 
-        // Merge column values: deduplicate identical values & format bullet points with newlines
-        state.columns.forEach((col) => {
-          const rawVals = targetRows
-            .map((r) => r[col.field])
-            .filter((v) => v && v !== '-' && v !== '');
+        if (consolidatedRow) {
+          // Use agent-synthesized consolidated values directly
+          state.columns.forEach((col) => {
+            const val =
+              consolidatedRow[col.field] ??
+              consolidatedRow[col.headerName] ??
+              targetRows[0][col.field] ??
+              '-';
+            mergedRow[col.field] = val;
+          });
+        } else {
+          // Fallback: merge column values with deduplication
+          state.columns.forEach((col) => {
+            const rawVals = targetRows
+              .map((r) => r[col.field])
+              .filter((v) => v && v !== '-' && v !== '');
 
-          // Extract individual items if already bullet-separated or newline-separated
-          const expandedItems: string[] = [];
-          rawVals.forEach((val) => {
-            if (typeof val === 'string') {
-              const parts = val
-                .split(/\n|•/)
-                .map((s) => s.trim())
-                .filter((s) => s.length > 0);
-              expandedItems.push(...parts);
+            const expandedItems: string[] = [];
+            rawVals.forEach((val) => {
+              if (typeof val === 'string') {
+                const parts = val
+                  .split(/\n|•/)
+                  .map((s) => s.trim())
+                  .filter((s) => s.length > 0);
+                expandedItems.push(...parts);
+              } else {
+                expandedItems.push(String(val));
+              }
+            });
+
+            const uniqueItems = Array.from(new Set(expandedItems));
+
+            if (uniqueItems.length === 0) {
+              mergedRow[col.field] = '-';
+            } else if (uniqueItems.length === 1) {
+              mergedRow[col.field] = uniqueItems[0];
             } else {
-              expandedItems.push(String(val));
+              mergedRow[col.field] = uniqueItems.map((item) => `• ${item}`).join('\n');
             }
           });
+        }
 
-          // Deduplicate items intelligently (case-sensitive exact match)
-          const uniqueItems = Array.from(new Set(expandedItems));
-
-          if (uniqueItems.length === 0) {
-            mergedRow[col.field] = '-';
-          } else if (uniqueItems.length === 1) {
-            mergedRow[col.field] = uniqueItems[0];
-          } else {
-            // Multiple distinct items: format with newlines and bullet points (\n• )
-            mergedRow[col.field] = uniqueItems.map((item) => `• ${item}`).join('\n');
-          }
-        });
-
-        // Remove original rows and insert merged row at the first position
+        // Remove original rows and insert merged row at first position
         state.rows = state.rows.filter((r) => !rowIds.includes(r.id));
         state.rows.splice(firstRowIndex, 0, mergedRow);
         state.selectedRowIds = [];
@@ -294,6 +340,61 @@ export const useGridStore = create<GridState>((set) => ({
 
         // Replace original row with split rows
         state.rows.splice(rowIndex, 1, newRowA, newRowB);
+      })
+    ),
+
+  disaggregateRow: (targetRowId, replacementRows, citations) =>
+    set(
+      produce((state: GridState) => {
+        const rowIndex = state.rows.findIndex((r) => r.id === targetRowId);
+        if (rowIndex === -1) return;
+        const sourceRow = state.rows[rowIndex];
+        if (sourceRow.isDraftRow) return;
+
+        saveSnapshot(state);
+
+        const newRows: GridRow[] = replacementRows.map((rep, i) => {
+          const newRowId = `row-${Date.now()}-${i}`;
+          const mergedCitationMap: Record<string, CellCitation> = {
+            ...(sourceRow.citationMap || {}),
+          };
+          if (citations) {
+            const extraCitations = citations[i] || citations[rep.id] || citations;
+            if (typeof extraCitations === 'object') {
+              Object.assign(mergedCitationMap, extraCitations);
+            }
+          }
+
+          const newRow: GridRow = {
+            ...sourceRow,
+            id: newRowId,
+            aiStatus: 'Pending Review',
+            citationMap: mergedCitationMap,
+          };
+
+          state.columns.forEach((col) => {
+            const val =
+              rep[col.field] ??
+              rep[col.headerName] ??
+              Object.entries(rep).find(
+                ([k]) =>
+                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                  col.field.toLowerCase().replace(/[^a-z0-9]/g, '') ||
+                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                  col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
+              )?.[1];
+
+            if (val !== undefined && val !== null) {
+              newRow[col.field] = String(val);
+            }
+          });
+
+          return newRow;
+        });
+
+        // Replace original composite row in-place with the array of atomic sub-rows
+        state.rows.splice(rowIndex, 1, ...newRows);
+        state.selectedRowIds = [];
       })
     ),
 
