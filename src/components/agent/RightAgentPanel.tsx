@@ -83,8 +83,19 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
     return () => clearInterval(interval);
   }, [isThinking]);
 
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea dynamically based on text content height
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      textareaRef.current.style.height = `${Math.min(Math.max(scrollHeight, 38), 160)}px`;
+    }
+  }, [inputPrompt]);
+
+  const handleSend = (e?: React.FormEvent | React.KeyboardEvent) => {
+    if (e) e.preventDefault();
     if (!inputPrompt.trim() || isThinking) return;
 
     if (focusedCell) {
@@ -94,6 +105,17 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
     // Send clean text without prepended tags
     sendMessage(inputPrompt.trim(), activePdfTitle);
     setInputPrompt('');
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '38px';
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend(e);
+    }
   };
 
   const handleJumpToCitation = () => {
@@ -655,8 +677,8 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
         <div ref={chatBottomRef} />
       </div>
 
-      {/* Clean Single Unified Prompt Form with Dismissible Active Cell Context */}
-      <form className="agent-input-form" onSubmit={handleSend} style={{ padding: '8px', borderTop: '1px solid var(--border-subtle)' }}>
+      {/* Modern Multiline Chat Interface with Active Cell Context */}
+      <form className="agent-input-form" onSubmit={(e) => handleSend(e)} style={{ padding: '10px 12px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)' }}>
         {focusedCell && (
           <div
             style={{
@@ -665,15 +687,15 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
               justifyContent: 'space-between',
               background: 'rgba(137, 180, 250, 0.12)',
               border: '1px solid var(--accent-primary)',
-              borderRadius: '6px',
-              padding: '4px 8px',
-              marginBottom: '6px',
+              borderRadius: '8px',
+              padding: '5px 10px',
+              marginBottom: '8px',
               fontSize: '11px',
             }}
           >
             <span style={{ color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
               <span>🎯 Target Cell:</span>
-              <span style={{ color: 'var(--text-primary)', background: 'var(--bg-secondary)', padding: '1px 6px', borderRadius: '4px' }}>
+              <span style={{ color: 'var(--text-primary)', background: 'var(--bg-tertiary)', padding: '1px 7px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
                 {columns.find((c) => c.field === focusedCell.field)?.headerName || focusedCell.field}
               </span>
               <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
@@ -701,10 +723,23 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
           </div>
         )}
 
-        <div className="input-group" style={{ display: 'flex', gap: '6px' }}>
-          <input
-            type="text"
-            className="agent-prompt-input"
+        <div
+          className="chat-box-container"
+          style={{
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            background: 'var(--bg-tertiary)',
+            border: focusedCell ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+            borderRadius: '10px',
+            padding: '8px 10px 6px 10px',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <textarea
+            ref={textareaRef}
+            className="agent-prompt-textarea"
             placeholder={
               focusedCell
                 ? `Discuss or update "${columns.find((c) => c.field === focusedCell.field)?.headerName || focusedCell.field}"... (or click ✕ for global)`
@@ -712,33 +747,67 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
             }
             value={inputPrompt}
             onChange={(e) => setInputPrompt(e.target.value)}
+            onKeyDown={handleKeyDown}
             disabled={isThinking}
+            rows={1}
             style={{
-              flex: 1,
-              background: 'var(--bg-secondary)',
-              border: focusedCell ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+              width: '100%',
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
               color: 'var(--text-primary)',
-              padding: '8px 10px',
-              borderRadius: '6px',
               fontSize: '12px',
+              fontFamily: 'inherit',
+              resize: 'none',
+              minHeight: '38px',
+              maxHeight: '160px',
+              lineHeight: '1.45',
+              padding: '0',
+              boxSizing: 'border-box',
+              overflowY: 'auto',
             }}
           />
-          <button
-            type="submit"
-            className="send-btn"
-            disabled={isThinking || !inputPrompt.trim()}
+
+          <div
             style={{
-              background: 'var(--accent-primary)',
-              color: 'var(--bg-secondary)',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '0 14px',
-              cursor: 'pointer',
-              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: '6px',
+              paddingTop: '4px',
+              borderTop: '1px solid rgba(255, 255, 255, 0.04)',
             }}
           >
-            <Send size={14} />
-          </button>
+            <span style={{ fontSize: '10px', color: 'var(--text-secondary)', opacity: 0.65, userSelect: 'none' }}>
+              <kbd style={{ background: 'var(--bg-secondary)', padding: '1px 4px', borderRadius: '3px', border: '1px solid var(--border-subtle)', fontSize: '9px' }}>Shift</kbd> + <kbd style={{ background: 'var(--bg-secondary)', padding: '1px 4px', borderRadius: '3px', border: '1px solid var(--border-subtle)', fontSize: '9px' }}>Enter</kbd> for newline
+            </span>
+
+            <button
+              type="submit"
+              className="send-btn"
+              disabled={isThinking || !inputPrompt.trim()}
+              title="Send message (Enter)"
+              style={{
+                background: inputPrompt.trim() && !isThinking ? 'var(--accent-primary)' : 'var(--bg-secondary)',
+                color: inputPrompt.trim() && !isThinking ? 'var(--bg-secondary)' : 'var(--text-secondary)',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '5px 12px',
+                cursor: inputPrompt.trim() && !isThinking ? 'pointer' : 'not-allowed',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px',
+                fontWeight: 600,
+                fontSize: '11px',
+                transition: 'all 0.15s ease',
+                opacity: inputPrompt.trim() && !isThinking ? 1 : 0.5,
+              }}
+            >
+              <span>Send</span>
+              <Send size={12} />
+            </button>
+          </div>
         </div>
       </form>
     </aside>

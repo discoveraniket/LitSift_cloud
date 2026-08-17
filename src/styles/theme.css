@@ -692,19 +692,22 @@ body {
   gap: 6px;
 }
 
-.agent-prompt-input {
-  flex: 1;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-primary);
-  padding: 6px 10px;
-  border-radius: 4px;
-  font-size: 11px;
-  outline: none;
+.chat-box-container:focus-within {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.15), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
 }
 
-.agent-prompt-input:focus {
-  border-color: var(--accent-primary);
+.agent-prompt-textarea::-webkit-scrollbar {
+  width: 4px;
+}
+
+.agent-prompt-textarea::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 4px;
+}
+
+.agent-prompt-textarea::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }
 
 .agent-send-btn {

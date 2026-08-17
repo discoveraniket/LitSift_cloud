@@ -28,6 +28,45 @@ export interface AgentToolSpec {
   execute: (args: any, mode: AgentExecutionMode) => Promise<ToolExecutionResult>;
 }
 
+/**
+ * Resilient JSON parser that handles Markdown code blocks, trailing commas,
+ * unescaped internal quotes, and control characters in LLM responses.
+ */
+export const safeJsonParse = <T = any>(rawText: string, fallback?: T): T => {
+  if (!rawText || typeof rawText !== 'string') {
+    if (fallback !== undefined) return fallback;
+    throw new Error('Empty text provided for JSON parsing.');
+  }
+
+  // 1. Strip markdown fences like ```json ... ``` or ``` ... ```
+  let cleaned = rawText.trim();
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
+  }
+
+  // 2. Direct fast parse
+  try {
+    return JSON.parse(cleaned);
+  } catch (firstErr) {
+    // 3. Fallback: repair trailing commas before closing braces/brackets
+    try {
+      const withoutTrailingCommas = cleaned.replace(/,\s*([}\]])/g, '$1');
+      return JSON.parse(withoutTrailingCommas);
+    } catch {
+      // 4. Fallback: repair unescaped raw newlines or control characters
+      try {
+        const sanitized = cleaned
+          .replace(/[\u0000-\u001F\u007F-\u009F]/g, (c) => (c === '\n' || c === '\r' || c === '\t' ? c : ''))
+          .replace(/,\s*([}\]])/g, '$1');
+        return JSON.parse(sanitized);
+      } catch {
+        if (fallback !== undefined) return fallback;
+        throw firstErr;
+      }
+    }
+  }
+};
+
 export const agentToolsRegistry: Record<string, AgentToolSpec> = {
   updateCell: {
     name: 'updateCell',
@@ -656,7 +695,7 @@ Return your response strictly as a JSON object with this format:
       }
 
       logStore.setActiveStep(`[3/3] Parsing JSON payload & populating table grid...`);
-      const parsed = JSON.parse(text);
+      const parsed = safeJsonParse(text);
 
       let rawRows: any[] = [];
       if (Array.isArray(parsed.rows) && parsed.rows.length > 0) {
@@ -829,13 +868,50 @@ Return your answer strictly in JSON format:
           config: {
             temperature: 0.1,
             responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                isSupported: {
+                  type: Type.BOOLEAN,
+                  description: 'Whether the claim is strictly supported by the text',
+                },
+                confidenceScore: {
+                  type: Type.NUMBER,
+                  description: 'Confidence score between 0.0 and 1.0',
+                },
+                pageNumber: {
+                  type: Type.INTEGER,
+                  description: 'Page number supporting this claim',
+                },
+                sectionName: {
+                  type: Type.STRING,
+                  description: 'Section name e.g. Results, Discussion, Methods',
+                },
+                exactSupportingQuote: {
+                  type: Type.STRING,
+                  description: 'Direct quote passage from document supporting this claim',
+                },
+                auditReasoning: {
+                  type: Type.STRING,
+                  description: 'Explanation of alignment or discrepancies',
+                },
+              },
+              required: [
+                'isSupported',
+                'confidenceScore',
+                'pageNumber',
+                'sectionName',
+                'exactSupportingQuote',
+                'auditReasoning',
+              ],
+            },
           },
         });
 
         const text = res.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) throw new Error('Empty verification response from Gemini.');
 
-        const audit = JSON.parse(text);
+        const audit = safeJsonParse(text);
 
         // Update row citation with verified evidence
         useGridStore.setState(
@@ -940,13 +1016,49 @@ Return your response in JSON format:
           config: {
             temperature: 0.1,
             responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                matches: {
+                  type: Type.ARRAY,
+                  description: 'List of matching excerpts and locations in the paper',
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      pageNumber: {
+                        type: Type.INTEGER,
+                        description: 'Page number where the match was found',
+                      },
+                      section: {
+                        type: Type.STRING,
+                        description: 'Section name in the document',
+                      },
+                      excerpt: {
+                        type: Type.STRING,
+                        description: 'Direct quote or finding from the paper',
+                      },
+                      relevance: {
+                        type: Type.STRING,
+                        description: 'Explanation of relevance to the query',
+                      },
+                    },
+                    required: ['pageNumber', 'section', 'excerpt', 'relevance'],
+                  },
+                },
+                summary: {
+                  type: Type.STRING,
+                  description: 'Short overview synthesizing the search results for the user query',
+                },
+              },
+              required: ['matches', 'summary'],
+            },
           },
         });
 
         const text = res.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) throw new Error('No search results returned.');
 
-        const parsed = JSON.parse(text);
+        const parsed = safeJsonParse(text);
         logStore.addLog('success', `Found ${parsed.matches?.length || 0} document matches for "${args.query}"`);
 
         return {
