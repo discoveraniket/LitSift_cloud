@@ -10,8 +10,8 @@ const createDefaultGreeting = (pdfTitle?: string): AgentMessage => ({
   pdfId: pdfTitle ? undefined : 'master-grid',
   sender: 'agent',
   text: pdfTitle
-    ? `**Now viewing "${pdfTitle}".**\n\nLitSift Agent is online. Ask me to extract paper findings, verify citations, or edit table cells!`
-    : 'LitSift Agent is online. Ask me to extract findings, verify citations, or query the data grid!',
+    ? `⚡ Viewing "${pdfTitle}"`
+    : '⚡ LitSift Agent ready',
   timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
 });
 
@@ -60,6 +60,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   sendMessage: (text: string, activePdfTitle?: string) => {
     const currentPdfId = get().activePdfId || 'master-grid';
     const controller = new AbortController();
+    const startTime = Date.now();
 
     const userMsg: AgentMessage = {
       id: `msg-${Date.now()}`,
@@ -82,6 +83,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // Execute Multi-Step ReAct Agent Loop
     processAgentInteraction(text, activePdfTitle, controller.signal)
       .then((result) => {
+        const durationSec = Number(((Date.now() - startTime) / 1000).toFixed(1));
         const agentMsg: AgentMessage = {
           id: `msg-${Date.now() + 1}`,
           pdfId: currentPdfId,
@@ -89,6 +91,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           text: result.replyText,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           toolsExecuted: result.toolsExecuted,
+          executionTime: durationSec,
           toolCall:
             result.toolsExecuted.length > 0
               ? {
@@ -185,13 +188,24 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     get().sendMessage(optionText);
   },
 
+  deleteMessage: async (id: string) => {
+    set((state) => ({
+      messages: state.messages.filter((m) => m.id !== id),
+    }));
+    try {
+      await db.chatMessages.delete(id);
+    } catch (err) {
+      console.warn('Failed to delete message from IndexedDB:', err);
+    }
+  },
+
   clearMessages: async () => {
     const currentPdfId = get().activePdfId || 'master-grid';
     const freshMsg: AgentMessage = {
       id: `msg-${Date.now()}`,
       pdfId: currentPdfId,
       sender: 'agent',
-      text: 'Fresh session started. LitSift Agent is ready for new paper extractions and table edits!',
+      text: '⚡ LitSift Agent ready',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 

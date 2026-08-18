@@ -22,12 +22,14 @@ export interface AgentMessage {
     status: 'running' | 'completed' | 'failed';
   };
   options?: string[]; // Interactive options/chips
+  executionTime?: number; // Total duration of agent execution in seconds
 }
 
 export interface AgentExecutionResult {
   replyText: string;
   thought?: string;
   toolsExecuted: AgentToolExecution[];
+  executionTime?: number;
 }
 
 export interface AgentState {
@@ -45,5 +47,6 @@ export interface AgentState {
   cancelInteraction: () => void;
   selectOption: (optionText: string) => void;
   clearMessages: () => void;
+  deleteMessage: (id: string) => void;
   setExecutionMode: (mode: 'human_in_loop' | 'autonomous_autopilot') => void;
 }

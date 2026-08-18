@@ -4,9 +4,6 @@ import {
   Bot,
   User,
   Sparkles,
-  Terminal,
-  FileText,
-  Lightbulb,
   Trash2,
   X,
   ChevronDown,
@@ -14,6 +11,9 @@ import {
   CheckCircle2,
   XCircle,
   ShieldCheck,
+  Copy,
+  Check,
+  Zap,
 } from 'lucide-react';
 import { useAgentStore } from '../../store/useAgentStore';
 import { useGridStore } from '../../store/useGridStore';
@@ -39,7 +39,10 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
     cancelInteraction,
     selectOption,
     clearMessages,
+    deleteMessage,
   } = useAgentStore();
+
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
 
   const {
     rows,
@@ -53,11 +56,10 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
     addCellDiscussionMessage,
   } = useGridStore();
 
-  const { logs, activeStep, isOpen: isLogOpen, toggleOpen, clearLogs } = useLogStore();
+  const { logs, isOpen: isLogOpen } = useLogStore();
 
   const [inputPrompt, setInputPrompt] = useState('');
   const [elapsed, setElapsed] = useState(0);
-  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [expandedMsgTools, setExpandedMsgTools] = useState<Record<string, boolean>>({});
   const [expandedToolPayloadId, setExpandedToolPayloadId] = useState<string | null>(null);
 
@@ -145,6 +147,13 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
     }
   }, [logs, isLogOpen]);
 
+  const handleCopyText = (id: string, text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedMsgId(id);
+      setTimeout(() => setCopiedMsgId(null), 2000);
+    });
+  };
+
   return (
     <aside className="panel right-agent" style={{ display: 'flex', flexDirection: 'column', position: 'relative', height: '100%' }}>
       {/* Panel Header */}
@@ -195,51 +204,27 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
             boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.6)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', borderBottom: '1px solid #313244', paddingBottom: '4px' }}>
-            <span style={{ color: 'var(--accent-primary)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Terminal size={11} /> LIVE EXECUTION LOGS
-            </span>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button
-                onClick={clearLogs}
-                style={{ background: 'transparent', border: 'none', color: '#6c7086', cursor: 'pointer', fontSize: '9px' }}
-                title="Clear Logs"
-              >
-                Clear
-              </button>
-              <button
-                onClick={toggleOpen}
-                style={{ background: 'transparent', border: 'none', color: '#a6adc8', cursor: 'pointer' }}
-              >
-                <X size={12} />
-              </button>
-            </div>
+          <div style={{ fontWeight: 700, color: 'var(--accent-primary)', marginBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>⚡ REALTIME AGENT REASONING & EXECUTION TRACE</span>
+            <span style={{ fontSize: '9px', color: 'var(--text-secondary)' }}>{logs.length} events logged</span>
           </div>
 
           {logs.length === 0 ? (
-            <div style={{ color: '#6c7086', fontStyle: 'italic', padding: '6px 0' }}>No execution events logged yet. Trigger an action or query.</div>
+            <div style={{ color: '#6c7086', fontStyle: 'italic' }}>No execution trace logged yet. Send a prompt to view live agent reasoning.</div>
           ) : (
             logs.map((log) => (
-              <div key={log.id} style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: `2px solid ${log.level === 'error' ? '#f38ba8' : log.level === 'success' ? '#a6e3a1' : log.level === 'warn' ? '#f9e2af' : '#89b4fa'}`, paddingLeft: '6px', margin: '2px 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ color: log.level === 'error' ? '#f38ba8' : log.level === 'success' ? '#a6e3a1' : log.level === 'warn' ? '#f9e2af' : '#89b4fa', fontWeight: 600 }}>
-                    [{log.timestamp}] {log.message}
-                  </span>
-                  {log.details && (
-                    <button
-                      onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
-                      style={{ background: 'transparent', border: 'none', color: '#89b4fa', cursor: 'pointer', fontSize: '9px', display: 'flex', alignItems: 'center' }}
-                    >
-                      {expandedLogId === log.id ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-                      <span>payload</span>
-                    </button>
-                  )}
-                </div>
-                {log.details && expandedLogId === log.id && (
-                  <pre style={{ background: '#181825', padding: '4px', borderRadius: '4px', overflowX: 'auto', color: '#bac2de', fontSize: '9px', margin: '2px 0' }}>
-                    {JSON.stringify(log.details, null, 2)}
-                  </pre>
-                )}
+              <div key={log.id} style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+                <span style={{ color: '#6c7086', minWidth: '55px' }}>{log.timestamp}</span>
+                <span
+                  style={{
+                    fontWeight: 700,
+                    minWidth: '55px',
+                    color: log.level === 'error' ? 'var(--accent-danger)' : log.level === 'warn' ? '#f9e2af' : 'var(--accent-success)',
+                  }}
+                >
+                  [{log.level.toUpperCase()}]
+                </span>
+                <span style={{ flex: 1, wordBreak: 'break-word' }}>{log.message}</span>
               </div>
             ))
           )}
@@ -316,12 +301,11 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
           style={{
             margin: '8px 8px 0 8px',
             background: 'var(--bg-tertiary)',
-            border: '1px solid var(--accent-primary)',
-            borderRadius: '8px',
-            padding: '10px 12px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '6px',
+            padding: '8px 10px',
             cursor: 'pointer',
-            transition: 'border-color 0.2s ease',
+            transition: 'all 0.15s ease',
           }}
         >
           <div
@@ -329,52 +313,44 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              marginBottom: '6px',
+              marginBottom: '4px',
               fontSize: '11px',
-              fontWeight: 700,
+              fontWeight: 600,
               color: 'var(--accent-primary)',
             }}
           >
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Lightbulb size={13} color="#f9e2af" /> AI CELL REASONING
+            <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Sparkles size={12} color="var(--accent-primary)" /> Cell Grounding
             </span>
-            <span
-              style={{
-                fontSize: '10px',
-                background: 'rgba(166, 227, 161, 0.2)',
-                color: 'var(--accent-success)',
-                padding: '1px 6px',
-                borderRadius: '10px',
-                border: '1px solid var(--accent-success)',
-                fontWeight: 700,
-              }}
-            >
-              {Math.round(activeCitation.confidence * 100)}% Grounded
+            <span style={{ fontSize: '10px', color: 'var(--accent-success)', fontWeight: 600 }}>
+              {Math.round(activeCitation.confidence * 100)}% Match
             </span>
           </div>
 
-          <div style={{ fontSize: '11px', color: 'var(--text-primary)', marginBottom: '8px', lineHeight: '1.4' }}>
-            <strong>💡 Rationale:</strong> {activeCitation.reasoning}
+          <div style={{ fontSize: '11px', color: 'var(--text-primary)', marginBottom: '6px', lineHeight: '1.35' }}>
+            {activeCitation.reasoning}
           </div>
 
           <div
             style={{
-              background: 'var(--bg-secondary)',
-              borderLeft: '3px solid var(--accent-primary)',
-              padding: '6px 8px',
-              borderRadius: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
               fontSize: '10px',
               color: 'var(--text-secondary)',
               fontStyle: 'italic',
+              background: 'var(--bg-secondary)',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              gap: '8px',
             }}
           >
-            <div style={{ fontWeight: 600, fontStyle: 'normal', color: 'var(--text-primary)', marginBottom: '2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <FileText size={11} /> Source: {activeCitation.sectionName} (Page {activeCitation.pageNumber})
-              </span>
-              <span style={{ fontSize: '9px', color: 'var(--accent-primary)', textDecoration: 'underline' }}>Jump to page ↗</span>
-            </div>
-            "{activeCitation.snippetQuote}"
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              "{activeCitation.snippetQuote}"
+            </span>
+            <span style={{ fontSize: '9px', color: 'var(--text-muted)', flexShrink: 0, fontStyle: 'normal' }}>
+              p. {activeCitation.pageNumber} ↗
+            </span>
           </div>
         </div>
       )}
@@ -384,18 +360,21 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
         {messages.map((msg) => {
           const isToolsExpanded = !!expandedMsgTools[msg.id];
           const hasTools = msg.toolsExecuted && msg.toolsExecuted.length > 0;
+          const isCopied = copiedMsgId === msg.id;
 
           return (
             <div
               key={msg.id}
               className={`agent-message-bubble ${msg.sender}`}
               style={{
-                marginBottom: '12px',
+                marginBottom: '14px',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+                position: 'relative',
               }}
             >
+              {/* Header: Sender & Timestamp */}
               <div
                 style={{
                   display: 'flex',
@@ -418,48 +397,47 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
                 <span>• {msg.timestamp}</span>
               </div>
 
+              {/* Message Content Container */}
               <div
+                className="message-content-wrapper"
                 style={{
-                  background: msg.sender === 'user' ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-                  color: msg.sender === 'user' ? 'var(--bg-secondary)' : 'var(--text-primary)',
-                  padding: '8px 12px',
-                  borderRadius: msg.sender === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
-                  fontSize: '12px',
-                  lineHeight: '1.4',
+                  position: 'relative',
                   maxWidth: '92%',
-                  border: msg.sender === 'agent' ? '1px solid var(--border-subtle)' : 'none',
+                  background: msg.sender === 'user' ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+                  color: 'var(--text-primary)',
+                  padding: msg.sender === 'user' ? '8px 12px' : '4px 8px 6px 12px',
+                  borderRadius: msg.sender === 'user' ? '10px' : '6px',
+                  border: msg.sender === 'user' ? '1px solid var(--border-subtle)' : 'none',
+                  borderLeft: msg.sender === 'agent' ? '2px solid var(--accent-primary)' : undefined,
+                  fontSize: '12px',
+                  lineHeight: '1.45',
                 }}
               >
-                {/* VS Code Copilot Style Collapsible Tool Execution Section */}
+                {/* Minimal Collapsible Tool Executions Drawer */}
                 {hasTools && (
                   <div style={{ marginBottom: '8px' }}>
                     <button
                       onClick={() => toggleToolsForMessage(msg.id)}
                       style={{
-                        background: 'rgba(255, 255, 255, 0.04)',
+                        background: 'rgba(255, 255, 255, 0.03)',
                         border: '1px solid var(--border-subtle)',
                         borderRadius: '6px',
-                        padding: '4px 8px',
-                        fontSize: '11px',
+                        padding: '2px 7px',
+                        fontSize: '10px',
                         color: 'var(--text-secondary)',
                         cursor: 'pointer',
-                        display: 'flex',
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '6px',
-                        width: '100%',
-                        justifyContent: 'space-between',
+                        gap: '4px',
+                        fontWeight: 600,
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
-                        {isToolsExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                        <Terminal size={11} color="var(--accent-primary)" />
-                        <span>Executed {msg.toolsExecuted!.length} tool action{msg.toolsExecuted!.length > 1 ? 's' : ''}</span>
-                      </span>
-                      <span style={{ fontSize: '10px', color: 'var(--accent-success)', fontWeight: 600 }}>✓ Complete</span>
+                      {isToolsExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                      <span>{msg.toolsExecuted!.length} tool action{msg.toolsExecuted!.length > 1 ? 's' : ''}</span>
                     </button>
 
-                    {/* Expandable Step Details */}
+                    {/* Expandable Technical Step Details */}
                     {isToolsExpanded && (
                       <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px', paddingLeft: '4px', borderLeft: '2px solid var(--border-subtle)' }}>
                         {msg.toolsExecuted!.map((t) => (
@@ -501,7 +479,7 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
                   </div>
                 )}
 
-                {/* Natural Language Response Content */}
+                {/* Natural Language Response / Query Content */}
                 {msg.sender === 'agent' ? (
                   <div
                     className="chat-markdown"
@@ -511,8 +489,9 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
                   <div>{msg.text}</div>
                 )}
 
+                {/* Interactive Suggestion Chips */}
                 {msg.options && (
-                  <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {msg.options.map((opt, i) => (
                       <button
                         key={i}
@@ -522,7 +501,7 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
                           color: 'var(--accent-primary)',
                           border: '1px solid var(--accent-primary)',
                           borderRadius: '6px',
-                          padding: '6px 10px',
+                          padding: '4px 8px',
                           fontSize: '11px',
                           textAlign: 'left',
                           cursor: 'pointer',
@@ -535,12 +514,83 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
                     ))}
                   </div>
                 )}
+
+                {/* Persistent Execution Time Note (Bottom Muted Badge) */}
+                {msg.sender === 'agent' && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      marginTop: '6px',
+                      fontSize: '10px',
+                      color: 'var(--text-secondary)',
+                      opacity: 0.75,
+                    }}
+                  >
+                    <Zap size={10} color="var(--accent-primary)" />
+                    <span>{msg.executionTime !== undefined ? `⚡ ${msg.executionTime}s` : '⚡ Instant'}</span>
+                  </div>
+                )}
+
+                {/* Hover Quick-Actions (Copy & Delete Buttons) */}
+                <div
+                  className="msg-hover-toolbar"
+                  style={{
+                    position: 'absolute',
+                    bottom: '-10px',
+                    right: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '2px',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '6px',
+                    padding: '2px 4px',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+                    zIndex: 10,
+                  }}
+                >
+                  <button
+                    onClick={() => handleCopyText(msg.id, msg.text)}
+                    title="Copy message to clipboard"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: isCopied ? 'var(--accent-success)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {isCopied ? <Check size={11} /> : <Copy size={11} />}
+                  </button>
+
+                  <button
+                    onClick={() => deleteMessage(msg.id)}
+                    title="Delete message from chat history"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-danger)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
               </div>
             </div>
           );
         })}
 
-        {/* Live Active Thinking / Execution Bubble (VS Code Copilot Style) */}
+        {/* Live Active Thinking / Execution Bubble */}
         {isThinking && (
           <div
             className="agent-message-bubble agent"
@@ -567,58 +617,51 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
 
             <div
               style={{
-                background: 'var(--bg-tertiary)',
+                background: 'rgba(137, 180, 250, 0.08)',
                 border: '1px solid var(--accent-primary)',
-                borderRadius: '12px 12px 12px 2px',
-                padding: '10px 12px',
+                borderRadius: '8px',
+                padding: '6px 10px',
                 maxWidth: '92%',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-primary)', fontSize: '11px', fontWeight: 600 }}>
-                  <Sparkles size={14} className="spin-icon" />
-                  <span>{activeStep || 'Agent is reasoning & executing tools...'}</span>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-primary)', fontSize: '11px', fontWeight: 600 }}>
+                <Sparkles size={13} className="spin-icon" />
+                <span>Executing...</span>
+              </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span
-                    style={{
-                      fontFamily: 'monospace',
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      color: 'var(--text-primary)',
-                      background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: '10px',
-                      padding: '2px 6px',
-                      minWidth: '54px',
-                      textAlign: 'center',
-                      fontVariantNumeric: 'tabular-nums',
-                      display: 'inline-flex',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    ⏱️ {elapsed.toFixed(1)}s
-                  </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  ⚡ {elapsed.toFixed(1)}s
+                </span>
 
-                  <button
-                    onClick={cancelInteraction}
-                    title="Stop Agent Execution"
-                    style={{
-                      background: 'rgba(243, 139, 168, 0.2)',
-                      border: '1px solid var(--accent-danger)',
-                      color: 'var(--accent-danger)',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      fontSize: '10px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Stop
-                  </button>
-                </div>
+                <button
+                  onClick={cancelInteraction}
+                  title="Stop Agent Execution"
+                  style={{
+                    background: 'rgba(243, 139, 168, 0.2)',
+                    border: '1px solid var(--accent-danger)',
+                    color: 'var(--accent-danger)',
+                    padding: '1px 6px',
+                    borderRadius: '4px',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Stop
+                </button>
               </div>
             </div>
           </div>

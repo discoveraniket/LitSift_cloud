@@ -1059,6 +1059,20 @@ body {
   text-decoration: underline;
 }
 
+/* Chat Hover Action Toolbar */
+.msg-hover-toolbar {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transform: translateY(2px);
+}
+
+.message-content-wrapper:hover .msg-hover-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 5px;
