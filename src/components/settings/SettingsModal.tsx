@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Settings, X, Key, Cpu, Check, ShieldCheck, Plus } from 'lucide-react';
+import { Settings, X, Key, Cpu, Check, ShieldCheck, Plus, Zap } from 'lucide-react';
 import { getGeminiApiKey, getSelectedGeminiModel, setSelectedGeminiModel } from '../../services/geminiService';
+import { useAgentStore } from '../../store/useAgentStore';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -55,6 +56,9 @@ const DEFAULT_MODELS: ModelOption[] = [
 ];
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+  const mode = useAgentStore((state) => state.mode);
+  const setExecutionMode = useAgentStore((state) => state.setExecutionMode);
+
   const [currentModel, setCurrentModel] = useState<string>(getSelectedGeminiModel());
   const [apiKeyInput, setApiKeyInput] = useState<string>(getGeminiApiKey());
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -323,6 +327,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Agent Execution Mode (HITL vs Autopilot) */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <ShieldCheck size={14} color="var(--accent-primary)" />
+              AGENT EXECUTION MODE
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div
+                onClick={() => setExecutionMode('human_in_loop')}
+                style={{
+                  border: mode === 'human_in_loop' ? '1px solid var(--accent-warning, #f9e2af)' : '1px solid var(--border-subtle)',
+                  background: mode === 'human_in_loop' ? 'rgba(249, 226, 175, 0.12)' : 'var(--bg-tertiary)',
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-warning, #f9e2af)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <ShieldCheck size={14} /> HITL Staged Review
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: '1.3' }}>
+                  AI extractions require human confirmation before committing.
+                </div>
+              </div>
+
+              <div
+                onClick={() => setExecutionMode('autonomous_autopilot')}
+                style={{
+                  border: mode === 'autonomous_autopilot' ? '1px solid var(--accent-success)' : '1px solid var(--border-subtle)',
+                  background: mode === 'autonomous_autopilot' ? 'rgba(166, 227, 161, 0.12)' : 'var(--bg-tertiary)',
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-success)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Zap size={14} /> Autopilot Mode
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: '1.3' }}>
+                  Extracted data is instantly committed into grid tables.
+                </div>
+              </div>
             </div>
           </div>
 

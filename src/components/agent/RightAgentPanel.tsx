@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   XCircle,
   ShieldCheck,
-  Zap,
 } from 'lucide-react';
 import { useAgentStore } from '../../store/useAgentStore';
 import { useGridStore } from '../../store/useGridStore';
@@ -36,7 +35,6 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
     messages,
     isThinking,
     mode,
-    setExecutionMode,
     sendMessage,
     cancelInteraction,
     selectOption,
@@ -149,81 +147,33 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
 
   return (
     <aside className="panel right-agent" style={{ display: 'flex', flexDirection: 'column', position: 'relative', height: '100%' }}>
-      {/* Panel Header with Mode Switcher & Log Drawer Controls */}
+      {/* Panel Header */}
       <div className="panel-header" style={{ justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Bot size={14} color="var(--accent-primary)" />
           <span style={{ fontWeight: 700 }}>AGENTIC AI COMMAND CENTER</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {/* Execution Mode Toggle: Human-in-the-Loop vs Autopilot */}
-          <button
-            onClick={() => setExecutionMode(mode === 'human_in_loop' ? 'autonomous_autopilot' : 'human_in_loop')}
-            title={`Toggle mode. Currently: ${mode === 'human_in_loop' ? 'Human-in-the-Loop (Staged Review)' : 'Autonomous Autopilot (Instant Commit)'}`}
-            style={{
-              background: mode === 'human_in_loop' ? 'rgba(249, 226, 175, 0.15)' : 'rgba(166, 227, 161, 0.15)',
-              border: `1px solid ${mode === 'human_in_loop' ? 'var(--accent-warning, #f9e2af)' : 'var(--accent-success)'}`,
-              color: mode === 'human_in_loop' ? 'var(--accent-warning, #f9e2af)' : 'var(--accent-success)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '10px',
-              padding: '2px 7px',
-              borderRadius: '4px',
-              fontWeight: 600,
-              transition: 'all 0.2s ease',
-            }}
-          >
-            {mode === 'human_in_loop' ? <ShieldCheck size={11} /> : <Zap size={11} />}
-            <span>{mode === 'human_in_loop' ? 'HITL Review' : 'Autopilot'}</span>
-          </button>
-
-          {/* Logs Drawer Toggle */}
-          <button
-            onClick={toggleOpen}
-            title="Toggle Live Debug & Execution Logs"
-            style={{
-              background: isLogOpen ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-              color: isLogOpen ? 'var(--bg-secondary)' : 'var(--text-secondary)',
-              border: '1px solid var(--border-subtle)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '10px',
-              padding: '2px 8px',
-              borderRadius: '4px',
-              fontWeight: 600,
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <Terminal size={11} />
-            <span>Logs ({logs.length})</span>
-          </button>
-
-          <button
-            onClick={() => clearMessages()}
-            title="Clear Chat History & Start Fresh Session"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '11px',
-              padding: '2px 4px',
-              borderRadius: '4px',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-danger)')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
+        <button
+          onClick={() => clearMessages()}
+          title="Clear Chat History & Start Fresh Session"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            fontSize: '11px',
+            padding: '2px 4px',
+            borderRadius: '4px',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-danger)')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+        >
+          <Trash2 size={13} />
+        </button>
       </div>
 
       {/* Embedded Live Execution Console Drawer */}

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { HeaderBar } from './HeaderBar';
+import { ActivityBar } from './ActivityBar';
+import { StatusBar } from './StatusBar';
 import { LeftExplorerPanel } from '../explorer/LeftExplorerPanel';
 import { CentralViewerPanel } from '../pdf-viewer/CentralViewerPanel';
 import { RightAgentPanel } from '../agent/RightAgentPanel';
@@ -21,11 +23,12 @@ export const WorkspaceLayout: React.FC = () => {
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showBottomPanel, setShowBottomPanel] = useState(true);
   const [showRightPanel, setShowRightPanel] = useState(true);
+  const [isGridMaximized, setIsGridMaximized] = useState(false);
 
-  // Pixel Width/Height State for perfect, non-squashing dragging
+  // Pixel Width/Height State for perfect dragging
   const [leftWidth, setLeftWidth] = useState(260);
   const [rightWidth, setRightWidth] = useState(420);
-  const [bottomHeight, setBottomHeight] = useState(240);
+  const [bottomHeight, setBottomHeight] = useState(280);
 
   const [isDragging, setIsDragging] = useState<string | null>(null);
 
@@ -39,8 +42,13 @@ export const WorkspaceLayout: React.FC = () => {
 
   const handleOpenMasterGrid = () => {
     useGridStore.getState().resetActiveSelection();
-    useAgentStore.getState().setActivePdfId('', 'Master Workspace');
-    setActiveView('master_grid');
+    if (activeView === 'master_grid') {
+      setActiveView('pdf');
+    } else {
+      useAgentStore.getState().setActivePdfId('', 'Master Workspace');
+      setActiveView('master_grid');
+      setShowBottomPanel(false); // Auto-hide bottom panel when viewing Master Grid in central area
+    }
   };
 
   const handleToggleZenMode = () => {
@@ -122,7 +130,7 @@ export const WorkspaceLayout: React.FC = () => {
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaY = startY - moveEvent.clientY;
-      const newHeight = Math.max(120, Math.min(500, startHeight + deltaY));
+      const newHeight = Math.max(140, Math.min(700, startHeight + deltaY));
       setBottomHeight(newHeight);
     };
 
@@ -137,77 +145,110 @@ export const WorkspaceLayout: React.FC = () => {
   };
 
   return (
-    <div className={`workspace-container ${isDragging ? 'is-dragging' : ''}`}>
-      <HeaderBar
-        activeView={activeView}
-        activePdfTitle={activePdfTitle}
+    <div className={`workspace-app ${isDragging ? 'is-dragging' : ''}`}>
+      {/* 48px VS Code Vertical Activity Bar */}
+      <ActivityBar
         showLeftPanel={showLeftPanel}
         showBottomPanel={showBottomPanel}
-        showRightPanel={showRightPanel}
-        onToggleView={(view) => {
-          if (view === 'master_grid') {
-            handleOpenMasterGrid();
-          } else {
-            handleSelectPdf(activePdfId, activePdfTitle);
-          }
-        }}
+        activeView={activeView}
         onToggleLeftPanel={() => setShowLeftPanel(!showLeftPanel)}
         onToggleBottomPanel={() => setShowBottomPanel(!showBottomPanel)}
-        onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
+        onOpenMasterGrid={handleOpenMasterGrid}
         onToggleZenMode={handleToggleZenMode}
         onOpenSettings={() => setShowSettingsModal(true)}
         onResetWorkspace={handleResetWorkspace}
       />
 
-      <div className="workspace-body">
-        <div className="layout-row-top">
-          {showLeftPanel && (
-            <>
-              <div className="layout-col-left" style={{ width: `${leftWidth}px` }}>
-                <LeftExplorerPanel
-                  onSelectPdf={handleSelectPdf}
-                  onOpenMasterGrid={handleOpenMasterGrid}
+      {/* Main Workspace Frame */}
+      <div className="workspace-main-frame">
+        <HeaderBar
+          activeView={activeView}
+          activePdfTitle={activePdfTitle}
+          showLeftPanel={showLeftPanel}
+          showBottomPanel={showBottomPanel}
+          showRightPanel={showRightPanel}
+          onToggleView={(view) => {
+            if (view === 'master_grid') {
+              handleOpenMasterGrid();
+            } else {
+              handleSelectPdf(activePdfId, activePdfTitle);
+            }
+          }}
+          onToggleLeftPanel={() => setShowLeftPanel(!showLeftPanel)}
+          onToggleBottomPanel={() => setShowBottomPanel(!showBottomPanel)}
+          onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
+        />
+
+        <div className="workspace-body">
+          {/* Top Section: Left Explorer | Central Viewer | Right AI Chat */}
+          {!isGridMaximized && (
+            <div className="layout-row-top">
+              {showLeftPanel && (
+                <>
+                  <div className="layout-col-left" style={{ width: `${leftWidth}px` }}>
+                    <LeftExplorerPanel
+                      onSelectPdf={handleSelectPdf}
+                      onOpenMasterGrid={handleOpenMasterGrid}
+                    />
+                  </div>
+                  <div
+                    className="custom-drag-handle horizontal"
+                    onMouseDown={handleMouseDownLeft}
+                  />
+                </>
+              )}
+
+              <div className="layout-col-center">
+                <CentralViewerPanel
+                  activeView={activeView}
+                  activePdfId={activePdfId}
+                  activePdfTitle={activePdfTitle}
                 />
               </div>
-              <div
-                className="custom-drag-handle horizontal"
-                onMouseDown={handleMouseDownLeft}
-              />
-            </>
+
+              {showRightPanel && (
+                <>
+                  <div
+                    className="custom-drag-handle horizontal"
+                    onMouseDown={handleMouseDownRight}
+                  />
+                  <div className="layout-col-right" style={{ width: `${rightWidth}px` }}>
+                    <RightAgentPanel activePdfTitle={activePdfTitle} />
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
-          <div className="layout-col-center">
-            <CentralViewerPanel
-              activeView={activeView}
-              activePdfId={activePdfId}
-              activePdfTitle={activePdfTitle}
-            />
-          </div>
-
-          {showRightPanel && (
+          {/* 100% Full-Width Bottom Data Grid Panel */}
+          {showBottomPanel && (
             <>
+              {!isGridMaximized && (
+                <div
+                  className="custom-drag-handle vertical"
+                  onMouseDown={handleMouseDownBottom}
+                />
+              )}
               <div
-                className="custom-drag-handle horizontal"
-                onMouseDown={handleMouseDownRight}
-              />
-              <div className="layout-col-right" style={{ width: `${rightWidth}px` }}>
-                <RightAgentPanel activePdfTitle={activePdfTitle} />
+                className={`layout-row-bottom ${isGridMaximized ? 'maximized' : ''}`}
+                style={{ height: isGridMaximized ? '100%' : `${bottomHeight}px` }}
+              >
+                <BottomGridPanel
+                  activePdfId={activePdfId}
+                  activePdfTitle={activePdfTitle}
+                />
               </div>
             </>
           )}
         </div>
 
-        {showBottomPanel && (
-          <>
-            <div
-              className="custom-drag-handle vertical"
-              onMouseDown={handleMouseDownBottom}
-            />
-            <div className="layout-row-bottom" style={{ height: `${bottomHeight}px` }}>
-              <BottomGridPanel activePdfId={activePdfId} activePdfTitle={activePdfTitle} />
-            </div>
-          </>
-        )}
+        {/* Unified Control & Status Bar */}
+        <StatusBar
+          activePdfTitle={activePdfTitle}
+          showBottomPanel={showBottomPanel}
+          isGridMaximized={isGridMaximized}
+          onToggleMaximizeGrid={() => setIsGridMaximized(!isGridMaximized)}
+        />
       </div>
 
       <SettingsModal

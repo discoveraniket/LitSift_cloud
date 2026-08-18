@@ -55,15 +55,168 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.workspace-container {
+.workspace-app {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100vh;
   width: 100vw;
   background-color: var(--bg-primary);
+  overflow: hidden;
 }
 
-/* Compact Header Bar */
+.workspace-main-frame {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 48px VS Code Activity Bar */
+.activity-bar {
+  width: 48px;
+  height: 100%;
+  background-color: var(--bg-tertiary);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 50;
+  user-select: none;
+}
+
+.activity-bar-top,
+.activity-bar-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.activity-item {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.activity-item:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.activity-item.active {
+  color: var(--accent-primary);
+  border-left-color: var(--accent-primary);
+  background: rgba(137, 180, 250, 0.08);
+}
+
+.activity-item.brand-item {
+  cursor: default;
+  font-size: 18px;
+}
+
+.activity-item.brand-item:hover {
+  background: transparent;
+}
+
+.activity-tooltip {
+  position: absolute;
+  left: 54px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: all 0.15s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-subtle);
+  z-index: 100;
+}
+
+.activity-item:hover .activity-tooltip {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* 24px VS Code Bottom Status Bar */
+.status-bar {
+  height: 24px;
+  background-color: var(--bg-tertiary);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: 11px;
+  font-family: var(--font-sans);
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.status-bar-left,
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.status-item.mode-item {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  font-size: 10px;
+}
+
+.status-item.mode-item.hitl {
+  background: rgba(249, 226, 175, 0.15);
+  color: var(--accent-warning);
+  border: 1px solid rgba(249, 226, 175, 0.3);
+}
+
+.status-item.mode-item.autopilot {
+  background: rgba(166, 227, 161, 0.15);
+  color: var(--accent-success);
+  border: 1px solid rgba(166, 227, 161, 0.3);
+}
+
+.status-item.thinking-item {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.status-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.status-value.highlight {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+/* VS Code Tab Strip */
 .header-bar {
   height: var(--header-height);
   background-color: var(--bg-secondary);
@@ -74,59 +227,45 @@ body {
   padding: 0 12px;
 }
 
-.header-brand {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.brand-title {
-  font-weight: 700;
-  font-size: 13px;
-  color: var(--accent-primary);
-}
-
-.brand-badge {
-  background: var(--bg-surface);
-  color: var(--accent-secondary);
-  font-size: 9px;
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-weight: 600;
-}
-
 .header-tabs {
   display: flex;
-  gap: 4px;
+  height: 100%;
+  gap: 2px;
 }
 
 .header-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: transparent;
-  border: 1px solid transparent;
+  border: none;
+  border-top: 2px solid transparent;
   color: var(--text-secondary);
-  padding: 4px 10px;
-  border-radius: 4px;
+  padding: 0 12px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 500;
   transition: all 0.15s ease;
 }
 
 .header-tab:hover {
-  background: var(--bg-hover);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text-primary);
 }
 
 .header-tab.active {
-  background: var(--bg-surface);
-  color: var(--accent-primary);
-  border-color: var(--border-subtle);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-top-color: var(--accent-primary);
 }
+
+.tab-icon.pdf-icon { color: var(--accent-primary); }
+.tab-icon.grid-icon { color: var(--accent-secondary); }
 
 .header-controls {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .status-indicator {

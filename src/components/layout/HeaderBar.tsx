@@ -1,7 +1,5 @@
 import React from 'react';
-import { PanelLeft, PanelBottom, PanelRight, Maximize2, Settings, RotateCcw } from 'lucide-react';
-import { getSelectedGeminiModel } from '../../services/geminiService';
-import { useAgentStore } from '../../store/useAgentStore';
+import { PanelLeft, PanelBottom, PanelRight, FileText, Table } from 'lucide-react';
 
 interface HeaderBarProps {
   activeView: 'pdf' | 'master_grid';
@@ -13,9 +11,6 @@ interface HeaderBarProps {
   onToggleLeftPanel: () => void;
   onToggleBottomPanel: () => void;
   onToggleRightPanel: () => void;
-  onToggleZenMode: () => void;
-  onOpenSettings: () => void;
-  onResetWorkspace: () => void;
 }
 
 export const HeaderBar: React.FC<HeaderBarProps> = ({
@@ -28,101 +23,51 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onToggleLeftPanel,
   onToggleBottomPanel,
   onToggleRightPanel,
-  onToggleZenMode,
-  onOpenSettings,
-  onResetWorkspace,
 }) => {
-  const currentModel = getSelectedGeminiModel();
-  const mode = useAgentStore((state) => state.mode);
 
   return (
     <header className="header-bar">
-      <div className="header-brand">
-        <span className="brand-logo">⚡</span>
-        <span className="brand-title">LitSift Cloud</span>
-        <span className="brand-badge">Agentic Workspace</span>
-      </div>
-
+      {/* VS Code Style Editor Tabs Strip */}
       <div className="header-tabs">
         <button
           className={`header-tab ${activeView === 'pdf' ? 'active' : ''}`}
           onClick={() => onToggleView('pdf')}
         >
-          📄 {activePdfTitle}
+          <FileText size={13} className="tab-icon pdf-icon" />
+          <span className="tab-title">{activePdfTitle}</span>
         </button>
         <button
           className={`header-tab ${activeView === 'master_grid' ? 'active' : ''}`}
           onClick={() => onToggleView('master_grid')}
         >
-          📊 Master Data Grid
+          <Table size={13} className="tab-icon grid-icon" />
+          <span className="tab-title">Master Data Grid</span>
         </button>
       </div>
 
+      {/* VS Code Panel Layout Controls */}
       <div className="header-controls">
-        <button
-          className="layout-toggle-btn reset-workspace-btn"
-          onClick={onResetWorkspace}
-          title="Reset Workspace & Start Fresh Project (Clears all PDFs, table rows, and chat history)"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-            padding: '3px 8px',
-            fontSize: '11px',
-            color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: '4px',
-            background: 'var(--bg-secondary)',
-            cursor: 'pointer',
-          }}
-        >
-          <RotateCcw size={13} color="var(--accent-warning, #f9e2af)" />
-          <span style={{ fontSize: '11px', fontWeight: 600 }}>New Project</span>
-        </button>
-
-        <button
-          className="layout-toggle-btn"
-          onClick={onOpenSettings}
-          title={`Configure AI Model & API Settings (Active: ${currentModel})`}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', fontSize: '11px' }}
-        >
-          <Settings size={15} color="var(--accent-primary)" />
-          <span style={{ fontSize: '11px', fontWeight: 600 }}>{currentModel}</span>
-        </button>
-
-        <div className="status-indicator" title={`Agent Execution Mode: ${mode === 'human_in_loop' ? 'Human-in-the-Loop (Staged Review)' : 'Autonomous Autopilot'}`}>
-          <span className="status-dot online"></span>
-          {mode === 'human_in_loop' ? 'HITL Mode' : 'Autopilot'}
-        </div>
-
         <div className="layout-toggle-group">
           <button
             className={`layout-toggle-btn ${showLeftPanel ? 'active' : ''}`}
             onClick={onToggleLeftPanel}
             title="Toggle Left Explorer (Ctrl+B)"
           >
-            <PanelLeft size={16} />
+            <PanelLeft size={15} />
           </button>
           <button
             className={`layout-toggle-btn ${showBottomPanel ? 'active' : ''}`}
             onClick={onToggleBottomPanel}
-            title="Toggle Bottom Data Grid"
+            title="Toggle Bottom Data Grid Panel"
           >
-            <PanelBottom size={16} />
+            <PanelBottom size={15} />
           </button>
           <button
             className={`layout-toggle-btn ${showRightPanel ? 'active' : ''}`}
             onClick={onToggleRightPanel}
-            title="Toggle Right AI Agent"
+            title="Toggle Right AI Copilot"
           >
-            <PanelRight size={16} />
-          </button>
-          <button
-            className="layout-toggle-btn zen-btn"
-            onClick={onToggleZenMode}
-            title="Zen Reader Mode (Hide All Panels)"
-          >
-            <Maximize2 size={15} />
+            <PanelRight size={15} />
           </button>
         </div>
       </div>
