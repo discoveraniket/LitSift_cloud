@@ -58,6 +58,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   setExecutionMode: (mode) => set({ mode }),
 
   sendMessage: (text: string, activePdfTitle?: string) => {
+    if (!text || !text.trim()) return;
     const currentPdfId = get().activePdfId || 'master-grid';
     const controller = new AbortController();
     const startTime = Date.now();

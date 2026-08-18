@@ -10,11 +10,10 @@ describe('LitSift Cloud Workspace Layout', () => {
       expect(screen.getByText('LitSift Cloud')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('EXPLORER')).toBeInTheDocument();
-    expect(screen.getByText('AGENTIC AI COMMAND CENTER')).toBeInTheDocument();
+    expect(screen.getByText('VIEWS')).toBeInTheDocument();
+    expect(screen.getByText('RESEARCH PAPERS')).toBeInTheDocument();
     expect(screen.getByTitle('Toggle Left Explorer (Ctrl+B)')).toBeInTheDocument();
-    expect(screen.getByTitle('Toggle Bottom Data Grid')).toBeInTheDocument();
-    expect(screen.getByTitle('Toggle Right AI Agent')).toBeInTheDocument();
-    expect(screen.getByTitle('Zen Reader Mode (Hide All Panels)')).toBeInTheDocument();
+    expect(screen.getByTitle('Toggle Bottom Data Grid Panel')).toBeInTheDocument();
+    expect(screen.getByTitle('Toggle Right AI Copilot')).toBeInTheDocument();
   });
 });

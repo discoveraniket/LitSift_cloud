@@ -27,25 +27,131 @@ export function setSelectedGeminiModel(modelId: string): void {
   localStorage.setItem('LITSIFT_SELECTED_MODEL', modelId);
 }
 
+export interface AgentPrerequisiteValidation {
+  valid: boolean;
+  error?: string;
+  activePdf?: any;
+  pdfBase64?: string;
+}
+
+/**
+ * Pre-flight validation verifying all required prerequisites (API key, prompt, PDF binary, schema)
+ * before invoking Google GenAI API.
+ */
+export async function validateAgentPrerequisites(
+  userPrompt: string,
+  activePdfTitle: string = 'Active Paper'
+): Promise<AgentPrerequisiteValidation> {
+  const logStore = useLogStore.getState();
+
+  // 1. Validate Prompt Non-Empty
+  if (!userPrompt || !userPrompt.trim()) {
+    return {
+      valid: false,
+      error: 'Please enter a prompt or instruction for LitSift Agent.',
+    };
+  }
+
+  // 2. Validate Gemini API Key
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    return {
+      valid: false,
+      error:
+        '⚠️ **GEMINI_API_KEY is not configured.**\n\nPlease set your Gemini API key in **Settings (⚙️)** or through the environment variable (`VITE_GEMINI_API_KEY`) to enable autonomous agent execution.',
+    };
+  }
+
+  const pdfStore = usePdfStore.getState();
+  const gridStore = useGridStore.getState();
+
+  const activePdf =
+    pdfStore.getActivePdf() ||
+    pdfStore.pdfs.find((p) => p.name === activePdfTitle || p.id === activePdfTitle);
+
+  const lowerPrompt = userPrompt.toLowerCase();
+  const isDocumentQuery =
+    lowerPrompt.includes('extract') ||
+    lowerPrompt.includes('paper') ||
+    lowerPrompt.includes('pdf') ||
+    lowerPrompt.includes('document') ||
+    lowerPrompt.includes('citation') ||
+    lowerPrompt.includes('verify') ||
+    lowerPrompt.includes('quote') ||
+    lowerPrompt.includes('burst size') ||
+    lowerPrompt.includes('latent period') ||
+    lowerPrompt.includes('genome');
+
+  // 3. Document Availability Guard
+  if (isDocumentQuery && !activePdf && pdfStore.pdfs.length === 0) {
+    logStore.addLog('warn', 'Agent interaction halted: No research paper PDF in workspace.');
+    return {
+      valid: false,
+      error:
+        '📄 **No Research Paper PDF Loaded in Workspace**\n\nPlease upload or select a research paper PDF from the **Left Explorer** before requesting data extraction or document synthesis.',
+    };
+  }
+
+  // 4. PDF Binary Blob Availability Guard
+  let pdfBase64: string | undefined;
+  if (activePdf) {
+    try {
+      logStore.setActiveStep(`Verifying attached PDF "${activePdf.name}"...`);
+      pdfBase64 = await getPdfBase64(activePdf);
+      if (!pdfBase64 || pdfBase64.length === 0) {
+        throw new Error('PDF binary content is empty.');
+      }
+    } catch (err: any) {
+      logStore.addLog('error', `PDF binary read failed for "${activePdf.name}": ${err.message}`);
+      if (isDocumentQuery) {
+        return {
+          valid: false,
+          error: `⚠️ **Unable to read PDF file "${activePdf.name}".**\n\nThe binary file data could not be retrieved from local IndexedDB storage. Please re-upload the PDF in the Left Explorer.`,
+        };
+      }
+    }
+  }
+
+  // 5. Schema Guard
+  if (lowerPrompt.includes('extract') && gridStore.columns.length === 0) {
+    logStore.addLog('warn', 'Extraction requested with 0 schema columns defined.');
+    return {
+      valid: false,
+      error:
+        '📊 **No Schema Columns Defined in Data Grid**\n\nThe extraction grid does not have any target columns defined. Please add columns in the table or import a CSV schema template before extracting findings.',
+    };
+  }
+
+  return {
+    valid: true,
+    activePdf,
+    pdfBase64,
+  };
+}
+
 export async function processAgentInteraction(
   userPrompt: string,
   activePdfTitle: string = 'Active Paper',
   abortSignal?: AbortSignal
 ): Promise<AgentExecutionResult> {
-  const apiKey = getGeminiApiKey();
-  const selectedModel = getSelectedGeminiModel();
-  const agentMode: AgentExecutionMode = useAgentStore.getState().mode || 'human_in_loop';
   const logStore = useLogStore.getState();
 
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is missing. Please configure GEMINI_API_KEY in Settings or environment variables.');
+  // Run Pre-Flight Prerequisite Validation
+  const validation = await validateAgentPrerequisites(userPrompt, activePdfTitle);
+  if (!validation.valid) {
+    return {
+      replyText: validation.error || 'Agent execution could not proceed due to missing prerequisites.',
+      toolsExecuted: [],
+    };
   }
 
+  const apiKey = getGeminiApiKey()!;
+  const selectedModel = getSelectedGeminiModel();
+  const agentMode: AgentExecutionMode = useAgentStore.getState().mode || 'human_in_loop';
+  const activePdf = validation.activePdf;
+  const pdfBase64 = validation.pdfBase64;
+
   try {
-    const pdfStore = usePdfStore.getState();
-    const activePdf =
-      pdfStore.getActivePdf() ||
-      pdfStore.pdfs.find((p) => p.name === activePdfTitle || p.id === activePdfTitle);
     const agentStore = useAgentStore.getState();
 
     // Determine past conversation turns (excluding welcome banner)
@@ -104,24 +210,24 @@ ${userPrompt}
 
       finalPromptText = `[CURRENT DATA GRID STATE]
 - Active Columns: ${colsSummary || 'None'}
-- Existing Table Rows (${populatedRows.length}):
+- Existing Table Rows in Workspace (${populatedRows.length}):
 ${rowsSummary || '  (No populated rows)'}
 
-[USER INSTRUCTION]:
-${userPrompt}
+[IMPORTANT MULTI-PAPER DATASET RULES]:
+- LitSift is a cumulative multi-paper database aggregating scientific findings across multiple uploaded research papers.
+- Existing rows from other papers (distinguishable by their Article DOI or paper titles) represent valuable accumulated research data and must NEVER be deleted, altered, or overwritten when extracting or editing data for a new paper.
+- When extracting findings from the current paper ("${activePdfTitle}"), ALWAYS append new rows into the table schema.
 
-(Note: If table rows already exist, perform updates or schema modifications directly on the existing rows without calling extractPDFData unless the user explicitly asks to re-extract.)`;
+[USER INSTRUCTION]:
+${userPrompt}`;
     }
 
     // Build multi-turn contents array with history
     const contents: any[] = [];
 
     // On Turn 1 (or standalone), attach the PDF binary
-    if (activePdf) {
+    if (activePdf && pdfBase64) {
       try {
-        logStore.setActiveStep(`Loading attached PDF "${activePdf.name}"...`);
-        const base64Data = await getPdfBase64(activePdf);
-
         const firstUserMsg = pastNonWelcomeMessages.find((m) => m.sender === 'user');
         const firstTurnText = firstUserMsg ? firstUserMsg.text : finalPromptText;
 
@@ -131,7 +237,7 @@ ${userPrompt}
             {
               inlineData: {
                 mimeType: 'application/pdf',
-                data: base64Data,
+                data: pdfBase64,
               },
             },
             { text: isFollowup ? firstTurnText : finalPromptText },
@@ -174,7 +280,12 @@ ${userPrompt}
 You are interacting with research paper "${activePdfTitle}" and managing a structured scientific data grid.
 Understand the user's high-level objective and autonomously break it down into an ordered sequence of prerequisite and dependent tool actions.
 When an objective involves dependent steps (such as creating schema structure before populating data, or querying findings before updating cells), execute the prerequisite actions first, and continue calling the dependent tools in subsequent turns until the complete user goal is fully realized.
-If rows are already present in the data grid, perform the requested updates, column additions, or refinements directly on the existing rows rather than re-extracting unless explicitly instructed.
+
+CUMULATIVE MULTI-DOCUMENT DATASET INTEGRITY:
+- The data grid accumulates scientific extractions across multiple papers.
+- NEVER delete or overwrite existing table rows belonging to other research papers (which have different article DOIs or paper titles).
+- When the user asks to extract data from the active paper, invoke extractPDFData to append the new findings to the dataset while leaving rows from other papers completely intact.
+- If editing existing rows from the active paper, perform updates, column additions, or disaggregations directly on those specific rows.
 
 You have access to a rich declarative tool suite:
 - Cell & row editing: updateCell, batchUpdateCells, updateRow
@@ -202,6 +313,7 @@ Execute all required tool actions to fulfill the user's instructions and summari
       const currentTools = getToolsForMode(agentMode);
 
       logStore.setActiveStep(`[Step ${currentStep}/${MAX_STEPS}] Reasoning with Gemini (${selectedModel})...`);
+      const genStartTime = performance.now();
 
       const response: any = await ai.models.generateContent({
         model: selectedModel,
@@ -216,6 +328,27 @@ Execute all required tool actions to fulfill the user's instructions and summari
             },
           },
         },
+      });
+
+      const genDurationSec = ((performance.now() - genStartTime) / 1000).toFixed(2);
+      const usage = response.usageMetadata;
+      const promptTokens = usage?.promptTokenCount ?? 0;
+      const candidateTokens = usage?.candidatesTokenCount ?? 0;
+      const thinkingTokens = usage?.thinkingTokenCount ?? usage?.reasoningTokenCount;
+      const cachedTokens = usage?.cachedContentTokenCount;
+
+      let telemetryMsg = `⏱️ [Step ${currentStep}] Gemini ${selectedModel} responded in ${genDurationSec}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`;
+      if (thinkingTokens) {
+        telemetryMsg += `, Thinking=${thinkingTokens.toLocaleString()}`;
+      }
+      if (cachedTokens) {
+        telemetryMsg += `, Cached=${cachedTokens.toLocaleString()}`;
+      }
+
+      logStore.addLog('info', telemetryMsg, {
+        step: currentStep,
+        latencySec: Number(genDurationSec),
+        usageMetadata: usage,
       });
 
       const candidate = response.candidates?.[0];
@@ -235,7 +368,7 @@ Execute all required tool actions to fulfill the user's instructions and summari
       // If no tools were called, the agent has finished its task
       if (!functionCalls || functionCalls.length === 0) {
         logStore.setActiveStep(null);
-        logStore.addLog('info', `Agent finished reasoning at step ${currentStep}`);
+        logStore.addLog('info', `Agent completed reasoning at step ${currentStep} (${genDurationSec}s)`);
         break;
       }
 
@@ -255,7 +388,14 @@ Execute all required tool actions to fulfill the user's instructions and summari
           logStore.addLog('info', `[Step ${currentStep}] Invoking tool: ${fc.name}`, fc.args);
           logStore.setActiveStep(`[Step ${currentStep}] Executing ${fc.name}...`);
 
+          const toolStartTime = performance.now();
           const toolResult = await toolSpec.execute(fc.args || {}, agentMode);
+          const toolDurationSec = ((performance.now() - toolStartTime) / 1000).toFixed(2);
+
+          logStore.addLog(
+            toolResult.success ? 'success' : 'error',
+            `⚡ [Step ${currentStep}] Tool "${fc.name}" ${toolResult.success ? 'finished' : 'failed'} in ${toolDurationSec}s`
+          );
 
           executedTools.push({
             id: `tool-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,

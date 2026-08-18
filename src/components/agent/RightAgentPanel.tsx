@@ -19,6 +19,7 @@ import { useAgentStore } from '../../store/useAgentStore';
 import { useGridStore } from '../../store/useGridStore';
 import { useLogStore } from '../../store/useLogStore';
 import { marked } from 'marked';
+import { getSelectedGeminiModel } from '../../services/geminiService';
 
 // Configure marked options
 marked.setOptions({
@@ -42,8 +43,6 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
     deleteMessage,
   } = useAgentStore();
 
-  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
-
   const {
     rows,
     columns,
@@ -53,15 +52,15 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
     focusedCell,
     resetActiveSelection,
     setActiveEvidence,
-    addCellDiscussionMessage,
   } = useGridStore();
 
-  const { logs, isOpen: isLogOpen } = useLogStore();
+  const { logs, isOpen: isLogOpen, toggleOpen: toggleLogOpen, setOpen: setLogOpen, clearLogs } = useLogStore();
 
   const [inputPrompt, setInputPrompt] = useState('');
   const [elapsed, setElapsed] = useState(0);
   const [expandedMsgTools, setExpandedMsgTools] = useState<Record<string, boolean>>({});
   const [expandedToolPayloadId, setExpandedToolPayloadId] = useState<string | null>(null);
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
 
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const logsBottomRef = useRef<HTMLDivElement>(null);
@@ -89,32 +88,26 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      const scrollHeight = textareaRef.current.scrollHeight;
-      textareaRef.current.style.height = `${Math.min(Math.max(scrollHeight, 38), 160)}px`;
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 140)}px`;
     }
   }, [inputPrompt]);
 
-  const handleSend = (e?: React.FormEvent | React.KeyboardEvent) => {
+  const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputPrompt.trim() || isThinking) return;
 
-    if (focusedCell) {
-      addCellDiscussionMessage(focusedCell.rowId, focusedCell.field, inputPrompt.trim());
-    }
-
-    // Send clean text without prepended tags
-    sendMessage(inputPrompt.trim(), activePdfTitle);
+    const text = inputPrompt;
     setInputPrompt('');
-
     if (textareaRef.current) {
-      textareaRef.current.style.height = '38px';
+      textareaRef.current.style.height = 'auto';
     }
+    sendMessage(text, activePdfTitle);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend(e);
+      handleSend();
     }
   };
 
@@ -156,33 +149,124 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
 
   return (
     <aside className="panel right-agent" style={{ display: 'flex', flexDirection: 'column', position: 'relative', height: '100%' }}>
+      {/* Top Header Bar with Model Badge, Live Telemetry Toggle, and Clear Chat */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '6px 12px',
+          background: 'var(--bg-secondary)',
+          borderBottom: '1px solid var(--border-subtle)',
+          fontSize: '11px',
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: 'var(--text-primary)' }}>
+          <Bot size={14} color="var(--accent-primary)" />
+          <span>LitSift Agent</span>
+          <span
+            style={{
+              fontSize: '9px',
+              padding: '1px 5px',
+              borderRadius: '10px',
+              background: 'rgba(137, 180, 250, 0.15)',
+              color: 'var(--accent-primary)',
+              fontFamily: 'monospace',
+            }}
+          >
+            {getSelectedGeminiModel()}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {/* Toggle Live Console / Telemetry Drawer */}
+          <button
+            onClick={toggleLogOpen}
+            title={isLogOpen ? 'Hide Live Execution Console' : 'Open Live Execution Console & Telemetry Profiler'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              background: isLogOpen ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+              color: isLogOpen ? 'var(--bg-secondary)' : 'var(--text-secondary)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '4px',
+              padding: '2px 7px',
+              fontSize: '10px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <Zap size={11} />
+            <span>Telemetry {logs.length > 0 ? `(${logs.length})` : ''}</span>
+          </button>
+
+          {/* Clear Chat History */}
+          <button
+            onClick={clearMessages}
+            title="Clear Chat History"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              padding: '2px 4px',
+            }}
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      </div>
 
       {/* Embedded Live Execution Console Drawer */}
       {isLogOpen && (
         <div
           style={{
-            maxHeight: '220px',
+            maxHeight: '260px',
             minHeight: '140px',
             background: '#11111b',
             borderBottom: '2px solid var(--accent-primary)',
-            padding: '8px',
+            padding: '8px 10px',
             overflowY: 'auto',
             fontFamily: 'monospace',
-            fontSize: '10px',
+            fontSize: '10.5px',
             color: '#cdd6f4',
             display: 'flex',
             flexDirection: 'column',
             gap: '4px',
             boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.6)',
+            flexShrink: 0,
           }}
         >
           <div style={{ fontWeight: 700, color: 'var(--accent-primary)', marginBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>⚡ REALTIME AGENT REASONING & EXECUTION TRACE</span>
-            <span style={{ fontSize: '9px', color: 'var(--text-secondary)' }}>{logs.length} events logged</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Zap size={12} /> REALTIME AGENT REASONING & TELEMETRY
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '9px', color: 'var(--text-secondary)' }}>{logs.length} events logged</span>
+              <button
+                onClick={clearLogs}
+                title="Clear Logs"
+                style={{ background: 'transparent', border: 'none', color: '#6c7086', cursor: 'pointer', fontSize: '9px' }}
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setLogOpen(false)}
+                title="Close Drawer"
+                style={{ background: 'transparent', border: 'none', color: '#6c7086', cursor: 'pointer' }}
+              >
+                <X size={12} />
+              </button>
+            </div>
           </div>
 
           {logs.length === 0 ? (
-            <div style={{ color: '#6c7086', fontStyle: 'italic' }}>No execution trace logged yet. Send a prompt to view live agent reasoning.</div>
+            <div style={{ color: '#6c7086', fontStyle: 'italic' }}>No execution trace logged yet. Send a prompt to view live agent reasoning and latency telemetry.</div>
           ) : (
             logs.map((log) => (
               <div key={log.id} style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>

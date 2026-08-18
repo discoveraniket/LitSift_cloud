@@ -176,6 +176,16 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
+  deleteRows: (rowIds) =>
+    set(
+      produce((state: GridState) => {
+        if (!rowIds || rowIds.length === 0) return;
+        saveSnapshot(state);
+        state.rows = state.rows.filter((r) => !rowIds.includes(r.id));
+        state.selectedRowIds = state.selectedRowIds.filter((id) => !rowIds.includes(id));
+      })
+    ),
+
   addColumn: (headerName, initialValues, citations) =>
     set(
       produce((state: GridState) => {

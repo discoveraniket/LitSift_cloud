@@ -640,7 +640,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         }
 
         logStore.addLog('info', `Deleting ${rowIds.length} row(s): ${rowIds.join(', ')}`);
-        rowIds.forEach((id) => gridStore.deleteRow(id));
+        gridStore.deleteRows(rowIds);
         logStore.addLog('success', `Deleted ${rowIds.length} row(s)`);
 
         return {
@@ -674,8 +674,9 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
       },
     },
     execute: async (args: any, mode: AgentExecutionMode): Promise<ToolExecutionResult> => {
-      const gridStore = useGridStore.getState();
-      const logStore = useLogStore.getState();
+      try {
+        const gridStore = useGridStore.getState();
+        const logStore = useLogStore.getState();
       const targetPdfTitle = args.pdfId || 'Active Research Paper';
       const apiKey = getGeminiApiKey();
       const selectedModel = getSelectedGeminiModel();
@@ -746,7 +747,7 @@ Return your response strictly as a JSON object with this format:
       contentsParts.push({ text: schemaPrompt });
 
       logStore.setActiveStep(`[2/3] Transmitting request to Google Gemini (${selectedModel})...`);
-      const startTime = Date.now();
+      const genStartTime = performance.now();
 
       const ai = new GoogleGenAI({ apiKey });
       const res = await ai.models.generateContent({
@@ -758,157 +759,178 @@ Return your response strictly as a JSON object with this format:
         },
       });
 
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      logStore.addLog('info', `Received response from Gemini in ${elapsed}s`);
+      const elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
+        const usage = res.usageMetadata;
+        const promptTokens = usage?.promptTokenCount ?? 0;
+        const candidateTokens = usage?.candidatesTokenCount ?? 0;
+        const thinkingTokens = (usage as any)?.thinkingTokenCount ?? (usage as any)?.reasoningTokenCount;
+        const cachedTokens = usage?.cachedContentTokenCount;
 
-      const text = res.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) {
-        const err = 'Gemini API returned an empty extraction response.';
-        logStore.addLog('error', err);
-        throw new Error(err);
-      }
+        let logDetail = `⏱️ extractPDFData: LLM responded in ${elapsed}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`;
+        if (thinkingTokens) logDetail += `, Thinking=${thinkingTokens.toLocaleString()}`;
+        if (cachedTokens) logDetail += `, Cached=${cachedTokens.toLocaleString()}`;
+        logStore.addLog('info', logDetail, { usageMetadata: usage, latencySec: Number(elapsed) });
 
-      logStore.setActiveStep(`[3/3] Parsing JSON payload & populating table grid...`);
-      const parsed = safeJsonParse(text);
+        const text = res.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) {
+          const err = 'Gemini API returned an empty extraction response.';
+          logStore.addLog('error', err);
+          throw new Error(err);
+        }
 
-      let rawRows: any[] = [];
-      if (Array.isArray(parsed.rows) && parsed.rows.length > 0) {
-        rawRows = parsed.rows;
-      } else if (parsed.extractions && typeof parsed.extractions === 'object') {
-        rawRows = [{ ...parsed.extractions, citations: parsed.citations || {} }];
-      } else if (Array.isArray(parsed)) {
-        rawRows = parsed;
-      } else {
-        rawRows = [parsed];
-      }
+        logStore.setActiveStep(`[3/3] Parsing JSON payload & populating table grid...`);
+        const parsed = safeJsonParse(text);
 
-      const activePdfId = usePdfStore.getState().activePdfId;
-      const rowsToAppend: GridRow[] = rawRows.map((r: any, i: number) => {
-        const rowId = `extracted-${Date.now()}-${i}`;
-        const rowData: GridRow = {
-          id: rowId,
-          pdfId: pdfInfo?.id || activePdfId || `pdf-${Date.now()}`,
-          pdfTitle: pdfInfo?.name || targetPdfTitle,
-          aiStatus: mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed',
-          citationMap: {},
-        };
+        let rawRows: any[] = [];
+        if (Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+          rawRows = parsed.rows;
+        } else if (parsed.extractions && typeof parsed.extractions === 'object') {
+          rawRows = [{ ...parsed.extractions, citations: parsed.citations || {} }];
+        } else if (Array.isArray(parsed)) {
+          rawRows = parsed;
+        } else {
+          rawRows = [parsed];
+        }
 
-        gridStore.columns.forEach((col) => {
-          const val =
-            r[col.field] ??
-            r[col.headerName] ??
-            Object.entries(r).find(
-              ([k]) =>
-                k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
-                col.field.toLowerCase().replace(/[^a-z0-9]/g, '') ||
-                k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
-                col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
-            )?.[1];
-          rowData[col.field] = val !== undefined && val !== null ? String(val) : '-';
-        });
+        const activePdfId = usePdfStore.getState().activePdfId;
+        const rowsToAppend: GridRow[] = rawRows.map((r: any, i: number) => {
+          const rowId = `extracted-${Date.now()}-${i}`;
+          const rowData: GridRow = {
+            id: rowId,
+            pdfId: pdfInfo?.id || activePdfId || `pdf-${Date.now()}`,
+            pdfTitle: pdfInfo?.name || targetPdfTitle,
+            aiStatus: mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed',
+            citationMap: {},
+          };
 
-        // Ensure citationMap maps every column field to its grounded citation
-        const rawCitations = r.citations || parsed.citations || {};
-        const normalizedCitationMap: Record<string, any> = {};
+          gridStore.columns.forEach((col) => {
+            const val =
+              r[col.field] ??
+              r[col.headerName] ??
+              Object.entries(r).find(
+                ([k]) =>
+                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                  col.field.toLowerCase().replace(/[^a-z0-9]/g, '') ||
+                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                  col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
+              )?.[1];
+            rowData[col.field] = val !== undefined && val !== null ? String(val) : '-';
+          });
 
-        gridStore.columns.forEach((col) => {
-          const citation =
-            rawCitations[col.field] ??
-            rawCitations[col.headerName] ??
-            Object.entries(rawCitations).find(
-              ([k]) =>
-                k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
-                col.field.toLowerCase().replace(/[^a-z0-9]/g, '') ||
-                k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
-                col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
-            )?.[1];
+          const rawCitations = r.citations || parsed.citations || {};
+          const normalizedCitationMap: Record<string, any> = {};
 
-          if (citation) {
-            normalizedCitationMap[col.field] = {
-              pageNumber: Number(citation.pageNumber) || 1,
-              sectionName: citation.sectionName || 'Extracted Section',
-              snippetQuote: citation.snippetQuote || rowData[col.field] || 'Verified excerpt',
-              reasoning: citation.reasoning || `Extracted value "${rowData[col.field]}" from document`,
-              confidence: citation.confidence || 0.96,
-            };
-          }
-        });
+          gridStore.columns.forEach((col) => {
+            const citation =
+              rawCitations[col.field] ??
+              rawCitations[col.headerName] ??
+              Object.entries(rawCitations).find(
+                ([k]) =>
+                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                  col.field.toLowerCase().replace(/[^a-z0-9]/g, '') ||
+                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                  col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
+              )?.[1];
 
-        rowData.citationMap = normalizedCitationMap;
-        return rowData;
-      });
-
-      gridStore.appendRows(rowsToAppend);
-
-      // Auto-focus first citation
-      useGridStore.setState(
-        produce((state: any) => {
-          const newestRow = state.rows[state.rows.length - rowsToAppend.length];
-          if (newestRow && newestRow.citationMap) {
-            const activeCols = state.columns;
-            const firstField = activeCols[0]?.field;
-            if (firstField && newestRow.citationMap[firstField]) {
-              state.activeCitation = newestRow.citationMap[firstField];
+            if (citation) {
+              normalizedCitationMap[col.field] = {
+                pageNumber: Number(citation.pageNumber) || 1,
+                sectionName: citation.sectionName || 'Extracted Section',
+                snippetQuote: citation.snippetQuote || rowData[col.field] || 'Verified excerpt',
+                reasoning: citation.reasoning || `Extracted value "${rowData[col.field]}" from document`,
+                confidence: citation.confidence || 0.96,
+              };
             }
-          }
-        })
-      );
+          });
 
-      logStore.setActiveStep(null);
-      logStore.addLog('success', `Extraction completed in ${elapsed}s. ${rowsToAppend.length} row(s) staged for review.`);
+          rowData.citationMap = normalizedCitationMap;
+          return rowData;
+        });
 
-      return {
-        success: true,
-        replyText: `✅ Gemini ${selectedModel} extracted ${rowsToAppend.length} structured finding row(s) from "${pdfInfo?.name || targetPdfTitle}" in ${elapsed}s! Staged in table (Pending Review).`,
-        summary: `extractPDFData(${pdfInfo?.name || targetPdfTitle}) -> ${rowsToAppend.length} rows`,
-        resultData: rowsToAppend,
-      };
+        gridStore.appendRows(rowsToAppend);
+
+        useGridStore.setState(
+          produce((state: any) => {
+            const newestRow = state.rows[state.rows.length - rowsToAppend.length];
+            if (newestRow && newestRow.citationMap) {
+              const activeCols = state.columns;
+              const firstField = activeCols[0]?.field;
+              if (firstField && newestRow.citationMap[firstField]) {
+                state.activeCitation = newestRow.citationMap[firstField];
+              }
+            }
+          })
+        );
+
+        logStore.setActiveStep(null);
+        logStore.addLog('success', `Extraction completed in ${elapsed}s. ${rowsToAppend.length} row(s) staged for review.`);
+
+        return {
+          success: true,
+          replyText: `Extracted ${rowsToAppend.length} scientific observation row(s) from **${pdfInfo?.name || targetPdfTitle}** into the master table with grounded citations!`,
+          summary: `extractPDFData(${rowsToAppend.length} rows extracted)`,
+          resultData: { extractedCount: rowsToAppend.length, pdfId: pdfInfo?.id || activePdfId },
+        };
+      } catch (err: any) {
+        useLogStore.getState().setActiveStep(null);
+        useLogStore.getState().addLog('error', `extractPDFData failed: ${err.message}`);
+        return {
+          success: false,
+          replyText: `Failed to extract findings: ${err.message}`,
+          summary: `extractPDFData(failed: ${err.message})`,
+          error: err.message,
+        };
+      }
     },
   },
 
   verifyEvidenceCitation: {
     name: 'verifyEvidenceCitation',
-    description: 'Verify a specific cell finding against the research paper PDF, checking for accuracy, quote grounding, and computing confidence.',
+    description: 'Fact-check and audit a specific table cell value against the exact source text of the paper PDF.',
     parameters: {
       type: Type.OBJECT,
       properties: {
         rowId: {
           type: Type.STRING,
-          description: 'Target row ID to verify.',
+          description: 'Row ID containing the cell to verify. Defaults to focused row.',
         },
         field: {
           type: Type.STRING,
-          description: 'Target column field key to verify.',
+          description: 'Column field key to verify. Defaults to focused column.',
         },
-        claimText: {
+        claim: {
           type: Type.STRING,
-          description: 'The extracted text claim to verify against the PDF content.',
+          description: 'The specific extracted claim or numeric value to audit against the PDF.',
         },
       },
-      required: ['field'],
     },
     execute: async (args: any): Promise<ToolExecutionResult> => {
       try {
+        const gridStore = useGridStore.getState();
+        const logStore = useLogStore.getState();
         const apiKey = getGeminiApiKey();
         const selectedModel = getSelectedGeminiModel();
-        const logStore = useLogStore.getState();
-        const gridStore = useGridStore.getState();
+
+        if (!apiKey) throw new Error('GEMINI_API_KEY is missing.');
+
+        const targetRow =
+          gridStore.rows.find((r) => r.id === args.rowId) ||
+          gridStore.rows.find((r) => r.id === gridStore.focusedCell?.rowId) ||
+          gridStore.rows[0];
+
+        if (!targetRow) throw new Error('No row available to verify.');
+
+        const targetField = args.field || gridStore.focusedCell?.field || gridStore.columns[0]?.field;
+        const claimValue = args.claim || targetRow[targetField];
+
+        logStore.addLog('info', `Verifying claim for "${targetField}": "${claimValue}"`);
+
         const pdfStore = usePdfStore.getState();
-
-        if (!apiKey) throw new Error('GEMINI_API_KEY is not configured.');
-
-        const targetRow = gridStore.rows.find((r) => r.id === args.rowId) || gridStore.rows[0];
-        if (!targetRow) throw new Error('No table row available for verification.');
-
-        const targetField = args.field || 'methodology';
-        const claimValue = args.claimText || targetRow[targetField] || '';
-        const pdfInfo = pdfStore.pdfs.find((p) => p.id === targetRow.pdfId || p.name === targetRow.pdfTitle) || pdfStore.getActivePdf();
-
-        logStore.addLog('info', `Verifying citation for column "${targetField}" on paper "${targetRow.pdfTitle}"`, { claimValue });
+        const targetPdf = pdfStore.pdfs.find((p) => p.id === targetRow.pdfId || p.name === targetRow.pdfTitle) || pdfStore.getActivePdf();
 
         const contentsParts: any[] = [];
-        if (pdfInfo) {
-          const base64Data = await getPdfBase64(pdfInfo);
+        if (targetPdf) {
+          const base64Data = await getPdfBase64(targetPdf);
           contentsParts.push({
             inlineData: {
               mimeType: 'application/pdf',
@@ -917,13 +939,13 @@ Return your response strictly as a JSON object with this format:
           });
         }
 
-        const verifyPrompt = `You are a scientific fact-checker auditing an extracted finding against the attached research paper PDF.
+        const verifyPrompt = `You are auditing scientific fact-checking evidence for an extracted table cell value.
+Target Field: "${targetField}"
+Extracted Claim: "${claimValue}"
+Document Name: "${targetRow.pdfTitle}"
 
-Claim / Extracted Value to Verify:
-"${claimValue}"
-
-Check whether this claim is strictly supported by the text.
-Return your answer strictly in JSON format:
+Inspect the attached research paper PDF. Verify whether this extracted claim is supported by the text.
+Return your response in JSON format:
 {
   "isSupported": true,
   "confidenceScore": 0.95,
@@ -935,6 +957,7 @@ Return your answer strictly in JSON format:
 
         contentsParts.push({ text: verifyPrompt });
 
+        const genStartTime = performance.now();
         const ai = new GoogleGenAI({ apiKey });
         const res = await ai.models.generateContent({
           model: selectedModel,
@@ -942,52 +965,26 @@ Return your answer strictly in JSON format:
           config: {
             temperature: 0.1,
             responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                isSupported: {
-                  type: Type.BOOLEAN,
-                  description: 'Whether the claim is strictly supported by the text',
-                },
-                confidenceScore: {
-                  type: Type.NUMBER,
-                  description: 'Confidence score between 0.0 and 1.0',
-                },
-                pageNumber: {
-                  type: Type.INTEGER,
-                  description: 'Page number supporting this claim',
-                },
-                sectionName: {
-                  type: Type.STRING,
-                  description: 'Section name e.g. Results, Discussion, Methods',
-                },
-                exactSupportingQuote: {
-                  type: Type.STRING,
-                  description: 'Direct quote passage from document supporting this claim',
-                },
-                auditReasoning: {
-                  type: Type.STRING,
-                  description: 'Explanation of alignment or discrepancies',
-                },
-              },
-              required: [
-                'isSupported',
-                'confidenceScore',
-                'pageNumber',
-                'sectionName',
-                'exactSupportingQuote',
-                'auditReasoning',
-              ],
-            },
           },
         });
+
+        const elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
+        const usage = res.usageMetadata;
+        const promptTokens = usage?.promptTokenCount ?? 0;
+        const candidateTokens = usage?.candidatesTokenCount ?? 0;
+        const thinkingTokens = (usage as any)?.thinkingTokenCount ?? (usage as any)?.reasoningTokenCount;
+        const cachedTokens = usage?.cachedContentTokenCount;
+
+        let logDetail = `⏱️ verifyCitation: LLM responded in ${elapsed}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`;
+        if (thinkingTokens) logDetail += `, Thinking=${thinkingTokens.toLocaleString()}`;
+        if (cachedTokens) logDetail += `, Cached=${cachedTokens.toLocaleString()}`;
+        logStore.addLog('info', logDetail, { usageMetadata: usage, latencySec: Number(elapsed) });
 
         const text = res.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) throw new Error('Empty verification response from Gemini.');
 
         const audit = safeJsonParse(text);
 
-        // Update row citation with verified evidence
         useGridStore.setState(
           produce((state: any) => {
             const row = state.rows.find((r: any) => r.id === targetRow.id);
@@ -1029,26 +1026,26 @@ Return your answer strictly in JSON format:
 
   searchDocument: {
     name: 'searchDocument',
-    description: 'Search the attached research paper PDF for specific scientific keywords, methods, results, or sections.',
+    description: 'Perform a semantic evidence search inside the attached research paper PDF.',
     parameters: {
       type: Type.OBJECT,
       properties: {
         query: {
           type: Type.STRING,
-          description: 'Search query, keyword, or scientific concept to find in the paper.',
+          description: 'Search query or finding to locate in the PDF.',
         },
       },
       required: ['query'],
     },
     execute: async (args: any): Promise<ToolExecutionResult> => {
       try {
+        const logStore = useLogStore.getState();
         const apiKey = getGeminiApiKey();
         const selectedModel = getSelectedGeminiModel();
-        const logStore = useLogStore.getState();
         const pdfStore = usePdfStore.getState();
-        const activePdf = pdfStore.getActivePdf();
+        const activePdf = pdfStore.getActivePdf() || pdfStore.pdfs[0];
 
-        if (!apiKey) throw new Error('GEMINI_API_KEY is not configured.');
+        if (!apiKey) throw new Error('GEMINI_API_KEY is missing.');
         if (!args.query) throw new Error('Search query is required.');
 
         logStore.addLog('info', `Searching document for "${args.query}"`);
@@ -1083,6 +1080,7 @@ Return your response in JSON format:
 
         contentsParts.push({ text: searchPrompt });
 
+        const genStartTime = performance.now();
         const ai = new GoogleGenAI({ apiKey });
         const res = await ai.models.generateContent({
           model: selectedModel,
@@ -1090,44 +1088,20 @@ Return your response in JSON format:
           config: {
             temperature: 0.1,
             responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                matches: {
-                  type: Type.ARRAY,
-                  description: 'List of matching excerpts and locations in the paper',
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      pageNumber: {
-                        type: Type.INTEGER,
-                        description: 'Page number where the match was found',
-                      },
-                      section: {
-                        type: Type.STRING,
-                        description: 'Section name in the document',
-                      },
-                      excerpt: {
-                        type: Type.STRING,
-                        description: 'Direct quote or finding from the paper',
-                      },
-                      relevance: {
-                        type: Type.STRING,
-                        description: 'Explanation of relevance to the query',
-                      },
-                    },
-                    required: ['pageNumber', 'section', 'excerpt', 'relevance'],
-                  },
-                },
-                summary: {
-                  type: Type.STRING,
-                  description: 'Short overview synthesizing the search results for the user query',
-                },
-              },
-              required: ['matches', 'summary'],
-            },
           },
         });
+
+        const elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
+        const usage = res.usageMetadata;
+        const promptTokens = usage?.promptTokenCount ?? 0;
+        const candidateTokens = usage?.candidatesTokenCount ?? 0;
+        const thinkingTokens = (usage as any)?.thinkingTokenCount ?? (usage as any)?.reasoningTokenCount;
+        const cachedTokens = usage?.cachedContentTokenCount;
+
+        let logDetail = `⏱️ searchDocument: LLM responded in ${elapsed}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`;
+        if (thinkingTokens) logDetail += `, Thinking=${thinkingTokens.toLocaleString()}`;
+        if (cachedTokens) logDetail += `, Cached=${cachedTokens.toLocaleString()}`;
+        logStore.addLog('info', logDetail, { usageMetadata: usage, latencySec: Number(elapsed) });
 
         const text = res.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) throw new Error('No search results returned.');

@@ -93,4 +93,57 @@ describe('Agent Multi-Step Execution Store & Tools', () => {
     const updatedEnum = updatedTools[0].functionDeclarations.find((d: any) => d.name === 'updateCell')?.parameters?.properties?.field?.enum;
     expect(updatedEnum).toContain('genome_size');
   });
+
+  it('runs pre-flight validation to catch missing prompt, API key, PDF document, and schema', async () => {
+    const { validateAgentPrerequisites } = await import('../services/geminiService');
+
+    // 1. Empty prompt check
+    const emptyPromptRes = await validateAgentPrerequisites('   ');
+    expect(emptyPromptRes.valid).toBe(false);
+    expect(emptyPromptRes.error).toContain('Please enter a prompt');
+
+    // 2. Missing API key check (when API key is unset)
+    const originalEnvKey = process.env.GEMINI_API_KEY;
+    const originalLocalKey = localStorage.getItem('LITSIFT_GEMINI_API_KEY');
+    delete process.env.GEMINI_API_KEY;
+    localStorage.removeItem('LITSIFT_GEMINI_API_KEY');
+
+    const noKeyRes = await validateAgentPrerequisites('Extract phage burst size');
+    expect(noKeyRes.valid).toBe(false);
+    expect(noKeyRes.error).toContain('GEMINI_API_KEY is not configured');
+
+    // Restore key for remaining checks
+    if (originalEnvKey) process.env.GEMINI_API_KEY = originalEnvKey;
+    else process.env.GEMINI_API_KEY = 'test-dummy-api-key';
+    if (originalLocalKey) localStorage.setItem('LITSIFT_GEMINI_API_KEY', originalLocalKey);
+
+    // 3. Missing research paper PDF check
+    const { usePdfStore } = await import('../store/usePdfStore');
+    usePdfStore.setState({ pdfs: [], activePdfId: '' });
+    const noPdfRes = await validateAgentPrerequisites('Extract phage genome and burst size from paper');
+    expect(noPdfRes.valid).toBe(false);
+    expect(noPdfRes.error).toContain('No Research Paper PDF Loaded');
+
+    // 4. Missing schema columns check
+    useGridStore.setState({ columns: [] });
+    usePdfStore.setState({
+      pdfs: [
+        {
+          id: 'pdf-test-1',
+          name: 'Phage_Study.pdf',
+          url: 'blob:http://localhost/test',
+          status: 'Ready',
+          file: new File(['mock content'], 'Phage_Study.pdf', { type: 'application/pdf' }),
+        },
+      ],
+      activePdfId: 'pdf-test-1',
+    });
+    const noSchemaRes = await validateAgentPrerequisites('Extract table data from paper');
+    expect(noSchemaRes.valid).toBe(false);
+    expect(noSchemaRes.error).toContain('No Schema Columns Defined');
+
+    // Clean up
+    if (originalEnvKey) process.env.GEMINI_API_KEY = originalEnvKey;
+    if (originalLocalKey) localStorage.setItem('LITSIFT_GEMINI_API_KEY', originalLocalKey);
+  });
 });

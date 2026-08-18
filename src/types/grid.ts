@@ -54,6 +54,7 @@ export interface GridState {
   updateRow: (rowId: string, fields: Record<string, any>, citations?: Record<string, any>) => void;
   addRow: (pdfId?: string, pdfTitle?: string) => void;
   deleteRow: (rowId: string) => void;
+  deleteRows: (rowIds: string[]) => void;
   addColumn: (headerName: string, initialValues?: Record<string, any>, citations?: Record<string, any>) => void;
   renameColumn: (field: string, newHeaderName: string) => void;
   deleteColumn: (field: string) => void;
