@@ -77,11 +77,8 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
 
   if (activeView === 'master_grid') {
     return (
-      <main className="panel central-viewer master-grid-mode">
-        <div className="viewer-header">
-          <span>WORKSPACE MASTER DATA GRID (GLOBAL VIEW - ALL PAPERS)</span>
-        </div>
-        <div className="table-container" style={{ height: 'calc(100% - 32px)', padding: '4px' }}>
+      <main className="panel central-viewer master-grid-mode" style={{ height: '100%', padding: 0 }}>
+        <div className="table-container" style={{ height: '100%', padding: 0 }}>
           <AgGridWrapper />
         </div>
       </main>
@@ -89,31 +86,45 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
   }
 
   return (
-    <main className="panel central-viewer pdf-mode" style={{ position: 'relative' }}>
-      <div className="viewer-header">
-        <span>DOCUMENT VIEWER: {activePdfTitle}</span>
-        {pdfUrl && (
-          <div className="viewer-controls" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <button
-              className="control-btn"
-              onClick={() => {
-                setShowSearchBar(true);
-                setTimeout(() => searchInputRef.current?.focus(), 50);
-              }}
-              title="Find text in PDF (Ctrl+F)"
-              style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 7px' }}
-            >
-              <Search size={11} /> Find
-            </button>
-            <button className="control-btn" onClick={handleZoomOut}>Zoom Out (-)</button>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', padding: '0 4px' }}>
-              {Math.round(zoomScale * 100)}%
-            </span>
-            <button className="control-btn" onClick={handleZoomIn}>Zoom In (+)</button>
-            <button className="control-btn" onClick={handleFitWidth}>Fit Width</button>
-          </div>
-        )}
-      </div>
+    <main className="panel central-viewer pdf-mode" style={{ position: 'relative', height: '100%' }}>
+      {/* Floating In-Viewer Controls Overlay */}
+      {pdfUrl && (
+        <div
+          className="viewer-controls"
+          style={{
+            position: 'absolute',
+            top: '6px',
+            right: '12px',
+            zIndex: 20,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            background: 'var(--bg-tertiary)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '6px',
+            padding: '2px 6px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          }}
+        >
+          <button
+            className="control-btn"
+            onClick={() => {
+              setShowSearchBar(true);
+              setTimeout(() => searchInputRef.current?.focus(), 50);
+            }}
+            title="Find text in PDF (Ctrl+F)"
+            style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 7px' }}
+          >
+            <Search size={11} /> Find
+          </button>
+          <button className="control-btn" onClick={handleZoomOut}>Zoom Out (-)</button>
+          <span style={{ fontSize: '10px', color: 'var(--text-secondary)', padding: '0 4px', fontWeight: 600 }}>
+            {Math.round(zoomScale * 100)}%
+          </span>
+          <button className="control-btn" onClick={handleZoomIn}>Zoom In (+)</button>
+          <button className="control-btn" onClick={handleFitWidth}>Fit Width</button>
+        </div>
+      )}
 
       {/* Floating In-Viewer Find Bar */}
       {showSearchBar && pdfUrl && (

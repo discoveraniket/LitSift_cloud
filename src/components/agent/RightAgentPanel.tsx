@@ -156,34 +156,6 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
 
   return (
     <aside className="panel right-agent" style={{ display: 'flex', flexDirection: 'column', position: 'relative', height: '100%' }}>
-      {/* Panel Header */}
-      <div className="panel-header" style={{ justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Bot size={14} color="var(--accent-primary)" />
-          <span style={{ fontWeight: 700 }}>AGENTIC AI COMMAND CENTER</span>
-        </div>
-
-        <button
-          onClick={() => clearMessages()}
-          title="Clear Chat History & Start Fresh Session"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--text-secondary)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            fontSize: '11px',
-            padding: '2px 4px',
-            borderRadius: '4px',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-danger)')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
-        >
-          <Trash2 size={13} />
-        </button>
-      </div>
 
       {/* Embedded Live Execution Console Drawer */}
       {isLogOpen && (
@@ -771,9 +743,31 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({ activePdfTitle
               borderTop: '1px solid rgba(255, 255, 255, 0.04)',
             }}
           >
-            <span style={{ fontSize: '10px', color: 'var(--text-secondary)', opacity: 0.65, userSelect: 'none' }}>
-              <kbd style={{ background: 'var(--bg-secondary)', padding: '1px 4px', borderRadius: '3px', border: '1px solid var(--border-subtle)', fontSize: '9px' }}>Shift</kbd> + <kbd style={{ background: 'var(--bg-secondary)', padding: '1px 4px', borderRadius: '3px', border: '1px solid var(--border-subtle)', fontSize: '9px' }}>Enter</kbd> for newline
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '10px', color: 'var(--text-secondary)', opacity: 0.65, userSelect: 'none' }}>
+                <kbd style={{ background: 'var(--bg-secondary)', padding: '1px 4px', borderRadius: '3px', border: '1px solid var(--border-subtle)', fontSize: '9px' }}>Shift</kbd> + <kbd style={{ background: 'var(--bg-secondary)', padding: '1px 4px', borderRadius: '3px', border: '1px solid var(--border-subtle)', fontSize: '9px' }}>Enter</kbd> for newline
+              </span>
+              <button
+                type="button"
+                onClick={() => clearMessages()}
+                title="Clear Chat History & Start Fresh Session"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  opacity: 0.7,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-danger)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+              >
+                <Trash2 size={11} /> Clear
+              </button>
+            </div>
 
             <button
               type="submit"

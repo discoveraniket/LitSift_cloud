@@ -210,11 +210,6 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
         style={{ display: 'none' }}
       />
 
-      <div className="panel-header" style={{ justifyContent: 'space-between' }}>
-        <span>EXPLORER</span>
-        <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Workspace</span>
-      </div>
-
       <div style={{ padding: '4px 0', flex: 1, overflowY: 'auto' }}>
         {/* Collapsible Section: VIEWS */}
         <div>
