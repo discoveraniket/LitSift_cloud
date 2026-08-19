@@ -39,10 +39,10 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(Array.isArray(tools[0].functionDeclarations)).toBe(true);
 
     const names = tools[0].functionDeclarations.map((d: any) => d.name);
+    expect(names).toHaveLength(13);
     expect(names).toContain('updateCell');
     expect(names).toContain('batchUpdateCells');
     expect(names).toContain('updateRow');
-    expect(names).toContain('appendRow');
     expect(names).toContain('appendRows');
     expect(names).toContain('addColumn');
     expect(names).toContain('renameColumn');
@@ -52,7 +52,6 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(names).toContain('deleteRows');
     expect(names).toContain('extractPDFData');
     expect(names).toContain('verifyEvidenceCitation');
-    expect(names).toContain('searchDocument');
     expect(names).toContain('queryGridData');
 
     const updateCellDecl = tools[0].functionDeclarations.find((d: any) => d.name === 'updateCell');
@@ -195,16 +194,16 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(queryRes.resultData.matches[0].id).toBe('row-2');
   });
 
-  it('executes appendRow and appendRows tools to add observations atomically', async () => {
-    const appendSingleRes = await agentToolsRegistry.appendRow.execute(
+  it('executes appendRows tool to add single or batch observations atomically', async () => {
+    const appendSingleRes = await agentToolsRegistry.appendRows.execute(
       {
-        fields: { methodology: 'Single Method', sampleSize: '150' },
+        rows: [{ fields: { methodology: 'Single Method', sampleSize: '150' } }],
         pdfTitle: 'Appended Paper.pdf',
       },
       'human_in_loop'
     );
     expect(appendSingleRes.success).toBe(true);
-    expect(appendSingleRes.resultData.createdRowId).toBeDefined();
+    expect(appendSingleRes.resultData.createdRowIds).toHaveLength(1);
 
     const appendBatchRes = await agentToolsRegistry.appendRows.execute(
       {

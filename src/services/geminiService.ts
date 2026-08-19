@@ -152,12 +152,13 @@ export async function processAgentInteraction(
   try {
     const agentStore = useAgentStore.getState();
 
-    // Determine past conversation turns (excluding welcome banner)
+    // Determine past conversation turns (excluding welcome banners and transient error notices)
     const pastNonWelcomeMessages = agentStore.messages.filter(
       (m) =>
         m.id !== 'msg-1' &&
         !m.text.startsWith('**Now viewing') &&
-        !m.text.startsWith('LitSift Agent is online')
+        !m.text.startsWith('LitSift Agent is online') &&
+        !m.text.startsWith('⚠️')
     );
     const isFollowup = pastNonWelcomeMessages.length > 1;
 
@@ -220,10 +221,34 @@ ${rowsSummary || '  (No populated rows)'}
 ${userPrompt}`;
     }
 
-    // Build multi-turn contents array with clean conversation history (lightweight & fast)
+    // Build multi-turn contents array with root multimodal PDF anchor and clean conversation history
     const contents: any[] = [];
+    const rootUserParts: any[] = [];
+
+    if (validation.pdfBase64) {
+      rootUserParts.push({
+        inlineData: {
+          mimeType: 'application/pdf',
+          data: validation.pdfBase64,
+        },
+      });
+    }
 
     if (isFollowup) {
+      // Turn 0: Root anchor with multimodal PDF binary
+      contents.push({
+        role: 'user',
+        parts: [
+          ...rootUserParts,
+          { text: `You are analyzing research document "${activePdfTitle}". I will ask you questions and instructions to extract, verify, and edit data in our structured table grid.` },
+        ],
+      });
+      contents.push({
+        role: 'model',
+        parts: [{ text: `Understood. I have full multimodal access to "${activePdfTitle}" and will synthesize findings and assist you with managing the structured data grid.` }],
+      });
+
+      // Historical turns: Clean user prompts and assistant replies without redundant table duplicates
       const historyTurns = pastNonWelcomeMessages.slice(0, -1);
       for (const msg of historyTurns) {
         contents.push({
@@ -231,33 +256,46 @@ ${userPrompt}`;
           parts: [{ text: msg.text }],
         });
       }
+
+      // Latest active turn: Injects live data grid state and focused cell context
       contents.push({
         role: 'user',
         parts: [{ text: finalPromptText }],
       });
     } else {
+      // First turn: Anchors PDF with live data grid state and user prompt
       contents.push({
         role: 'user',
-        parts: [{ text: finalPromptText }],
+        parts: [
+          ...rootUserParts,
+          { text: finalPromptText },
+        ],
       });
     }
 
     const ai = new GoogleGenAI({ apiKey });
 
     const systemInstruction = `You are LitSift Agent, an autonomous scientific literature synthesis assistant.
-You are interacting with research paper "${activePdfTitle}" and managing a structured scientific data grid.
+You are interacting with research document "${activePdfTitle}" and managing a structured scientific data grid.
 Understand the user's high-level objective and autonomously break it down into an ordered sequence of prerequisite and dependent tool actions.
 
 AUTONOMOUS DOCUMENT EXTRACTION & VERIFICATION FLOW:
 - When the user asks to extract findings from the active paper, call extractPDFData.
 - extractPDFData autonomously parses the paper, extracts all schema columns with verbatim citations, and inserts the new rows into the table grid.
-- TASK COMPLETION RULE: Once extractPDFData completes and stages the rows, the extraction objective is FINISHED. Do NOT execute redundant keyword searches (searchDocument) on individual fields that are already extracted. Present your final synthesis summary to the user immediately.
+- TASK COMPLETION RULE: Once extractPDFData completes and stages the rows, the extraction objective is FINISHED. Present your final synthesis summary to the user immediately.
 - Do NOT use batchUpdateCells to re-insert or overwrite data from extractPDFData.
+
+INTERACTIVE ROW-LEVEL INTEGRITY & COUPLED ATTRIBUTES:
+- In structured scientific and analytical data tables, columns within a single row often represent interdependent, coupled attributes of a single observation or entity.
+- When the user asks to update or modify a specific cell value that logically impacts other dependent columns in that same row:
+  1. Identify the interrelated attributes within that row.
+  2. Explicitly explain the relationship to the user.
+  3. Ask the user whether they would like to update the full row with the corresponding consistent values or modify only the target cell.
 
 ERROR HANDLING & RECOVERY RULES:
 - If extractPDFData or any other tool returns an error, state the error clearly to the user and explain what failed.
 - NEVER attempt to recover from a failed extractPDFData by using batchUpdateCells or updateRow to overwrite existing rows from other papers with search excerpts or partial text.
-- If you need to manually create an observation row, ALWAYS use appendRow or appendRows to create brand new rows with new IDs.
+- If you need to manually create an observation row, ALWAYS use appendRows to create brand new rows with new IDs.
 
 CUMULATIVE MULTI-DOCUMENT DATASET INTEGRITY:
 - The data grid accumulates scientific extractions across multiple papers.
@@ -266,8 +304,8 @@ CUMULATIVE MULTI-DOCUMENT DATASET INTEGRITY:
 - If the user specifically asks to edit, merge, or disaggregate existing rows from the active paper, perform updates directly on those specific rows.
 
 You have access to a rich declarative tool suite:
-- Document extraction, search & verification: extractPDFData, verifyEvidenceCitation, searchDocument, queryGridData
-- Row creation & structuring: appendRow, appendRows (to batch append multiple observation rows at once), disaggregateRow (to expand composite rows into atomic rows), mergeRows, deleteRows
+- Document extraction & verification: extractPDFData, verifyEvidenceCitation, queryGridData
+- Row creation & structuring: appendRows (supports single or batch row additions), disaggregateRow (to expand composite rows into atomic rows), mergeRows, deleteRows
 - Cell & row editing: updateCell, batchUpdateCells, updateRow
 - Schema management: addColumn (supports optional initialValues), renameColumn, deleteColumn
 Execute all required tool actions to fulfill the user's instructions and summarize your reasoning and findings clearly.`;
@@ -311,9 +349,33 @@ Execute all required tool actions to fulfill the user's instructions and summari
         });
       } catch (err: any) {
         const errMsg = String(err?.message || '');
-        if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED')) {
+        const isRateLimit = errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED');
+        const isTransient503 =
+          errMsg.includes('503') ||
+          errMsg.includes('Deadline') ||
+          errMsg.includes('UNAVAILABLE') ||
+          err?.status === 'UNAVAILABLE';
+
+        if (isRateLimit) {
           logStore.addLog('warn', `Gemini API rate limit reached (429). Waiting 15s before retry...`);
           await new Promise((resolve) => setTimeout(resolve, 15000));
+          response = await ai.models.generateContent({
+            model: selectedModel,
+            contents,
+            config: {
+              systemInstruction,
+              temperature: 0.2,
+              tools: currentTools,
+              toolConfig: {
+                functionCallingConfig: {
+                  mode: FunctionCallingConfigMode.AUTO,
+                },
+              },
+            },
+          });
+        } else if (isTransient503) {
+          logStore.addLog('warn', `Transient 503/Deadline error from Gemini API (${errMsg}). Retrying in 2s...`);
+          await new Promise((resolve) => setTimeout(resolve, 2000));
           response = await ai.models.generateContent({
             model: selectedModel,
             contents,
