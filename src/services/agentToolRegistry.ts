@@ -256,30 +256,38 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
       },
       required: ['updates'],
     },
-    execute: async (args: any, mode: AgentExecutionMode): Promise<ToolExecutionResult> => {
+    execute: async (args: any, _mode: AgentExecutionMode): Promise<ToolExecutionResult> => {
       try {
         const logStore = useLogStore.getState();
+        const gridStore = useGridStore.getState();
         const updates = args.updates;
 
         if (!Array.isArray(updates) || updates.length === 0) {
           throw new Error('Missing or empty updates array for batchUpdateCells.');
         }
 
-        logStore.addLog('info', `Executing batchUpdateCells for ${updates.length} cell(s)`);
+        logStore.addLog('info', `Executing atomic batchUpdateCells for ${updates.length} cell(s)`);
 
-        let appliedCount = 0;
-        for (const item of updates) {
-          const res = await agentToolsRegistry.updateCell.execute(item, mode);
-          if (res.success) appliedCount++;
-        }
+        // Execute batch update as single atomic store action with exactly 1 undo snapshot
+        gridStore.batchUpdateCells(
+          updates.map((u: any) => ({
+            rowId: u.rowId || gridStore.focusedCell?.rowId || gridStore.rows[0]?.id,
+            field: u.field,
+            value: u.newValue !== undefined ? u.newValue : u.value,
+            reasoning: u.reasoning,
+            sectionName: u.sectionName,
+            pageNumber: u.pageNumber,
+            snippetQuote: u.snippetQuote,
+          }))
+        );
 
-        logStore.addLog('success', `Batch update complete: ${appliedCount}/${updates.length} cells updated`);
+        logStore.addLog('success', `Batch update complete: ${updates.length} cells updated atomically`);
 
         return {
           success: true,
-          replyText: `Successfully updated ${appliedCount} cell(s) in the table.`,
-          summary: `batchUpdateCells(${appliedCount} cells updated)`,
-          resultData: { appliedCount, total: updates.length },
+          replyText: `Successfully updated ${updates.length} cell(s) in the table in a single atomic operation.`,
+          summary: `batchUpdateCells(${updates.length} cells updated)`,
+          resultData: { appliedCount: updates.length, total: updates.length },
         };
       } catch (err: any) {
         useLogStore.getState().addLog('error', `batchUpdateCells failed: ${err.message}`);
@@ -287,6 +295,164 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
           success: false,
           replyText: `Failed to batch update cells: ${err.message}`,
           summary: `batchUpdateCells(failed: ${err.message})`,
+          error: err.message,
+        };
+      }
+    },
+  },
+
+  appendRow: {
+    name: 'appendRow',
+    description: 'Append a new observation row to the table grid with specified field values and citations. Use this when creating a new row rather than modifying existing rows.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        fields: {
+          type: Type.OBJECT,
+          description: 'Key-value map of column fields/headers and their extracted values.',
+        },
+        citations: {
+          type: Type.OBJECT,
+          description: 'Optional evidence citation map containing pageNumber, sectionName, snippetQuote, reasoning for columns.',
+        },
+        pdfTitle: {
+          type: Type.STRING,
+          description: 'Name of the research paper this row belongs to.',
+        },
+      },
+      required: ['fields'],
+    },
+    execute: async (args: any): Promise<ToolExecutionResult> => {
+      try {
+        const gridStore = useGridStore.getState();
+        const logStore = useLogStore.getState();
+        const pdfStore = usePdfStore.getState();
+        const activePdf = pdfStore.getActivePdf() || pdfStore.pdfs[0];
+
+        const rowData: Partial<GridRow> = {
+          pdfId: activePdf?.id || `pdf-${Date.now()}`,
+          pdfTitle: args.pdfTitle || activePdf?.name || 'Active Paper',
+          aiStatus: 'Confirmed',
+          citationMap: args.citations || {},
+          ...(args.fields || {}),
+        };
+
+        const created = gridStore.appendRow(rowData);
+        logStore.addLog('success', `Created new observation row "${created.id}" for "${created.pdfTitle}"`);
+
+        return {
+          success: true,
+          replyText: `Appended new observation row [ID: ${created.id}] for paper "${created.pdfTitle}".`,
+          summary: `appendRow(${created.id} -> ${Object.keys(args.fields || {}).length} fields)`,
+          resultData: { createdRowId: created.id, row: created },
+        };
+      } catch (err: any) {
+        useLogStore.getState().addLog('error', `appendRow failed: ${err.message}`);
+        return {
+          success: false,
+          replyText: `Failed to append row: ${err.message}`,
+          summary: `appendRow(failed: ${err.message})`,
+          error: err.message,
+        };
+      }
+    },
+  },
+
+  appendRows: {
+    name: 'appendRows',
+    description: 'Append multiple new observation rows to the table grid simultaneously in a single atomic operation.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        rows: {
+          type: Type.ARRAY,
+          description: 'Array of observation row objects to append to the table grid.',
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              fields: {
+                type: Type.OBJECT,
+                description: 'Key-value map of column fields/headers and their extracted values.',
+              },
+              citations: {
+                type: Type.OBJECT,
+                description: 'Optional evidence citation map containing pageNumber, sectionName, snippetQuote, reasoning for columns.',
+              },
+              pdfTitle: {
+                type: Type.STRING,
+                description: 'Optional name of the research paper this row belongs to.',
+              },
+            },
+            required: ['fields'],
+          },
+        },
+        pdfTitle: {
+          type: Type.STRING,
+          description: 'Optional fallback paper title applied to all appended rows.',
+        },
+      },
+      required: ['rows'],
+    },
+    execute: async (args: any): Promise<ToolExecutionResult> => {
+      try {
+        const gridStore = useGridStore.getState();
+        const logStore = useLogStore.getState();
+        const pdfStore = usePdfStore.getState();
+        const activePdf = pdfStore.getActivePdf() || pdfStore.pdfs[0];
+
+        const rawRows = args.rows;
+        if (!Array.isArray(rawRows) || rawRows.length === 0) {
+          throw new Error('Missing or empty rows array for appendRows.');
+        }
+
+        const rowsToAppend: GridRow[] = rawRows.map((r: any, i: number) => {
+          const rowId = `manual-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 5)}`;
+          const fields = r.fields || r;
+          const rowObj: GridRow = {
+            id: rowId,
+            pdfId: activePdf?.id || `pdf-${Date.now()}`,
+            pdfTitle: r.pdfTitle || args.pdfTitle || activePdf?.name || 'Active Paper',
+            aiStatus: 'Confirmed',
+            citationMap: r.citations || {},
+          };
+
+          gridStore.columns.forEach((col) => {
+            const val =
+              fields[col.field] ??
+              fields[col.headerName] ??
+              Object.entries(fields).find(
+                ([k]) =>
+                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                  col.field.toLowerCase().replace(/[^a-z0-9]/g, '') ||
+                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                  col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
+              )?.[1];
+            rowObj[col.field] = val !== undefined && val !== null ? String(val) : '-';
+          });
+
+          return rowObj;
+        });
+
+        gridStore.appendRows(rowsToAppend);
+        const createdRowIds = rowsToAppend.map((r) => r.id);
+
+        logStore.addLog(
+          'success',
+          `Batch appended ${rowsToAppend.length} new observation row(s) [${createdRowIds.join(', ')}]`
+        );
+
+        return {
+          success: true,
+          replyText: `Successfully appended ${rowsToAppend.length} observation row(s) to the table: [${createdRowIds.join(', ')}].`,
+          summary: `appendRows(${rowsToAppend.length} rows created)`,
+          resultData: { createdRowIds, rowsCount: rowsToAppend.length, rows: rowsToAppend },
+        };
+      } catch (err: any) {
+        useLogStore.getState().addLog('error', `appendRows failed: ${err.message}`);
+        return {
+          success: false,
+          replyText: `Failed to append rows: ${err.message}`,
+          summary: `appendRows(failed: ${err.message})`,
           error: err.message,
         };
       }
@@ -750,21 +916,47 @@ Return your response strictly as a JSON object with this format:
       const genStartTime = performance.now();
 
       const ai = new GoogleGenAI({ apiKey });
-      const res = await ai.models.generateContent({
-        model: selectedModel,
-        contents: contentsParts,
-        config: {
-          temperature: 0.1,
-          responseMimeType: 'application/json',
-        },
-      });
+      let res: any;
+      try {
+        res = await ai.models.generateContent({
+          model: selectedModel,
+          contents: contentsParts,
+          config: {
+            temperature: 0.1,
+            responseMimeType: 'application/json',
+          },
+        });
+      } catch (firstErr: any) {
+        const errMsg = String(firstErr?.message || '');
+        const isTransient =
+          errMsg.includes('503') ||
+          errMsg.includes('Deadline') ||
+          errMsg.includes('429') ||
+          errMsg.includes('UNAVAILABLE') ||
+          firstErr?.status === 'UNAVAILABLE';
+
+        if (isTransient) {
+          logStore.addLog('warn', `Transient error from Gemini API (${errMsg}). Retrying extraction in 2s...`);
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          res = await ai.models.generateContent({
+            model: selectedModel,
+            contents: contentsParts,
+            config: {
+              temperature: 0.1,
+              responseMimeType: 'application/json',
+            },
+          });
+        } else {
+          throw firstErr;
+        }
+      }
 
       const elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
-        const usage = res.usageMetadata;
-        const promptTokens = usage?.promptTokenCount ?? 0;
-        const candidateTokens = usage?.candidatesTokenCount ?? 0;
-        const thinkingTokens = (usage as any)?.thinkingTokenCount ?? (usage as any)?.reasoningTokenCount;
-        const cachedTokens = usage?.cachedContentTokenCount;
+      const usage = res.usageMetadata;
+      const promptTokens = usage?.promptTokenCount ?? 0;
+      const candidateTokens = usage?.candidatesTokenCount ?? 0;
+      const thinkingTokens = (usage as any)?.thinkingTokenCount ?? (usage as any)?.reasoningTokenCount;
+      const cachedTokens = usage?.cachedContentTokenCount;
 
         let logDetail = `⏱️ extractPDFData: LLM responded in ${elapsed}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`;
         if (thinkingTokens) logDetail += `, Thinking=${thinkingTokens.toLocaleString()}`;
@@ -865,11 +1057,26 @@ Return your response strictly as a JSON object with this format:
         logStore.setActiveStep(null);
         logStore.addLog('success', `Extraction completed in ${elapsed}s. ${rowsToAppend.length} row(s) staged for review.`);
 
+        const createdRowIds = rowsToAppend.map((r) => r.id);
+        const rowSummaries = rowsToAppend.map((r) => {
+          const summaryObj: Record<string, any> = { id: r.id, pdfTitle: r.pdfTitle };
+          gridStore.columns.forEach((c) => {
+            summaryObj[c.field] = r[c.field];
+          });
+          return summaryObj;
+        });
+
         return {
           success: true,
-          replyText: `Extracted ${rowsToAppend.length} scientific observation row(s) from **${pdfInfo?.name || targetPdfTitle}** into the master table with grounded citations!`,
-          summary: `extractPDFData(${rowsToAppend.length} rows extracted)`,
-          resultData: { extractedCount: rowsToAppend.length, pdfId: pdfInfo?.id || activePdfId },
+          replyText: `Extracted ${rowsToAppend.length} observation row(s) from **${pdfInfo?.name || targetPdfTitle}** into the master table with grounded citations! Newly created row IDs: [${createdRowIds.join(', ')}].`,
+          summary: `extractPDFData(${pdfInfo?.name || targetPdfTitle} -> ${rowsToAppend.length} rows: [${createdRowIds.join(', ')}])`,
+          resultData: {
+            status: 'COMPLETED',
+            message: `Successfully created and inserted ${rowsToAppend.length} new row(s) into the data grid with full evidence citations. The new row IDs are: [${createdRowIds.join(', ')}]. These rows are already active in the table state. You may use queryGridData with any of these row IDs to inspect and verify specific columns or synthesize your final summary for the user. Do NOT attempt to overwrite other rows with batchUpdateCells.`,
+            createdRowIds,
+            rowsSummary: rowSummaries,
+            pdfId: pdfInfo?.id || activePdfId,
+          },
         };
       } catch (err: any) {
         useLogStore.getState().setActiveStep(null);

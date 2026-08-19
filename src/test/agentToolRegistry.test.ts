@@ -42,6 +42,8 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(names).toContain('updateCell');
     expect(names).toContain('batchUpdateCells');
     expect(names).toContain('updateRow');
+    expect(names).toContain('appendRow');
+    expect(names).toContain('appendRows');
     expect(names).toContain('addColumn');
     expect(names).toContain('renameColumn');
     expect(names).toContain('deleteColumn');
@@ -191,6 +193,32 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(queryRes.success).toBe(true);
     expect(queryRes.resultData.matches).toHaveLength(1);
     expect(queryRes.resultData.matches[0].id).toBe('row-2');
+  });
+
+  it('executes appendRow and appendRows tools to add observations atomically', async () => {
+    const appendSingleRes = await agentToolsRegistry.appendRow.execute(
+      {
+        fields: { methodology: 'Single Method', sampleSize: '150' },
+        pdfTitle: 'Appended Paper.pdf',
+      },
+      'human_in_loop'
+    );
+    expect(appendSingleRes.success).toBe(true);
+    expect(appendSingleRes.resultData.createdRowId).toBeDefined();
+
+    const appendBatchRes = await agentToolsRegistry.appendRows.execute(
+      {
+        rows: [
+          { fields: { methodology: 'Batch A', sampleSize: '200' } },
+          { fields: { methodology: 'Batch B', sampleSize: '300' } },
+        ],
+        pdfTitle: 'Batch Paper.pdf',
+      },
+      'human_in_loop'
+    );
+    expect(appendBatchRes.success).toBe(true);
+    expect(appendBatchRes.resultData.rowsCount).toBe(2);
+    expect(useGridStore.getState().rows).toHaveLength(5); // 2 initial + 1 single + 2 batch
   });
 
   it('handles errors gracefully in updateCell when invalid inputs are passed', async () => {

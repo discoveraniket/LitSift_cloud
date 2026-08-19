@@ -148,8 +148,6 @@ export async function processAgentInteraction(
   const apiKey = getGeminiApiKey()!;
   const selectedModel = getSelectedGeminiModel();
   const agentMode: AgentExecutionMode = useAgentStore.getState().mode || 'human_in_loop';
-  const activePdf = validation.activePdf;
-  const pdfBase64 = validation.pdfBase64;
 
   try {
     const agentStore = useAgentStore.getState();
@@ -222,51 +220,21 @@ ${rowsSummary || '  (No populated rows)'}
 ${userPrompt}`;
     }
 
-    // Build multi-turn contents array with history
+    // Build multi-turn contents array with clean conversation history (lightweight & fast)
     const contents: any[] = [];
 
-    // On Turn 1 (or standalone), attach the PDF binary
-    if (activePdf && pdfBase64) {
-      try {
-        const firstUserMsg = pastNonWelcomeMessages.find((m) => m.sender === 'user');
-        const firstTurnText = firstUserMsg ? firstUserMsg.text : finalPromptText;
-
+    if (isFollowup) {
+      const historyTurns = pastNonWelcomeMessages.slice(0, -1);
+      for (const msg of historyTurns) {
         contents.push({
-          role: 'user',
-          parts: [
-            {
-              inlineData: {
-                mimeType: 'application/pdf',
-                data: pdfBase64,
-              },
-            },
-            { text: isFollowup ? firstTurnText : finalPromptText },
-          ],
-        });
-
-        // Add intermediate conversation history turns if in follow-up mode
-        if (isFollowup) {
-          const remainingHistory = pastNonWelcomeMessages.slice(1, -1);
-          for (const msg of remainingHistory) {
-            contents.push({
-              role: msg.sender === 'user' ? 'user' : 'model',
-              parts: [{ text: msg.text }],
-            });
-          }
-
-          // Add current prompt as latest user turn
-          contents.push({
-            role: 'user',
-            parts: [{ text: finalPromptText }],
-          });
-        }
-      } catch (e: any) {
-        logStore.addLog('warn', `PDF attachment notice: ${e.message}`);
-        contents.push({
-          role: 'user',
-          parts: [{ text: finalPromptText }],
+          role: msg.sender === 'user' ? 'user' : 'model',
+          parts: [{ text: msg.text }],
         });
       }
+      contents.push({
+        role: 'user',
+        parts: [{ text: finalPromptText }],
+      });
     } else {
       contents.push({
         role: 'user',
@@ -279,23 +247,33 @@ ${userPrompt}`;
     const systemInstruction = `You are LitSift Agent, an autonomous scientific literature synthesis assistant.
 You are interacting with research paper "${activePdfTitle}" and managing a structured scientific data grid.
 Understand the user's high-level objective and autonomously break it down into an ordered sequence of prerequisite and dependent tool actions.
-When an objective involves dependent steps (such as creating schema structure before populating data, or querying findings before updating cells), execute the prerequisite actions first, and continue calling the dependent tools in subsequent turns until the complete user goal is fully realized.
+
+AUTONOMOUS DOCUMENT EXTRACTION & VERIFICATION FLOW:
+- When the user asks to extract findings from the active paper, call extractPDFData.
+- extractPDFData autonomously parses the paper, extracts all schema columns with verbatim citations, and inserts the new rows into the table grid.
+- TASK COMPLETION RULE: Once extractPDFData completes and stages the rows, the extraction objective is FINISHED. Do NOT execute redundant keyword searches (searchDocument) on individual fields that are already extracted. Present your final synthesis summary to the user immediately.
+- Do NOT use batchUpdateCells to re-insert or overwrite data from extractPDFData.
+
+ERROR HANDLING & RECOVERY RULES:
+- If extractPDFData or any other tool returns an error, state the error clearly to the user and explain what failed.
+- NEVER attempt to recover from a failed extractPDFData by using batchUpdateCells or updateRow to overwrite existing rows from other papers with search excerpts or partial text.
+- If you need to manually create an observation row, ALWAYS use appendRow or appendRows to create brand new rows with new IDs.
 
 CUMULATIVE MULTI-DOCUMENT DATASET INTEGRITY:
 - The data grid accumulates scientific extractions across multiple papers.
 - NEVER delete or overwrite existing table rows belonging to other research papers (which have different article DOIs or paper titles).
-- When the user asks to extract data from the active paper, invoke extractPDFData to append the new findings to the dataset while leaving rows from other papers completely intact.
-- If editing existing rows from the active paper, perform updates, column additions, or disaggregations directly on those specific rows.
+- When extracting findings from the active paper, append the new findings to the dataset while leaving rows from other papers completely intact.
+- If the user specifically asks to edit, merge, or disaggregate existing rows from the active paper, perform updates directly on those specific rows.
 
 You have access to a rich declarative tool suite:
+- Document extraction, search & verification: extractPDFData, verifyEvidenceCitation, searchDocument, queryGridData
+- Row creation & structuring: appendRow, appendRows (to batch append multiple observation rows at once), disaggregateRow (to expand composite rows into atomic rows), mergeRows, deleteRows
 - Cell & row editing: updateCell, batchUpdateCells, updateRow
 - Schema management: addColumn (supports optional initialValues), renameColumn, deleteColumn
-- Row structuring & disaggregation: disaggregateRow (to expand composite multi-variable rows into atomic observation rows with structured column values), mergeRows (to synthesize unified rows), deleteRows
-- Document synthesis & verification: extractPDFData, verifyEvidenceCitation, searchDocument, queryGridData
 Execute all required tool actions to fulfill the user's instructions and summarize your reasoning and findings clearly.`;
 
-    // Multi-Step ReAct Execution Loop
-    const MAX_STEPS = 6;
+    // Multi-Step ReAct Execution Loop (Expanded to 10 Turns)
+    const MAX_STEPS = 10;
     let currentStep = 1;
     const executedTools: AgentToolExecution[] = [];
     let finalReplyText = '';
@@ -315,20 +293,45 @@ Execute all required tool actions to fulfill the user's instructions and summari
       logStore.setActiveStep(`[Step ${currentStep}/${MAX_STEPS}] Reasoning with Gemini (${selectedModel})...`);
       const genStartTime = performance.now();
 
-      const response: any = await ai.models.generateContent({
-        model: selectedModel,
-        contents,
-        config: {
-          systemInstruction,
-          temperature: 0.2,
-          tools: currentTools,
-          toolConfig: {
-            functionCallingConfig: {
-              mode: FunctionCallingConfigMode.AUTO,
+      let response: any;
+      try {
+        response = await ai.models.generateContent({
+          model: selectedModel,
+          contents,
+          config: {
+            systemInstruction,
+            temperature: 0.2,
+            tools: currentTools,
+            toolConfig: {
+              functionCallingConfig: {
+                mode: FunctionCallingConfigMode.AUTO,
+              },
             },
           },
-        },
-      });
+        });
+      } catch (err: any) {
+        const errMsg = String(err?.message || '');
+        if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED')) {
+          logStore.addLog('warn', `Gemini API rate limit reached (429). Waiting 15s before retry...`);
+          await new Promise((resolve) => setTimeout(resolve, 15000));
+          response = await ai.models.generateContent({
+            model: selectedModel,
+            contents,
+            config: {
+              systemInstruction,
+              temperature: 0.2,
+              tools: currentTools,
+              toolConfig: {
+                functionCallingConfig: {
+                  mode: FunctionCallingConfigMode.AUTO,
+                },
+              },
+            },
+          });
+        } else {
+          throw err;
+        }
+      }
 
       const genDurationSec = ((performance.now() - genStartTime) / 1000).toFixed(2);
       const usage = response.usageMetadata;

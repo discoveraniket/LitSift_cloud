@@ -50,9 +50,11 @@ export interface GridState {
   hydrateFromDb: () => Promise<void>;
   resetActiveSelection: () => void;
   updateCell: (rowId: string, field: string, value: any) => void;
+  batchUpdateCells: (updates: Array<{ rowId: string; field: string; value: any; reasoning?: string; sectionName?: string; pageNumber?: number; snippetQuote?: string }>) => void;
   updateCellCitation: (rowId: string, field: string, citation: CellCitation) => void;
   updateRow: (rowId: string, fields: Record<string, any>, citations?: Record<string, any>) => void;
   addRow: (pdfId?: string, pdfTitle?: string) => void;
+  appendRow: (row: Partial<GridRow>) => GridRow;
   deleteRow: (rowId: string) => void;
   deleteRows: (rowIds: string[]) => void;
   addColumn: (headerName: string, initialValues?: Record<string, any>, citations?: Record<string, any>) => void;

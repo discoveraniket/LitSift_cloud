@@ -25,7 +25,7 @@ const persistToStorage = async (columns: SchemaColumn[], rows: GridRow[]) => {
 };
 
 const saveSnapshot = (state: GridState) => {
-  if (undoStack.length >= 25) {
+  if (undoStack.length >= 100) {
     undoStack.shift();
   }
   undoStack.push({
@@ -104,6 +104,31 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
+  batchUpdateCells: (updates) =>
+    set(
+      produce((state: GridState) => {
+        saveSnapshot(state);
+        updates.forEach((u) => {
+          const row = state.rows.find((r) => r.id === u.rowId);
+          if (row) {
+            row[u.field] = u.value;
+            row.aiStatus = 'Confirmed';
+            if (u.reasoning || u.snippetQuote || u.sectionName || u.pageNumber) {
+              if (!row.citationMap) row.citationMap = {};
+              row.citationMap[u.field] = {
+                pageNumber: Number(u.pageNumber) || 1,
+                sectionName: u.sectionName || 'Updated Field',
+                snippetQuote: u.snippetQuote || String(u.value),
+                reasoning: u.reasoning || `Updated value "${u.value}"`,
+                confidence: 0.95,
+              };
+            }
+          }
+        });
+        persistToStorage(state.columns, state.rows);
+      })
+    ),
+
   updateCellCitation: (rowId, field, citation) =>
     set(
       produce((state: GridState) => {
@@ -134,6 +159,7 @@ export const useGridStore = create<GridState>((set) => ({
               row[k] = v;
             }
           });
+          row.aiStatus = 'Confirmed';
           if (citations) {
             if (!row.citationMap) row.citationMap = {};
             Object.entries(citations).forEach(([k, cit]) => {
@@ -144,8 +170,8 @@ export const useGridStore = create<GridState>((set) => ({
               row.citationMap![fieldKey] = cit;
             });
           }
-          row.aiStatus = 'Confirmed';
         }
+        persistToStorage(state.columns, state.rows);
       })
     ),
 
@@ -167,6 +193,30 @@ export const useGridStore = create<GridState>((set) => ({
         state.rows.push(newRow);
       })
     ),
+
+  appendRow: (row) => {
+    let createdRow: GridRow = {
+      id: row.id || `manual-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      pdfId: row.pdfId || '',
+      pdfTitle: row.pdfTitle || 'Manual Entry',
+      aiStatus: row.aiStatus || 'Confirmed',
+      citationMap: row.citationMap || {},
+      ...row,
+    };
+    set(
+      produce((state: GridState) => {
+        saveSnapshot(state);
+        state.columns.forEach((col) => {
+          if (createdRow[col.field] === undefined || createdRow[col.field] === null) {
+            createdRow[col.field] = '-';
+          }
+        });
+        state.rows.push(createdRow);
+        persistToStorage(state.columns, state.rows);
+      })
+    );
+    return createdRow;
+  },
 
   deleteRow: (rowId) =>
     set(
