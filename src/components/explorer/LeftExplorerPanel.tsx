@@ -3,6 +3,7 @@ import { useGridStore } from '../../store/useGridStore';
 import { useAgentStore } from '../../store/useAgentStore';
 import { usePdfStore } from '../../store/usePdfStore';
 import { useLogStore } from '../../store/useLogStore';
+import { downloadPdfFile } from '../../services/workspaceService';
 import {
   ChevronDown,
   ChevronRight,
@@ -17,22 +18,26 @@ import {
   Copy,
   Check,
   Maximize2,
+  FileArchive,
 } from 'lucide-react';
 
 interface LeftExplorerPanelProps {
   onSelectPdf: (pdfId: string, title: string) => void;
   onOpenMasterGrid: () => void;
   onOpenDebugLogs?: () => void;
+  onOpenWorkspaceHub?: (section: 'export' | 'import') => void;
 }
 
 export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   onSelectPdf,
   onOpenMasterGrid,
   onOpenDebugLogs,
+  onOpenWorkspaceHub,
 }) => {
   const { columns, rows } = useGridStore();
   const { logs, clearLogs } = useLogStore();
 
+  const [workspaceOpen, setWorkspaceOpen] = useState(true);
   const [viewsOpen, setViewsOpen] = useState(true);
   const [papersOpen, setPapersOpen] = useState(true);
   const [schemasOpen, setSchemasOpen] = useState(true);
@@ -211,6 +216,8 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
     });
   };
 
+  const validRowCount = rows.filter((r) => !r.isDraftRow).length;
+
   return (
     <aside className="panel left-explorer">
       {/* Hidden File / Folder Inputs */}
@@ -240,8 +247,74 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
       />
 
       <div style={{ padding: '4px 0', flex: 1, overflowY: 'auto' }}>
-        {/* Collapsible Section: VIEWS */}
+        {/* Collapsible Section: WORKSPACE PROJECT */}
         <div>
+          <div className="vscode-tree-header" onClick={() => setWorkspaceOpen(!workspaceOpen)}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {workspaceOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{' '}
+              <FileArchive size={12} color="var(--accent-primary)" /> WORKSPACE
+            </span>
+            <span
+              style={{
+                fontSize: '9px',
+                padding: '0 5px',
+                borderRadius: '8px',
+                background: 'rgba(137, 180, 250, 0.15)',
+                color: 'var(--accent-primary)',
+                fontWeight: 600,
+              }}
+            >
+              {pdfs.length}P • {validRowCount}R
+            </span>
+          </div>
+
+          {workspaceOpen && (
+            <div style={{ padding: '4px 8px 6px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button
+                  className="vscode-tree-item"
+                  style={{
+                    flex: 1,
+                    background: 'var(--accent-primary, #89b4fa)',
+                    color: 'var(--bg-primary, #1e1e2e)',
+                    borderRadius: '4px',
+                    padding: '5px 8px',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                    fontSize: '11px',
+                  }}
+                  onClick={() => onOpenWorkspaceHub?.('export')}
+                  title="Open Workspace Hub tab to package & export .litsift bundle"
+                >
+                  <Download size={12} />
+                  <span>Export State</span>
+                </button>
+
+                <button
+                  className="vscode-tree-item"
+                  style={{
+                    flex: 1,
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '4px',
+                    padding: '5px 8px',
+                    justifyContent: 'center',
+                    fontWeight: 600,
+                    fontSize: '11px',
+                  }}
+                  onClick={() => onOpenWorkspaceHub?.('import')}
+                  title="Open Workspace Hub tab to import .litsift bundle"
+                >
+                  <Upload size={12} color="var(--accent-primary)" />
+                  <span>Import</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Collapsible Section: VIEWS */}
+        <div style={{ marginTop: '6px' }}>
           <div className="vscode-tree-header" onClick={() => setViewsOpen(!viewsOpen)}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               {viewsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} VIEWS
@@ -324,6 +397,43 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                   >
                     {file.status}
                   </span>
+
+                  {/* Download Individual PDF Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      downloadPdfFile({
+                        name: file.name,
+                        file: file.file,
+                        base64: file.base64,
+                        url: file.url,
+                      });
+                    }}
+                    title={`Download "${file.name}" to disk`}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      borderRadius: '3px',
+                      opacity: 0.7,
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.color = 'var(--accent-primary, #89b4fa)';
+                      (e.currentTarget as HTMLElement).style.opacity = '1';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
+                      (e.currentTarget as HTMLElement).style.opacity = '0.7';
+                    }}
+                  >
+                    <Download size={12} />
+                  </button>
+
+                  {/* Delete Paper Button */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

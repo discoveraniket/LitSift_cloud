@@ -1,5 +1,40 @@
 import '@testing-library/jest-dom';
 
+// Polyfill URL.createObjectURL & URL.revokeObjectURL for JSDOM
+if (typeof window !== 'undefined') {
+  if (!window.URL.createObjectURL) {
+    window.URL.createObjectURL = (_blob: any) => `blob:mock-url-${Math.random().toString(36).substring(2, 9)}`;
+  }
+  if (!window.URL.revokeObjectURL) {
+    window.URL.revokeObjectURL = () => {};
+  }
+}
+
+// Polyfill Blob.prototype.text and Blob.prototype.arrayBuffer
+if (typeof Blob !== 'undefined') {
+  if (!Blob.prototype.text) {
+    Blob.prototype.text = function () {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsText(this);
+      });
+    };
+  }
+
+  if (!Blob.prototype.arrayBuffer) {
+    Blob.prototype.arrayBuffer = function () {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as ArrayBuffer);
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(this);
+      });
+    };
+  }
+}
+
 // Polyfill ResizeObserver for JSDOM / testing
 if (typeof window !== 'undefined' && !window.ResizeObserver) {
   window.ResizeObserver = class ResizeObserver {
@@ -38,3 +73,4 @@ if (typeof HTMLCanvasElement !== 'undefined') {
     clip: () => {},
   } as any);
 }
+

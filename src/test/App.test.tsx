@@ -7,13 +7,16 @@ describe('LitSift Cloud Workspace Layout', () => {
     render(<App />);
     
     await waitFor(() => {
-      expect(screen.getByText('LitSift Cloud')).toBeInTheDocument();
+      expect(screen.getByText(/LitSift Cloud/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText('VIEWS')).toBeInTheDocument();
-    expect(screen.getByText('RESEARCH PAPERS')).toBeInTheDocument();
+    expect(screen.getAllByText(/WORKSPACE/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/VIEWS/i)).toBeInTheDocument();
+    expect(screen.getByText(/RESEARCH PAPERS/i)).toBeInTheDocument();
     expect(screen.getByTitle('Toggle Left Explorer (Ctrl+B)')).toBeInTheDocument();
     expect(screen.getByTitle('Toggle Bottom Data Grid Panel')).toBeInTheDocument();
     expect(screen.getByTitle('Toggle Right AI Copilot')).toBeInTheDocument();
   });
 });
+
+
