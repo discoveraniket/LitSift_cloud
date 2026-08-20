@@ -15,6 +15,11 @@ export interface AgentMessage {
   text: string;
   timestamp: string;
   thought?: string;
+  thinkingTokens?: number;
+  promptTokens?: number;
+  candidateTokens?: number;
+  cachedTokens?: number;
+  modelUsed?: string;
   toolsExecuted?: AgentToolExecution[];
   toolCall?: {
     name: string;
@@ -28,6 +33,11 @@ export interface AgentMessage {
 export interface AgentExecutionResult {
   replyText: string;
   thought?: string;
+  thinkingTokens?: number;
+  promptTokens?: number;
+  candidateTokens?: number;
+  cachedTokens?: number;
+  modelUsed?: string;
   toolsExecuted: AgentToolExecution[];
   executionTime?: number;
 }
@@ -36,6 +46,8 @@ export interface AgentState {
   messages: AgentMessage[];
   activePdfId: string;
   isThinking: boolean;
+  streamingThought?: string;
+  streamingText?: string;
   mode: 'human_in_loop' | 'autonomous_autopilot';
   abortController?: AbortController | null;
   lastInteractionId?: string;

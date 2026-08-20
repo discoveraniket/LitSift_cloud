@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useGridStore } from '../../store/useGridStore';
 import { useAgentStore } from '../../store/useAgentStore';
 import { usePdfStore } from '../../store/usePdfStore';
+import { useLogStore } from '../../store/useLogStore';
 import {
   ChevronDown,
   ChevronRight,
@@ -12,23 +13,32 @@ import {
   Download,
   Trash2,
   FolderOpen,
+  Terminal,
+  Copy,
+  Check,
+  Maximize2,
 } from 'lucide-react';
 
 interface LeftExplorerPanelProps {
   onSelectPdf: (pdfId: string, title: string) => void;
   onOpenMasterGrid: () => void;
+  onOpenDebugLogs?: () => void;
 }
 
 export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   onSelectPdf,
   onOpenMasterGrid,
+  onOpenDebugLogs,
 }) => {
   const { columns, rows } = useGridStore();
+  const { logs, clearLogs } = useLogStore();
 
   const [viewsOpen, setViewsOpen] = useState(true);
   const [papersOpen, setPapersOpen] = useState(true);
   const [schemasOpen, setSchemasOpen] = useState(true);
+  const [logsOpen, setLogsOpen] = useState(true);
   const [activeItem, setActiveItem] = useState<string>('master-grid');
+  const [copiedLogs, setCopiedLogs] = useState(false);
 
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -180,6 +190,25 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleCopyAllLogs = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (logs.length === 0) return;
+    const formatted = logs
+      .map((l) => {
+        let text = `[${l.timestamp}] [${l.level.toUpperCase()}] ${l.message}`;
+        if (l.details) {
+          text += `\nDetails: ${JSON.stringify(l.details, null, 2)}`;
+        }
+        return text;
+      })
+      .join('\n\n');
+
+    navigator.clipboard.writeText(formatted).then(() => {
+      setCopiedLogs(true);
+      setTimeout(() => setCopiedLogs(false), 2000);
+    });
   };
 
   return (
@@ -405,6 +434,139 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                   <Trash2 size={12} />
                   <span>Clear Entire Table</span>
                 </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Collapsible Section: AGENT DEBUG LOGS */}
+        <div style={{ marginTop: '8px' }}>
+          <div className="vscode-tree-header" onClick={() => setLogsOpen(!logsOpen)}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {logsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} DEBUG & TELEMETRY ({logs.length})
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span
+                className="vscode-action-icon"
+                title={copiedLogs ? 'Copied Full Logs!' : 'Copy All Logs to Clipboard'}
+                onClick={handleCopyAllLogs}
+                style={{ color: copiedLogs ? 'var(--accent-success)' : undefined }}
+              >
+                {copiedLogs ? <Check size={13} /> : <Copy size={13} />}
+              </span>
+              {onOpenDebugLogs && (
+                <span
+                  className="vscode-action-icon"
+                  title="Open Detailed Logs Window"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenDebugLogs();
+                  }}
+                >
+                  <Maximize2 size={13} />
+                </span>
+              )}
+              <span
+                className="vscode-action-icon"
+                title="Clear Logs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  clearLogs();
+                }}
+              >
+                <Trash2 size={13} />
+              </span>
+            </div>
+          </div>
+
+          {logsOpen && (
+            <div style={{ padding: '4px 8px 8px 12px' }}>
+              {logs.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)', fontSize: '10.5px', fontStyle: 'italic', padding: '6px 4px' }}>
+                  No logs captured yet.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    maxHeight: '160px',
+                    overflowY: 'auto',
+                    background: '#07080c',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '4px',
+                    padding: '6px',
+                    fontFamily: 'var(--font-mono, monospace)',
+                    fontSize: '9.5px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  {logs.slice(-25).map((l) => (
+                    <div key={l.id} style={{ display: 'flex', gap: '4px', lineHeight: '1.3' }}>
+                      <span style={{ color: '#6c7086' }}>{l.timestamp.split(' ')[0]}</span>
+                      <span
+                        style={{
+                          fontWeight: 700,
+                          color:
+                            l.level === 'error'
+                              ? 'var(--accent-danger)'
+                              : l.level === 'warn'
+                              ? 'var(--accent-warning)'
+                              : l.level === 'success'
+                              ? 'var(--accent-success)'
+                              : 'var(--accent-primary)',
+                        }}
+                      >
+                        [{l.level[0].toUpperCase()}]
+                      </span>
+                      <span style={{ color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.message}>
+                        {l.message}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
+                <button
+                  className="vscode-tree-item"
+                  style={{
+                    flex: 1,
+                    background: copiedLogs ? 'rgba(166, 227, 161, 0.2)' : 'var(--bg-tertiary)',
+                    border: '1px solid var(--border-subtle)',
+                    color: copiedLogs ? 'var(--accent-success)' : 'var(--text-primary)',
+                    borderRadius: '4px',
+                    padding: '4px 6px',
+                    justifyContent: 'center',
+                    fontSize: '10.5px',
+                    fontWeight: 600,
+                  }}
+                  onClick={() => handleCopyAllLogs()}
+                >
+                  {copiedLogs ? <Check size={11} /> : <Copy size={11} />}
+                  <span>{copiedLogs ? 'Copied Full Log' : 'Copy All Logs'}</span>
+                </button>
+
+                {onOpenDebugLogs && (
+                  <button
+                    className="vscode-tree-item"
+                    style={{
+                      background: 'rgba(137, 180, 250, 0.12)',
+                      border: '1px solid rgba(137, 180, 250, 0.3)',
+                      color: 'var(--accent-primary)',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      justifyContent: 'center',
+                      fontSize: '10.5px',
+                      fontWeight: 600,
+                    }}
+                    onClick={onOpenDebugLogs}
+                    title="Open Full Log Inspector"
+                  >
+                    <Terminal size={11} />
+                    <span>Inspect</span>
+                  </button>
+                )}
               </div>
             </div>
           )}

@@ -7,6 +7,7 @@ import { CentralViewerPanel } from '../pdf-viewer/CentralViewerPanel';
 import { RightAgentPanel } from '../agent/RightAgentPanel';
 import { BottomGridPanel } from '../data-grid/BottomGridPanel';
 import { SettingsModal } from '../settings/SettingsModal';
+import { DebugLogsModal } from '../agent/DebugLogsModal';
 
 import { usePdfStore } from '../../store/usePdfStore';
 import { useGridStore } from '../../store/useGridStore';
@@ -18,6 +19,7 @@ export const WorkspaceLayout: React.FC = () => {
   const activePdfId = activePdf?.id || '';
   const activePdfTitle = activePdf?.name || 'No Paper Selected';
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showLogsModal, setShowLogsModal] = useState(false);
 
   // Side Panel Toggle States
   const [showLeftPanel, setShowLeftPanel] = useState(true);
@@ -154,6 +156,7 @@ export const WorkspaceLayout: React.FC = () => {
         onToggleLeftPanel={() => setShowLeftPanel(!showLeftPanel)}
         onToggleBottomPanel={() => setShowBottomPanel(!showBottomPanel)}
         onOpenMasterGrid={handleOpenMasterGrid}
+        onOpenDebugLogs={() => setShowLogsModal(true)}
         onToggleZenMode={handleToggleZenMode}
         onOpenSettings={() => setShowSettingsModal(true)}
         onResetWorkspace={handleResetWorkspace}
@@ -189,6 +192,7 @@ export const WorkspaceLayout: React.FC = () => {
                     <LeftExplorerPanel
                       onSelectPdf={handleSelectPdf}
                       onOpenMasterGrid={handleOpenMasterGrid}
+                      onOpenDebugLogs={() => setShowLogsModal(true)}
                     />
                   </div>
                   <div
@@ -213,7 +217,10 @@ export const WorkspaceLayout: React.FC = () => {
                     onMouseDown={handleMouseDownRight}
                   />
                   <div className="layout-col-right" style={{ width: `${rightWidth}px` }}>
-                    <RightAgentPanel activePdfTitle={activePdfTitle} />
+                    <RightAgentPanel
+                      activePdfTitle={activePdfTitle}
+                      onOpenSettings={() => setShowSettingsModal(true)}
+                    />
                   </div>
                 </>
               )}
@@ -254,6 +261,11 @@ export const WorkspaceLayout: React.FC = () => {
       <SettingsModal
         isOpen={showSettingsModal}
         onClose={() => setShowSettingsModal(false)}
+      />
+
+      <DebugLogsModal
+        isOpen={showLogsModal}
+        onClose={() => setShowLogsModal(false)}
       />
     </div>
   );

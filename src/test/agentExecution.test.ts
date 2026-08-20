@@ -146,4 +146,29 @@ describe('Agent Multi-Step Execution Store & Tools', () => {
     if (originalEnvKey) process.env.GEMINI_API_KEY = originalEnvKey;
     if (originalLocalKey) localStorage.setItem('LITSIFT_GEMINI_API_KEY', originalLocalKey);
   });
+
+  it('stores and tracks thought reasoning traces and thinking tokens in AgentMessage', () => {
+    const testThought = 'Deliberating table schema and finding relevant paper passages...';
+    const testTokens = 840;
+
+    useAgentStore.setState({
+      messages: [
+        {
+          id: 'msg-agent-1',
+          sender: 'agent',
+          text: 'Extracted phage findings successfully.',
+          thought: testThought,
+          thinkingTokens: testTokens,
+          timestamp: '10:00 AM',
+          executionTime: 2.4,
+        },
+      ],
+    });
+
+    const messages = useAgentStore.getState().messages;
+    expect(messages.length).toBe(1);
+    expect(messages[0].thought).toBe(testThought);
+    expect(messages[0].thinkingTokens).toBe(840);
+    expect(messages[0].executionTime).toBe(2.4);
+  });
 });

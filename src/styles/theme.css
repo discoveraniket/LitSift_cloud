@@ -1073,6 +1073,198 @@ body {
   transform: translateY(0);
 }
 
+/* VS Code Copilot Chat Overhaul Styles */
+.vscode-chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.vscode-chat-turn {
+  transition: background 0.15s ease;
+}
+
+.vscode-chat-turn:hover {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.vscode-thought-container {
+  border-left: 2px solid var(--accent-secondary, #cba6f7) !important;
+}
+
+.vscode-thought-container.active-thinking {
+  border-left-color: var(--accent-primary) !important;
+  box-shadow: 0 0 10px rgba(137, 180, 250, 0.08);
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin-icon {
+  animation: spin 1.5s linear infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+.pulsing-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--accent-primary);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+/* VS Code Thought Markdown Prose */
+.vscode-thought-markdown {
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.vscode-thought-markdown p {
+  margin-bottom: 6px;
+}
+
+.vscode-thought-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.vscode-thought-markdown strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.vscode-thought-markdown em {
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.vscode-thought-markdown ul,
+.vscode-thought-markdown ol {
+  margin-left: 16px;
+  margin-bottom: 6px;
+}
+
+.vscode-thought-markdown li {
+  margin-bottom: 2px;
+}
+
+.vscode-thought-markdown code {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 3px;
+  border-radius: 3px;
+  color: #fab387;
+}
+
+.vscode-thought-markdown blockquote {
+  border-left: 2px solid var(--accent-secondary, #cba6f7);
+  padding-left: 8px;
+  margin: 4px 0;
+  color: var(--text-muted);
+}
+
+/* VS Code Markdown Rendering in Chat */
+.vscode-markdown {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.vscode-markdown p {
+  margin-bottom: 8px;
+}
+
+.vscode-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.vscode-markdown ul,
+.vscode-markdown ol {
+  margin-left: 18px;
+  margin-bottom: 8px;
+}
+
+.vscode-markdown li {
+  margin-bottom: 3px;
+}
+
+.vscode-markdown code {
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: #fab387;
+}
+
+.vscode-markdown pre {
+  background: #11111b;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  overflow-x: auto;
+}
+
+.vscode-markdown pre code {
+  background: transparent;
+  padding: 0;
+  color: #cdd6f4;
+  font-size: 10.5px;
+}
+
+.vscode-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 10.5px;
+}
+
+.vscode-markdown th,
+.vscode-markdown td {
+  border: 1px solid var(--border-subtle);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.vscode-markdown th {
+  background: var(--bg-surface);
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.vscode-markdown blockquote {
+  border-left: 3px solid var(--accent-primary);
+  padding-left: 10px;
+  margin: 6px 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Chat Input Container Focus Ring */
+.vscode-chat-input-box:focus-within {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 1px var(--accent-primary), 0 4px 14px rgba(0, 0, 0, 0.3) !important;
+}
+
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 5px;
@@ -1088,4 +1280,5 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--bg-active);
 }
+
 

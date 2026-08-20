@@ -19,6 +19,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   messages: [createDefaultGreeting()],
   activePdfId: '',
   isThinking: false,
+  streamingThought: '',
+  streamingText: '',
   mode: 'human_in_loop',
   abortController: null,
   lastInteractionId: undefined,
@@ -75,14 +77,26 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       produce((state: AgentState) => {
         state.messages.push(userMsg);
         state.isThinking = true;
+        state.streamingThought = '';
+        state.streamingText = '';
         state.abortController = controller;
       })
     );
 
     db.chatMessages.put(userMsg).catch(console.warn);
 
-    // Execute Multi-Step ReAct Agent Loop
-    processAgentInteraction(text, activePdfTitle, controller.signal)
+    // Execute Multi-Step ReAct Agent Loop with real-time streaming
+    processAgentInteraction(
+      text,
+      activePdfTitle,
+      controller.signal,
+      (stream) => {
+        set({
+          streamingThought: stream.fullThoughtText || '',
+          streamingText: stream.fullText || '',
+        });
+      }
+    )
       .then((result) => {
         const durationSec = Number(((Date.now() - startTime) / 1000).toFixed(1));
         const agentMsg: AgentMessage = {
@@ -90,6 +104,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           pdfId: currentPdfId,
           sender: 'agent',
           text: result.replyText,
+          thought: result.thought,
+          thinkingTokens: result.thinkingTokens,
+          promptTokens: result.promptTokens,
+          candidateTokens: result.candidateTokens,
+          cachedTokens: result.cachedTokens,
+          modelUsed: result.modelUsed,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           toolsExecuted: result.toolsExecuted,
           executionTime: durationSec,
@@ -109,6 +129,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           produce((state: AgentState) => {
             state.messages.push(agentMsg);
             state.isThinking = false;
+            state.streamingThought = '';
+            state.streamingText = '';
             state.abortController = null;
           })
         );
@@ -128,6 +150,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           produce((state: AgentState) => {
             state.messages.push(errMsg);
             state.isThinking = false;
+            state.streamingThought = '';
+            state.streamingText = '';
             state.abortController = null;
           })
         );
@@ -140,7 +164,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const controller = get().abortController;
     if (controller) {
       controller.abort();
-      set({ isThinking: false, abortController: null });
+      set({ isThinking: false, streamingThought: '', streamingText: '', abortController: null });
     }
   },
 

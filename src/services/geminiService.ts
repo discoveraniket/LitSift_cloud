@@ -129,10 +129,20 @@ export async function validateAgentPrerequisites(
   };
 }
 
+export interface AgentStreamUpdate {
+  thoughtChunk?: string;
+  fullThoughtText?: string;
+  textChunk?: string;
+  fullText?: string;
+}
+
+export type AgentStreamCallback = (data: AgentStreamUpdate) => void;
+
 export async function processAgentInteraction(
   userPrompt: string,
   activePdfTitle: string = 'Active Paper',
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  onStream?: AgentStreamCallback
 ): Promise<AgentExecutionResult> {
   const logStore = useLogStore.getState();
 
@@ -315,12 +325,23 @@ Execute all required tool actions to fulfill the user's instructions and summari
     let currentStep = 1;
     const executedTools: AgentToolExecution[] = [];
     let finalReplyText = '';
+    const accumulatedThoughts: string[] = [];
+    let totalThinkingTokens = 0;
+    let totalPromptTokens = 0;
+    let totalCandidateTokens = 0;
+    let totalCachedTokens = 0;
 
     while (currentStep <= MAX_STEPS) {
       if (abortSignal?.aborted) {
         logStore.addLog('warn', 'Agent interaction stopped by user.');
         return {
           replyText: 'Agent execution was stopped by user.',
+          thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join('\n\n---\n\n') : undefined,
+          thinkingTokens: totalThinkingTokens > 0 ? totalThinkingTokens : undefined,
+          promptTokens: totalPromptTokens > 0 ? totalPromptTokens : undefined,
+          candidateTokens: totalCandidateTokens > 0 ? totalCandidateTokens : undefined,
+          cachedTokens: totalCachedTokens > 0 ? totalCachedTokens : undefined,
+          modelUsed: selectedModel,
           toolsExecuted: executedTools,
         };
       }
@@ -331,22 +352,90 @@ Execute all required tool actions to fulfill the user's instructions and summari
       logStore.setActiveStep(`[Step ${currentStep}/${MAX_STEPS}] Reasoning with Gemini (${selectedModel})...`);
       const genStartTime = performance.now();
 
-      let response: any;
-      try {
-        response = await ai.models.generateContent({
+      const requestConfig = {
+        systemInstruction,
+        temperature: 0.2,
+        thinkingConfig: {
+          includeThoughts: true,
+          thinkingBudget: -1,
+        },
+        tools: currentTools,
+        toolConfig: {
+          functionCallingConfig: {
+            mode: FunctionCallingConfigMode.AUTO,
+          },
+        },
+      };
+
+      let stepThoughtText = '';
+      let stepAnswerText = '';
+      const collectedFunctionCalls: any[] = [];
+      const allModelParts: any[] = [];
+      let lastUsage: any = null;
+
+      const executeStreamTurn = async () => {
+        const stream = await ai.models.generateContentStream({
           model: selectedModel,
           contents,
-          config: {
-            systemInstruction,
-            temperature: 0.2,
-            tools: currentTools,
-            toolConfig: {
-              functionCallingConfig: {
-                mode: FunctionCallingConfigMode.AUTO,
-              },
-            },
-          },
+          config: requestConfig,
         });
+
+        for await (const chunk of stream) {
+          if (abortSignal?.aborted) break;
+
+          if (chunk.usageMetadata) {
+            lastUsage = chunk.usageMetadata;
+          }
+
+          const candidate = chunk.candidates?.[0];
+          const parts = candidate?.content?.parts || [];
+
+          for (const part of parts) {
+            allModelParts.push(part);
+
+            if (part.thought && part.text) {
+              stepThoughtText += part.text;
+              const liveFullThought = accumulatedThoughts.concat(stepThoughtText).join('\n\n---\n\n');
+              onStream?.({
+                thoughtChunk: part.text,
+                fullThoughtText: liveFullThought,
+                fullText: finalReplyText ? `${finalReplyText}\n\n${stepAnswerText}` : stepAnswerText,
+              });
+            } else if (!part.thought && part.text) {
+              stepAnswerText += part.text;
+              const liveFullThought = accumulatedThoughts.length > 0
+                ? (stepThoughtText ? accumulatedThoughts.concat(stepThoughtText).join('\n\n---\n\n') : accumulatedThoughts.join('\n\n---\n\n'))
+                : stepThoughtText;
+              onStream?.({
+                textChunk: part.text,
+                fullThoughtText: liveFullThought,
+                fullText: finalReplyText ? `${finalReplyText}\n\n${stepAnswerText}` : stepAnswerText,
+              });
+            }
+
+            if (part.functionCall) {
+              collectedFunctionCalls.push(part.functionCall);
+            }
+          }
+
+          if (chunk.functionCalls && chunk.functionCalls.length > 0) {
+            for (const fc of chunk.functionCalls) {
+              if (
+                !collectedFunctionCalls.some(
+                  (existing) =>
+                    existing.name === fc.name &&
+                    JSON.stringify(existing.args) === JSON.stringify(fc.args)
+                )
+              ) {
+                collectedFunctionCalls.push(fc);
+              }
+            }
+          }
+        }
+      };
+
+      try {
+        await executeStreamTurn();
       } catch (err: any) {
         const errMsg = String(err?.message || '');
         const isRateLimit = errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED');
@@ -359,52 +448,38 @@ Execute all required tool actions to fulfill the user's instructions and summari
         if (isRateLimit) {
           logStore.addLog('warn', `Gemini API rate limit reached (429). Waiting 15s before retry...`);
           await new Promise((resolve) => setTimeout(resolve, 15000));
-          response = await ai.models.generateContent({
-            model: selectedModel,
-            contents,
-            config: {
-              systemInstruction,
-              temperature: 0.2,
-              tools: currentTools,
-              toolConfig: {
-                functionCallingConfig: {
-                  mode: FunctionCallingConfigMode.AUTO,
-                },
-              },
-            },
-          });
+          await executeStreamTurn();
         } else if (isTransient503) {
           logStore.addLog('warn', `Transient 503/Deadline error from Gemini API (${errMsg}). Retrying in 2s...`);
           await new Promise((resolve) => setTimeout(resolve, 2000));
-          response = await ai.models.generateContent({
-            model: selectedModel,
-            contents,
-            config: {
-              systemInstruction,
-              temperature: 0.2,
-              tools: currentTools,
-              toolConfig: {
-                functionCallingConfig: {
-                  mode: FunctionCallingConfigMode.AUTO,
-                },
-              },
-            },
-          });
+          await executeStreamTurn();
         } else {
           throw err;
         }
       }
 
+      if (stepThoughtText) {
+        accumulatedThoughts.push(stepThoughtText);
+      }
+      if (stepAnswerText) {
+        finalReplyText = finalReplyText ? `${finalReplyText}\n\n${stepAnswerText}` : stepAnswerText;
+      }
+
       const genDurationSec = ((performance.now() - genStartTime) / 1000).toFixed(2);
-      const usage = response.usageMetadata;
+      const usage = lastUsage;
       const promptTokens = usage?.promptTokenCount ?? 0;
       const candidateTokens = usage?.candidatesTokenCount ?? 0;
-      const thinkingTokens = usage?.thinkingTokenCount ?? usage?.reasoningTokenCount;
+      const stepThinkingTokens = usage?.thinkingTokenCount ?? usage?.reasoningTokenCount ?? 0;
       const cachedTokens = usage?.cachedContentTokenCount;
 
+      totalThinkingTokens += stepThinkingTokens;
+      totalPromptTokens += promptTokens;
+      totalCandidateTokens += candidateTokens;
+      totalCachedTokens += cachedTokens ?? 0;
+
       let telemetryMsg = `⏱️ [Step ${currentStep}] Gemini ${selectedModel} responded in ${genDurationSec}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`;
-      if (thinkingTokens) {
-        telemetryMsg += `, Thinking=${thinkingTokens.toLocaleString()}`;
+      if (stepThinkingTokens) {
+        telemetryMsg += `, Thinking=${stepThinkingTokens.toLocaleString()}`;
       }
       if (cachedTokens) {
         telemetryMsg += `, Cached=${cachedTokens.toLocaleString()}`;
@@ -416,22 +491,8 @@ Execute all required tool actions to fulfill the user's instructions and summari
         usageMetadata: usage,
       });
 
-      const candidate = response.candidates?.[0];
-      const parts = candidate?.content?.parts || [];
-
-      // Extract function calls
-      const functionCalls =
-        response.functionCalls ||
-        parts.filter((p: any) => p.functionCall).map((p: any) => p.functionCall);
-
-      // Record any text generated by the model
-      const candidateText = parts.find((p: any) => p.text)?.text;
-      if (candidateText) {
-        finalReplyText = candidateText;
-      }
-
       // If no tools were called, the agent has finished its task
-      if (!functionCalls || functionCalls.length === 0) {
+      if (!collectedFunctionCalls || collectedFunctionCalls.length === 0) {
         logStore.setActiveStep(null);
         logStore.addLog('info', `Agent completed reasoning at step ${currentStep} (${genDurationSec}s)`);
         break;
@@ -440,12 +501,12 @@ Execute all required tool actions to fulfill the user's instructions and summari
       // Append model's tool call turn to contents
       contents.push({
         role: 'model',
-        parts,
+        parts: allModelParts.length > 0 ? allModelParts : [{ text: stepAnswerText || 'Executing tools...' }],
       });
 
       // Execute each tool requested by the model
       const responseParts: any[] = [];
-      for (const fc of functionCalls) {
+      for (const fc of collectedFunctionCalls) {
         if (abortSignal?.aborted) break;
 
         const toolSpec = agentToolsRegistry[fc.name || ''];
@@ -518,8 +579,17 @@ Execute all required tool actions to fulfill the user's instructions and summari
       }
     }
 
+    const finalThoughtText =
+      accumulatedThoughts.length > 0 ? accumulatedThoughts.join('\n\n---\n\n') : undefined;
+
     return {
       replyText: finalReplyText,
+      thought: finalThoughtText,
+      thinkingTokens: totalThinkingTokens > 0 ? totalThinkingTokens : undefined,
+      promptTokens: totalPromptTokens > 0 ? totalPromptTokens : undefined,
+      candidateTokens: totalCandidateTokens > 0 ? totalCandidateTokens : undefined,
+      cachedTokens: totalCachedTokens > 0 ? totalCachedTokens : undefined,
+      modelUsed: selectedModel,
       toolsExecuted: executedTools,
     };
   } catch (err: any) {

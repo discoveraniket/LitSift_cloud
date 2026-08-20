@@ -6,8 +6,10 @@ import {
   Settings,
   Maximize2,
   RotateCcw,
+  Bug,
 } from 'lucide-react';
 import { getSelectedGeminiModel } from '../../services/geminiService';
+import { useLogStore } from '../../store/useLogStore';
 
 interface ActivityBarProps {
   showLeftPanel: boolean;
@@ -16,6 +18,7 @@ interface ActivityBarProps {
   onToggleLeftPanel: () => void;
   onToggleBottomPanel: () => void;
   onOpenMasterGrid: () => void;
+  onOpenDebugLogs: () => void;
   onToggleZenMode: () => void;
   onOpenSettings: () => void;
   onResetWorkspace: () => void;
@@ -28,11 +31,13 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
   onToggleLeftPanel,
   onToggleBottomPanel,
   onOpenMasterGrid,
+  onOpenDebugLogs,
   onToggleZenMode,
   onOpenSettings,
   onResetWorkspace,
 }) => {
   const currentModel = getSelectedGeminiModel();
+  const logCount = useLogStore((state) => state.logs.length);
 
   return (
     <aside className="activity-bar">
@@ -62,14 +67,45 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <span className="activity-tooltip">Data Grid</span>
         </button>
 
-        {/* Bottom Debug Logs Panel Toggle */}
+        {/* Debug Logs Viewer Button */}
+        <button
+          className="activity-item"
+          onClick={onOpenDebugLogs}
+          title={`Agent Debug & Telemetry Logs (${logCount} events)`}
+          style={{ position: 'relative' }}
+        >
+          <Bug size={19} color={logCount > 0 ? 'var(--accent-primary)' : undefined} />
+          {logCount > 0 && (
+            <span
+              style={{
+                position: 'absolute',
+                top: '5px',
+                right: '5px',
+                background: 'var(--accent-primary)',
+                color: 'var(--bg-primary)',
+                borderRadius: '8px',
+                fontSize: '8.5px',
+                fontWeight: 700,
+                padding: '0 3.5px',
+                lineHeight: '12px',
+                minWidth: '12px',
+                textAlign: 'center',
+              }}
+            >
+              {logCount > 99 ? '99+' : logCount}
+            </span>
+          )}
+          <span className="activity-tooltip">Debug Logs</span>
+        </button>
+
+        {/* Bottom Panel Toggle */}
         <button
           className={`activity-item ${showBottomPanel ? 'active' : ''}`}
           onClick={onToggleBottomPanel}
           title="Toggle Bottom Extraction Grid & Logs Drawer"
         >
           <Terminal size={19} />
-          <span className="activity-tooltip">Data & Logs</span>
+          <span className="activity-tooltip">Bottom Grid</span>
         </button>
       </div>
 
