@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   ExternalLink,
   Download,
@@ -19,23 +19,160 @@ import { useGridStore } from '../../store/useGridStore';
 import { usePdfStore } from '../../store/usePdfStore';
 import { highlightSnippetInContainer, clearActiveHighlights } from '../../services/highlightUtils';
 
-interface ArticleReaderViewProps {
-  paper: PaperDocumentInfo;
-  onSwitchToPdf?: () => void;
+export interface ArticleReaderViewRef {
+  search: (query: string) => void;
+  nextMatch: () => void;
+  prevMatch: () => void;
+  clearSearch: () => void;
 }
 
-export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
+export interface ArticleReaderViewProps {
+  paper: PaperDocumentInfo;
+  onSwitchToPdf?: () => void;
+  fontSizeScale?: number;
+  onMatchCountChange?: (current: number, total: number) => void;
+}
+
+export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderViewProps>(({
   paper,
   onSwitchToPdf,
-}) => {
+  fontSizeScale = 1.0,
+  onMatchCountChange,
+}, ref) => {
   const [activeSectionId, setActiveSectionId] = useState<string>('abstract');
   const [copiedTableId, setCopiedTableId] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
   const mainContainerRef = useRef<HTMLElement>(null);
+  const searchMatchesRef = useRef<HTMLElement[]>([]);
+  const currentMatchIndexRef = useRef<number>(-1);
 
   const { addColumn, appendRows, activeEvidence } = useGridStore();
   const { updatePaperDocument } = usePdfStore();
+
+  // In-Article Text Search & Match Navigation
+  const clearSearch = () => {
+    if (!mainContainerRef.current) return;
+    const marks = mainContainerRef.current.querySelectorAll('mark.reader-search-mark');
+    marks.forEach((mark) => {
+      const parent = mark.parentNode;
+      if (parent) {
+        while (mark.firstChild) {
+          parent.insertBefore(mark.firstChild, mark);
+        }
+        parent.removeChild(mark);
+        parent.normalize();
+      }
+    });
+    searchMatchesRef.current = [];
+    currentMatchIndexRef.current = -1;
+    onMatchCountChange?.(0, 0);
+  };
+
+  const search = (query: string) => {
+    clearSearch();
+    if (!query || query.trim().length < 2 || !mainContainerRef.current) return;
+
+    const trimmedQuery = query.trim().toLowerCase();
+    const walker = document.createTreeWalker(mainContainerRef.current, NodeFilter.SHOW_TEXT);
+    const textNodes: Text[] = [];
+    let node: Text | null = null;
+    while ((node = walker.nextNode() as Text | null)) {
+      const parentTag = node.parentElement?.tagName.toLowerCase();
+      if (parentTag === 'button' || parentTag === 'nav' || node.parentElement?.closest('button')) {
+        continue;
+      }
+      if (node.nodeValue && node.nodeValue.toLowerCase().includes(trimmedQuery)) {
+        textNodes.push(node);
+      }
+    }
+
+    const createdMarks: HTMLElement[] = [];
+
+    for (const textNode of textNodes) {
+      let currentText = textNode.nodeValue || '';
+      let lower = currentText.toLowerCase();
+      let matchIdx = lower.indexOf(trimmedQuery);
+
+      if (matchIdx !== -1) {
+        const parent = textNode.parentNode;
+        if (!parent) continue;
+
+        let workingNode: Text = textNode;
+
+        while (matchIdx !== -1 && workingNode.nodeValue) {
+          const before = workingNode.nodeValue.substring(0, matchIdx);
+          const matched = workingNode.nodeValue.substring(matchIdx, matchIdx + trimmedQuery.length);
+          const after = workingNode.nodeValue.substring(matchIdx + trimmedQuery.length);
+
+          workingNode.nodeValue = before;
+
+          const mark = document.createElement('mark');
+          mark.className = 'reader-search-mark';
+          mark.textContent = matched;
+
+          const afterNode = document.createTextNode(after);
+
+          parent.insertBefore(mark, workingNode.nextSibling);
+          parent.insertBefore(afterNode, mark.nextSibling);
+
+          createdMarks.push(mark);
+
+          workingNode = afterNode;
+          lower = (workingNode.nodeValue || '').toLowerCase();
+          matchIdx = lower.indexOf(trimmedQuery);
+        }
+      }
+    }
+
+    searchMatchesRef.current = createdMarks;
+
+    if (createdMarks.length > 0) {
+      currentMatchIndexRef.current = 0;
+      createdMarks[0].classList.add('reader-search-match-current');
+      createdMarks[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      onMatchCountChange?.(1, createdMarks.length);
+    } else {
+      onMatchCountChange?.(0, 0);
+    }
+  };
+
+  const nextMatch = () => {
+    const total = searchMatchesRef.current.length;
+    if (total === 0) return;
+
+    if (currentMatchIndexRef.current >= 0 && currentMatchIndexRef.current < total) {
+      searchMatchesRef.current[currentMatchIndexRef.current].classList.remove('reader-search-match-current');
+    }
+
+    currentMatchIndexRef.current = (currentMatchIndexRef.current + 1) % total;
+    const currentEl = searchMatchesRef.current[currentMatchIndexRef.current];
+    currentEl.classList.add('reader-search-match-current');
+    currentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    onMatchCountChange?.(currentMatchIndexRef.current + 1, total);
+  };
+
+  const prevMatch = () => {
+    const total = searchMatchesRef.current.length;
+    if (total === 0) return;
+
+    if (currentMatchIndexRef.current >= 0 && currentMatchIndexRef.current < total) {
+      searchMatchesRef.current[currentMatchIndexRef.current].classList.remove('reader-search-match-current');
+    }
+
+    currentMatchIndexRef.current = (currentMatchIndexRef.current - 1 + total) % total;
+    const currentEl = searchMatchesRef.current[currentMatchIndexRef.current];
+    currentEl.classList.add('reader-search-match-current');
+    currentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    onMatchCountChange?.(currentMatchIndexRef.current + 1, total);
+  };
+
+  useImperativeHandle(ref, () => ({
+    search,
+    nextMatch,
+    prevMatch,
+    clearSearch,
+  }));
 
   // Auto-scroll and highlight exact sentence when activeEvidence changes
   useEffect(() => {
@@ -296,6 +433,9 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
           padding: '32px 48px',
           maxWidth: '960px',
           margin: '0 auto',
+          fontSize: `${14.5 * (fontSizeScale || 1.0)}px`,
+          lineHeight: 1.7,
+          transition: 'font-size 0.15s ease',
         }}
       >
         {/* Paper Header Hero */}
@@ -386,7 +526,7 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
           {/* Title */}
           <h1
             style={{
-              fontSize: '24px',
+              fontSize: `${24 * fontSizeScale}px`,
               fontWeight: 700,
               lineHeight: 1.35,
               color: 'var(--text-primary, #cdd6f4)',
@@ -398,7 +538,7 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
 
           {/* Authors */}
           {paper.authors && paper.authors.length > 0 && (
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary, #a6adc8)', marginBottom: '8px', lineHeight: 1.5 }}>
+            <div style={{ fontSize: `${13 * fontSizeScale}px`, color: 'var(--text-secondary, #a6adc8)', marginBottom: '8px', lineHeight: 1.5 }}>
               <strong>Authors: </strong>
               {paper.authors.map((a, idx) => (
                 <span key={idx}>
@@ -410,7 +550,7 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
           )}
 
           {/* Journal & Year */}
-          <div style={{ fontSize: '12px', color: 'var(--text-muted, #6c7086)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ fontSize: `${12 * fontSizeScale}px`, color: 'var(--text-muted, #6c7086)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>{paper.journal || 'Academic Article'}</span>
             {paper.year && <span>• {paper.year}</span>}
           </div>
@@ -501,7 +641,7 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
           >
             <h2
               style={{
-                fontSize: '16px',
+                fontSize: `${16 * fontSizeScale}px`,
                 fontWeight: 700,
                 color: 'var(--accent-primary, #89b4fa)',
                 margin: '0 0 10px 0',
@@ -512,7 +652,7 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
             >
               <FileText size={16} /> Abstract
             </h2>
-            <p style={{ fontSize: '13.5px', lineHeight: 1.7, color: 'var(--text-primary, #cdd6f4)', margin: 0 }}>
+            <p style={{ fontSize: `${14.5 * fontSizeScale}px`, lineHeight: 1.7, color: 'var(--text-primary, #cdd6f4)', margin: 0 }}>
               {paper.abstractText}
             </p>
           </section>
@@ -538,10 +678,10 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
             }}
           >
             <Upload size={24} style={{ color: 'var(--accent-primary, #89b4fa)', marginBottom: '8px' }} />
-            <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px 0' }}>
+            <h3 style={{ fontSize: `${14 * fontSizeScale}px`, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px 0' }}>
               Have Institutional Access to the Full PDF?
             </h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted, #6c7086)', margin: '0 0 12px 0' }}>
+            <p style={{ fontSize: `${12 * fontSizeScale}px`, color: 'var(--text-muted, #6c7086)', margin: '0 0 12px 0' }}>
               Drag & drop the downloaded PDF here to enable the full PDF Viewer and visual chart extraction.
             </p>
           </div>
@@ -552,7 +692,7 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
           <section key={sec.id} id={`sec-${sec.id}`} style={{ marginBottom: '36px' }}>
             <h2
               style={{
-                fontSize: '18px',
+                fontSize: `${18 * fontSizeScale}px`,
                 fontWeight: 700,
                 color: 'var(--text-primary, #cdd6f4)',
                 borderBottom: '1px solid var(--border-subtle, #313244)',
@@ -562,7 +702,7 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
             >
               {sec.title}
             </h2>
-            <div style={{ fontSize: '13.5px', lineHeight: 1.7, color: 'var(--text-secondary, #a6adc8)' }}>
+            <div style={{ fontSize: `${14.5 * fontSizeScale}px`, lineHeight: 1.7, color: 'var(--text-secondary, #a6adc8)' }}>
               {sec.content.split('\n\n').map((paragraph, pIdx) => (
                 <p key={pIdx} style={{ marginBottom: '14px' }}>
                   {paragraph}
@@ -577,7 +717,7 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
           <section id="sec-tables" style={{ marginBottom: '40px' }}>
             <h2
               style={{
-                fontSize: '18px',
+                fontSize: `${18 * fontSizeScale}px`,
                 fontWeight: 700,
                 color: 'var(--text-primary, #cdd6f4)',
                 borderBottom: '1px solid var(--border-subtle, #313244)',
@@ -668,7 +808,7 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
 
                   {/* Rendered HTML Table */}
                   <div style={{ overflowX: 'auto', maxHeight: '320px' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: `${12.5 * fontSizeScale}px`, textAlign: 'left' }}>
                       <thead>
                         <tr style={{ background: 'rgba(255, 255, 255, 0.03)', borderBottom: '1px solid var(--border-subtle, #313244)' }}>
                           {tbl.headers.map((h, hIdx) => (
@@ -751,7 +891,7 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
                     gap: '8px',
                   }}
                 >
-                  <strong style={{ fontSize: '13px', color: 'var(--accent-primary, #89b4fa)' }}>
+                  <strong style={{ fontSize: `${13 * fontSizeScale}px`, color: 'var(--accent-primary, #89b4fa)' }}>
                     {fig.label || 'Figure'}
                   </strong>
                   {fig.url && (
@@ -767,7 +907,7 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
                       }}
                     />
                   )}
-                  <p style={{ fontSize: '11px', color: 'var(--text-muted, #6c7086)', margin: 0, lineHeight: 1.4 }}>
+                  <p style={{ fontSize: `${11.5 * fontSizeScale}px`, color: 'var(--text-muted, #6c7086)', margin: 0, lineHeight: 1.4 }}>
                     {fig.caption}
                   </p>
                 </div>
@@ -778,4 +918,6 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
       </main>
     </div>
   );
-};
+});
+
+ArticleReaderView.displayName = 'ArticleReaderView';

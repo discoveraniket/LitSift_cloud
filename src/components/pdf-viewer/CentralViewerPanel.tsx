@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { AgGridWrapper } from '../data-grid/AgGridWrapper';
 import { PdfReader, PdfReaderRef } from './PdfReader';
-import { ArticleReaderView } from './ArticleReaderView';
+import { ArticleReaderView, ArticleReaderViewRef } from './ArticleReaderView';
 import { WorkspaceHubView } from '../workspace/WorkspaceHubView';
 import { PaperDiscoveryView } from '../workspace/PaperDiscoveryView';
 import { usePdfStore } from '../../store/usePdfStore';
@@ -46,6 +46,7 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
   onOpenPaperDiscovery,
 }) => {
   const [zoomScale, setZoomScale] = useState<number>(1.2);
+  const [readerFontSizeScale, setReaderFontSizeScale] = useState<number>(1.0);
   const [viewMode, setViewMode] = useState<'pdf' | 'reader'>('pdf');
   const [isPillCollapsed, setIsPillCollapsed] = useState(false);
 
@@ -57,11 +58,16 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
   const [totalMatches, setTotalMatches] = useState(0);
 
   const pdfReaderRef = useRef<PdfReaderRef>(null);
+  const articleReaderRef = useRef<ArticleReaderViewRef>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const handleZoomIn = () => setZoomScale((prev) => Math.min(prev + 0.2, 2.5));
   const handleZoomOut = () => setZoomScale((prev) => Math.max(prev - 0.2, 0.6));
   const handleFitWidth = () => setZoomScale(1.1);
+
+  const handleReaderFontIncrease = () => setReaderFontSizeScale((prev) => Math.min(prev + 0.1, 1.6));
+  const handleReaderFontDecrease = () => setReaderFontSizeScale((prev) => Math.max(prev - 0.1, 0.8));
+  const handleReaderFontReset = () => setReaderFontSizeScale(1.0);
 
   // Target PDF ID can come from activeTab or activePdfId prop
   const targetPdfId = (activeTab?.type === 'pdf' && activeTab.pdfId) ? activeTab.pdfId : activePdfId;
@@ -88,10 +94,10 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
     }
   };
 
-  // Intercept Ctrl+F to focus search input
+  // Intercept Ctrl+F to focus search input in both PDF and Reader mode
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && activeTab?.type === 'pdf' && pdfUrl && viewMode === 'pdf') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && activeTab?.type === 'pdf' && foundPdf) {
         e.preventDefault();
         setIsPillCollapsed(false);
         setTimeout(() => searchInputRef.current?.focus(), 50);
@@ -100,20 +106,26 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, pdfUrl, viewMode]);
+  }, [activeTab, foundPdf]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
     setSearchQuery(query);
-    pdfReaderRef.current?.search(query);
+    if (viewMode === 'pdf') {
+      pdfReaderRef.current?.search(query);
+    } else {
+      articleReaderRef.current?.search(query);
+    }
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       if (e.shiftKey) {
-        pdfReaderRef.current?.prevMatch();
+        if (viewMode === 'pdf') pdfReaderRef.current?.prevMatch();
+        else articleReaderRef.current?.prevMatch();
       } else {
-        pdfReaderRef.current?.nextMatch();
+        if (viewMode === 'pdf') pdfReaderRef.current?.nextMatch();
+        else articleReaderRef.current?.nextMatch();
       }
     } else if (e.key === 'Escape') {
       handleCloseSearch();
@@ -124,7 +136,11 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
     setSearchQuery('');
     setCurrentMatch(0);
     setTotalMatches(0);
-    pdfReaderRef.current?.clearSearch();
+    if (viewMode === 'pdf') {
+      pdfReaderRef.current?.clearSearch();
+    } else {
+      articleReaderRef.current?.clearSearch();
+    }
   };
 
   // 0. Empty Editor State (When all tabs are closed)
@@ -471,8 +487,8 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
                 </button>
               </div>
 
-              {/* Permanent Search Box (when in PDF Mode) */}
-              {viewMode === 'pdf' && hasPdfUrl && (
+              {/* Permanent Search Box (Active in both PDF & Reader Mode) */}
+              {Boolean(foundPdf) && (
                 <div
                   style={{
                     display: 'flex',
@@ -488,7 +504,7 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
                   <input
                     ref={searchInputRef}
                     type="text"
-                    placeholder="Find in PDF..."
+                    placeholder={viewMode === 'pdf' ? "Find in PDF..." : "Find in article..."}
                     value={searchQuery}
                     onChange={handleSearchChange}
                     onKeyDown={handleSearchKeyDown}
@@ -509,7 +525,7 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
                   {searchQuery && (
                     <>
                       <button
-                        onClick={() => pdfReaderRef.current?.prevMatch()}
+                        onClick={() => (viewMode === 'pdf' ? pdfReaderRef.current?.prevMatch() : articleReaderRef.current?.prevMatch())}
                         disabled={totalMatches === 0}
                         title="Previous match (Shift+Enter)"
                         style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '1px', display: 'flex' }}
@@ -517,7 +533,7 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
                         <ChevronUp size={12} />
                       </button>
                       <button
-                        onClick={() => pdfReaderRef.current?.nextMatch()}
+                        onClick={() => (viewMode === 'pdf' ? pdfReaderRef.current?.nextMatch() : articleReaderRef.current?.nextMatch())}
                         disabled={totalMatches === 0}
                         title="Next match (Enter)"
                         style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '1px', display: 'flex' }}
@@ -536,8 +552,8 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
                 </div>
               )}
 
-              {/* Zoom Controls (PDF Mode) */}
-              {viewMode === 'pdf' && hasPdfUrl && (
+              {/* Zoom Controls (PDF Mode) vs Font Size Controls (Reader Mode) */}
+              {viewMode === 'pdf' && hasPdfUrl ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
                   <button
                     onClick={handleZoomOut}
@@ -586,6 +602,57 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
                     }}
                   >
                     Fit
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                  <button
+                    onClick={handleReaderFontDecrease}
+                    title="Decrease Article Font Size (A-)"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-secondary, #a6adc8)',
+                      padding: '2px 6px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      borderRadius: '4px',
+                    }}
+                  >
+                    -
+                  </button>
+                  <span style={{ fontSize: '10px', color: 'var(--text-secondary, #a6adc8)', minWidth: '28px', textAlign: 'center', fontWeight: 600 }}>
+                    {Math.round(readerFontSizeScale * 100)}%
+                  </span>
+                  <button
+                    onClick={handleReaderFontIncrease}
+                    title="Increase Article Font Size (A+)"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-secondary, #a6adc8)',
+                      padding: '2px 6px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      borderRadius: '4px',
+                    }}
+                  >
+                    +
+                  </button>
+                  <button
+                    onClick={handleReaderFontReset}
+                    title="Reset Font Size (100%)"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted, #6c7086)',
+                      padding: '2px 5px',
+                      fontSize: '10px',
+                      cursor: 'pointer',
+                      borderRadius: '4px',
+                    }}
+                  >
+                    Reset
                   </button>
                 </div>
               )}
@@ -664,8 +731,14 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
         {foundPdf ? (
           viewMode === 'reader' || !hasPdfUrl ? (
             <ArticleReaderView
+              ref={articleReaderRef}
               paper={foundPdf}
+              fontSizeScale={readerFontSizeScale}
               onSwitchToPdf={() => setViewMode('pdf')}
+              onMatchCountChange={(curr, tot) => {
+                setCurrentMatch(curr);
+                setTotalMatches(tot);
+              }}
             />
           ) : (
             <PdfReader
