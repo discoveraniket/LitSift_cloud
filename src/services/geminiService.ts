@@ -1,7 +1,7 @@
 import { GoogleGenAI, FunctionCallingConfigMode } from '@google/genai';
 import { usePdfStore } from '../store/usePdfStore';
 import { useGridStore } from '../store/useGridStore';
-import { getPdfBase64 } from './pdfUtils';
+import { getPdfBase64, buildPaperMarkdownContext } from './pdfUtils';
 import { getToolsForMode, agentToolsRegistry, AgentExecutionMode } from './agentToolRegistry';
 import { useAgentStore } from '../store/useAgentStore';
 import { useLogStore } from '../store/useLogStore';
@@ -92,23 +92,33 @@ export async function validateAgentPrerequisites(
     };
   }
 
-  // 4. PDF Binary Blob Availability Guard
+  // 4. Document Content Availability Guard (PDF Binary OR Structured Text / Abstract)
   let pdfBase64: string | undefined;
   if (activePdf) {
-    try {
-      logStore.setActiveStep(`Verifying attached PDF "${activePdf.name}"...`);
-      pdfBase64 = await getPdfBase64(activePdf);
-      if (!pdfBase64 || pdfBase64.length === 0) {
-        throw new Error('PDF binary content is empty.');
+    const hasTextContent = Boolean(
+      (activePdf.abstractText && activePdf.abstractText.trim().length > 0) ||
+      (activePdf.sections && activePdf.sections.length > 0)
+    );
+
+    if (activePdf.base64 || activePdf.file || activePdf.url) {
+      try {
+        logStore.setActiveStep(`Verifying attached document "${activePdf.name}"...`);
+        pdfBase64 = await getPdfBase64(activePdf);
+      } catch (err: any) {
+        logStore.addLog('warn', `PDF binary read note for "${activePdf.name}": ${err.message}`);
+        // If no text content is available, only then report error
+        if (!hasTextContent && isDocumentQuery) {
+          return {
+            valid: false,
+            error: `⚠️ **Unable to read PDF file "${activePdf.name}".**\n\nThe binary file data could not be retrieved from local IndexedDB storage. Please re-upload the PDF in the Left Explorer.`,
+          };
+        }
       }
-    } catch (err: any) {
-      logStore.addLog('error', `PDF binary read failed for "${activePdf.name}": ${err.message}`);
-      if (isDocumentQuery) {
-        return {
-          valid: false,
-          error: `⚠️ **Unable to read PDF file "${activePdf.name}".**\n\nThe binary file data could not be retrieved from local IndexedDB storage. Please re-upload the PDF in the Left Explorer.`,
-        };
-      }
+    } else if (!hasTextContent && isDocumentQuery) {
+      return {
+        valid: false,
+        error: `📄 **No Document Content Available for "${activePdf.name}"**\n\nPlease select or upload a research paper with text or PDF content.`,
+      };
     }
   }
 
@@ -231,7 +241,7 @@ ${rowsSummary || '  (No populated rows)'}
 ${userPrompt}`;
     }
 
-    // Build multi-turn contents array with root multimodal PDF anchor and clean conversation history
+    // Build multi-turn contents array with root document anchor (PDF binary or Structured Markdown) and conversation history
     const contents: any[] = [];
     const rootUserParts: any[] = [];
 
@@ -242,10 +252,17 @@ ${userPrompt}`;
           data: validation.pdfBase64,
         },
       });
+    } else if (validation.activePdf) {
+      const docMarkdown = buildPaperMarkdownContext(validation.activePdf);
+      if (docMarkdown.trim().length > 0) {
+        rootUserParts.push({
+          text: `[ACTIVE DOCUMENT CONTENT: "${activePdfTitle}"]\n${docMarkdown}`,
+        });
+      }
     }
 
     if (isFollowup) {
-      // Turn 0: Root anchor with multimodal PDF binary
+      // Turn 0: Root anchor with document context
       contents.push({
         role: 'user',
         parts: [
@@ -255,7 +272,7 @@ ${userPrompt}`;
       });
       contents.push({
         role: 'model',
-        parts: [{ text: `Understood. I have full multimodal access to "${activePdfTitle}" and will synthesize findings and assist you with managing the structured data grid.` }],
+        parts: [{ text: `Understood. I have full access to "${activePdfTitle}" and will synthesize findings, extract exact verbatim citations, and assist you with managing the structured data grid.` }],
       });
 
       // Historical turns: Clean user prompts and assistant replies without redundant table duplicates

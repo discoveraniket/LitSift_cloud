@@ -3,7 +3,7 @@ import { useGridStore } from '../store/useGridStore';
 import { usePdfStore } from '../store/usePdfStore';
 import { useLogStore } from '../store/useLogStore';
 import { getGeminiApiKey, getSelectedGeminiModel } from './geminiService';
-import { getPdfBase64 } from './pdfUtils';
+import { getPdfBase64, buildPaperMarkdownContext } from './pdfUtils';
 import { GoogleGenAI, Type } from '@google/genai';
 import { GridRow } from '../types/grid';
 
@@ -808,27 +808,57 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
       const contentsParts: any[] = [];
 
       if (pdfInfo) {
-        try {
-          const base64Data = await getPdfBase64(pdfInfo);
-          contentsParts.push({
-            inlineData: {
-              mimeType: 'application/pdf',
-              data: base64Data,
-            },
-          });
-        } catch (e: any) {
-          logStore.addLog('warn', `PDF binary attachment warning: ${e.message}`);
+        let hasPdfBinary = false;
+        if (pdfInfo.base64 || pdfInfo.file || pdfInfo.url) {
+          try {
+            const base64Data = await getPdfBase64(pdfInfo);
+            if (base64Data) {
+              contentsParts.push({
+                inlineData: {
+                  mimeType: 'application/pdf',
+                  data: base64Data,
+                },
+              });
+              hasPdfBinary = true;
+            }
+          } catch (e: any) {
+            logStore.addLog('warn', `PDF binary read note for "${pdfInfo.name}": ${e.message}`);
+          }
+        }
+
+        // If no PDF binary was attached, attach high-density structured Markdown representation
+        if (!hasPdfBinary) {
+          const docMarkdown = buildPaperMarkdownContext(pdfInfo);
+          if (docMarkdown.trim().length > 0) {
+            contentsParts.push({
+              text: `[DOCUMENT CONTENT: "${pdfInfo.title || pdfInfo.name}"]\n${docMarkdown}`,
+            });
+          }
         }
       }
 
-      const schemaPrompt = `You are extracting structured scientific findings from the attached research paper PDF document ("${pdfInfo?.name || targetPdfTitle}").
+      const isAbstractOnly = pdfInfo?.sourceType === 'doi_abstract_only' || (!pdfInfo?.url && !pdfInfo?.file && !pdfInfo?.sections?.length);
 
-Extract concise values for the following schema columns:
+      const schemaPrompt = `You are extracting structured scientific findings from the research paper "${pdfInfo?.title || pdfInfo?.name || targetPdfTitle}".
+
+Extract concise, accurate values for the following schema columns:
 ${headers.map((h, i) => `${i + 1}. "${h}"`).join('\n')}
 
 If the paper tests multiple distinct variables, experimental groups, treatments, or pairwise combinations, emit a DISTINCT ROW for each tested subject/observation that has actual experimental results, ignoring background mentions.
 
-IMPORTANT: For EVERY extracted column value, provide a corresponding grounded citation object in "citations" with the exact page number, section name, verbatim snippet quote from the PDF, and reasoning explanation.
+${isAbstractOnly ? `[CRITICAL ANTI-HALLUCINATION RULE FOR ABSTRACT-ONLY PAPERS]:
+- This document is currently available as an ABSTRACT and metadata summary only (the full-text PDF is paywalled).
+- You must extract ONLY findings explicitly stated in the provided abstract text.
+- If a requested schema column field is NOT mentioned in the abstract, you MUST record the value as: "Not disclosed in abstract (Requires full PDF)".
+- NEVER guess, extrapolate, or hallucinate metrics that are not in the text.` : ''}
+
+[GROUNDED CITATION & EXACT LINE REQUIREMENTS]:
+For EVERY extracted column value, provide a corresponding grounded citation object in "citations" containing:
+1. "pageNumber": PDF page number (integer) if reading a PDF, or 1 if reading structured text/abstract.
+2. "sectionName": Exact section heading (e.g. "Methods §2.1", "Results - Table 2", "Abstract").
+3. "paragraphNumber": Specific paragraph or line location (e.g. "Paragraph 2", "Line 4").
+4. "snippetQuote": The EXACT UNALTERED VERBATIM sentence/line from the text (crucial for exact browser in-page search and highlighting).
+5. "reasoning": Grounded rationale for why this value was extracted.
 
 Return your response strictly as a JSON object with this format:
 {
@@ -841,8 +871,9 @@ Return your response strictly as a JSON object with this format:
           .map(
             (h) => `"${h}": {
           "pageNumber": 1,
-          "sectionName": "Section Name / Results / Methods",
-          "snippetQuote": "Exact verbatim excerpt quote from paper",
+          "sectionName": "Section Name / Results / Abstract",
+          "paragraphNumber": "Paragraph 2",
+          "snippetQuote": "Exact unaltered verbatim sentence quote from paper",
           "reasoning": "Grounded explanation for extracted value"
         }`
           )
@@ -971,6 +1002,8 @@ Return your response strictly as a JSON object with this format:
               normalizedCitationMap[col.field] = {
                 pageNumber: Number(citation.pageNumber) || 1,
                 sectionName: citation.sectionName || 'Extracted Section',
+                paragraphNumber: citation.paragraphNumber || undefined,
+                lineNumber: citation.lineNumber || undefined,
                 snippetQuote: citation.snippetQuote || rowData[col.field] || 'Verified excerpt',
                 reasoning: citation.reasoning || `Extracted value "${rowData[col.field]}" from document`,
                 confidence: citation.confidence || 0.96,

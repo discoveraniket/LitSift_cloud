@@ -14,6 +14,8 @@ export interface CellCitationMessage {
 export interface CellCitation {
   pageNumber: number;
   sectionName: string;
+  paragraphNumber?: string;
+  lineNumber?: string;
   snippetQuote: string;
   reasoning: string;
   confidence: number;

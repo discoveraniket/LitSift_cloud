@@ -174,4 +174,75 @@ describe('Agent Multi-Step Execution Store & Tools', () => {
     expect(messages[0].thinkingTokens).toBe(840);
     expect(messages[0].executionTime).toBe(2.4);
   });
+
+  it('validates abstract-only documents as valid prerequisites without throwing PDF binary errors', async () => {
+    const { validateAgentPrerequisites } = await import('../services/geminiService');
+    const { usePdfStore } = await import('../store/usePdfStore');
+
+    process.env.GEMINI_API_KEY = 'test-api-key';
+
+    useGridStore.setState({
+      columns: [{ field: 'burst_size', headerName: 'Burst Size' }],
+    });
+
+    usePdfStore.setState({
+      pdfs: [
+        {
+          id: 'doi-paper-paywalled',
+          name: 'Paywalled Phage Study',
+          title: 'Genomics of Phage T4',
+          abstractText: 'Phage T4 exhibits a burst size of 150 virions per cell with a 25 min latent period.',
+          status: 'Ready',
+          oaStatus: 'closed',
+          sourceType: 'doi_abstract_only',
+          uploadedAt: Date.now(),
+        },
+      ],
+      activePdfId: 'doi-paper-paywalled',
+    });
+
+    const validation = await validateAgentPrerequisites('Extract burst size and latent period from paper');
+    expect(validation.valid).toBe(true);
+    expect(validation.activePdf?.abstractText).toContain('burst size of 150');
+  });
+
+  it('generates high-density structured Markdown document context from paper metadata and sections', async () => {
+    const { buildPaperMarkdownContext } = await import('../services/pdfUtils');
+
+    const mockPaper = {
+      id: 'paper-123',
+      name: 'CRISPR Paper',
+      title: 'High-Fidelity CRISPR-Cas9 Specificity',
+      doi: '10.1038/s41467-020-17849-0',
+      journal: 'Nature Communications',
+      year: 2020,
+      authors: [{ name: 'Dr. Jane Smith', affiliation: 'Broad Institute' }],
+      oaStatus: 'gold',
+      citationCount: 120,
+      abstractText: 'Engineered Cas9 variants reduce off-target cleavage by 98%.',
+      sections: [
+        { heading: 'Results §2.1 Cleavage Specificity', content: 'On-target activity was preserved at 94% across 40 loci.' },
+      ],
+      tables: [
+        {
+          id: 'tbl-1',
+          title: 'Table 1: Target Loci Specificity',
+          rows: [
+            ['Target Gene', 'On-Target %', 'Off-Target %'],
+            ['EMX1', '94.2%', '0.1%'],
+          ],
+        },
+      ],
+    };
+
+    const markdown = buildPaperMarkdownContext(mockPaper);
+    expect(markdown).toContain('# High-Fidelity CRISPR-Cas9 Specificity');
+    expect(markdown).toContain('10.1038/s41467-020-17849-0');
+    expect(markdown).toContain('Nature Communications (2020)');
+    expect(markdown).toContain('Engineered Cas9 variants reduce off-target');
+    expect(markdown).toContain('## Results §2.1 Cleavage Specificity');
+    expect(markdown).toContain('| Target Gene | On-Target % | Off-Target % |');
+    expect(markdown).toContain('| EMX1 | 94.2% | 0.1% |');
+  });
 });
+

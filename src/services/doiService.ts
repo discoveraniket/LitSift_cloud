@@ -256,7 +256,29 @@ export async function resolvePaperByDoi(
   let abstractText = reconstructAbstract(openAlexData?.abstract_inverted_index);
 
   // Extract PMCID for Structured Text
-  const pmcid = openAlexData?.ids?.pmcid?.replace(/^PMC/, '') || undefined;
+  let pmcid = openAlexData?.ids?.pmcid?.replace(/^PMC/, '') || undefined;
+
+  // Fallback: If OpenAlex did not provide a PMCID, query Europe PMC directly by DOI
+  if (!pmcid) {
+    try {
+      const epmcSearchUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:"${encodeURIComponent(doi)}"&format=json&resultType=lite`;
+      const epmcRes = await fetch(epmcSearchUrl);
+      if (epmcRes.ok) {
+        const epmcData = await epmcRes.json();
+        const firstHit = epmcData?.resultList?.result?.[0];
+        if (firstHit) {
+          if (firstHit.pmcid) {
+            pmcid = String(firstHit.pmcid).replace(/^PMC/, '');
+          }
+          if (firstHit.hasPDF === 'Y' && firstHit.pmcid && !pdfDownloadUrl) {
+            pdfDownloadUrl = `https://europepmc.org/backend/ptpmcrender.fcgi?accid=${firstHit.pmcid}&blobtype=pdf`;
+          }
+        }
+      }
+    } catch (epmcErr) {
+      console.warn('Europe PMC direct DOI search note:', epmcErr);
+    }
+  }
 
   onProgress?.({
     step: 'structured_content',
@@ -291,6 +313,33 @@ export async function resolvePaperByDoi(
   let pdfBase64: string | undefined;
   let sourceType: DocumentSourceType = 'doi_abstract_only';
 
+  const tryDownloadPdf = async (url: string): Promise<boolean> => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { Accept: 'application/pdf' },
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        const blob = await res.blob();
+        if (blob.size > 20 && (contentType.includes('pdf') || blob.type.includes('pdf') || url.includes('.pdf') || url.includes('fcgi'))) {
+          pdfBlob = blob;
+          pdfBlobUrl = URL.createObjectURL(blob);
+          pdfBase64 = await blobToBase64(blob);
+          sourceType = 'doi_full_pdf';
+          return true;
+        }
+      }
+    } catch (e) {
+      console.warn(`PDF download attempt from ${url} failed:`, e);
+    }
+    return false;
+  };
+
   if (pdfDownloadUrl) {
     onProgress?.({
       step: 'downloading_pdf',
@@ -298,35 +347,21 @@ export async function resolvePaperByDoi(
       progressPercent: 80,
     });
 
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
+    const success = await tryDownloadPdf(pdfDownloadUrl);
 
-      const pdfRes = await fetch(pdfDownloadUrl, {
-        signal: controller.signal,
-        headers: { Accept: 'application/pdf' },
-      });
-      clearTimeout(timeoutId);
-
-      if (pdfRes.ok) {
-        const contentType = pdfRes.headers.get('content-type') || '';
-        const blob = await pdfRes.blob();
-        
-        // Ensure it's a valid PDF blob
-        if (blob.size > 20 && (contentType.includes('pdf') || blob.type.includes('pdf') || pdfDownloadUrl.endsWith('.pdf'))) {
-          pdfBlob = blob;
-          pdfBlobUrl = URL.createObjectURL(blob);
-          pdfBase64 = await blobToBase64(blob);
-          sourceType = 'doi_full_pdf';
-        }
-      }
-    } catch (pdfErr) {
-      console.warn(`Direct PDF download for ${doi} failed (CORS or network):`, pdfErr);
-      // Fallback gracefully to structured text / abstract
-      sourceType = sections.length > 0 ? 'doi_structured' : 'doi_abstract_only';
+    // If publisher direct download failed due to CORS, and we have a PMCID, try Europe PMC's open CORS PDF mirror
+    if (!success && pmcid) {
+      const epmcPdfUrl = `https://europepmc.org/backend/ptpmcrender.fcgi?accid=PMC${pmcid}&blobtype=pdf`;
+      await tryDownloadPdf(epmcPdfUrl);
     }
-  } else if (sections.length > 0) {
-    sourceType = 'doi_structured';
+  } else if (pmcid) {
+    // If no direct publisher PDF URL was provided, attempt download from Europe PMC PDF mirror
+    const epmcPdfUrl = `https://europepmc.org/backend/ptpmcrender.fcgi?accid=PMC${pmcid}&blobtype=pdf`;
+    await tryDownloadPdf(epmcPdfUrl);
+  }
+
+  if (!pdfBlob) {
+    sourceType = sections.length > 0 ? 'doi_structured' : 'doi_abstract_only';
   }
 
   onProgress?.({
