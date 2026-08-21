@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, ChevronUp, ChevronDown, X, Download, Table, FileArchive, Keyboard } from 'lucide-react';
+import { Search, ChevronUp, ChevronDown, X, Download, Table, FileArchive, Keyboard, BookOpen, FileText, Link } from 'lucide-react';
 import { AgGridWrapper } from '../data-grid/AgGridWrapper';
 import { PdfReader, PdfReaderRef } from './PdfReader';
+import { ArticleReaderView } from './ArticleReaderView';
 import { WorkspaceHubView } from '../workspace/WorkspaceHubView';
+import { ImportDoiModal } from '../explorer/ImportDoiModal';
 import { usePdfStore } from '../../store/usePdfStore';
 import { downloadPdfFile } from '../../services/workspaceService';
 import { EditorTab } from '../../types/layout';
@@ -29,7 +31,11 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
   onOpenWorkspaceHub,
 }) => {
   const [zoomScale, setZoomScale] = useState<number>(1.2);
+  const [viewMode, setViewMode] = useState<'pdf' | 'reader'>('pdf');
+  const [showDoiModal, setShowDoiModal] = useState(false);
+
   const pdfs = usePdfStore((state) => state.pdfs);
+  const setActivePdf = usePdfStore((state) => state.setActivePdf);
 
   // In-Viewer Find / Search Bar State
   const [showSearchBar, setShowSearchBar] = useState(false);
@@ -47,9 +53,16 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
   // Target PDF ID can come from activeTab or activePdfId prop
   const targetPdfId = (activeTab?.type === 'pdf' && activeTab.pdfId) ? activeTab.pdfId : activePdfId;
 
-  // Retrieve matching PDF url from usePdfStore
+  // Retrieve matching paper document from usePdfStore
   const foundPdf = pdfs.find((p) => p.id === targetPdfId || p.name === activePdfTitle);
   const pdfUrl = foundPdf?.url || '';
+
+  // Auto-switch to Reader mode if document has no PDF binary
+  useEffect(() => {
+    if (foundPdf && !foundPdf.url && (foundPdf.abstractText || (foundPdf.sections && foundPdf.sections.length > 0))) {
+      setViewMode('reader');
+    }
+  }, [foundPdf?.id, foundPdf?.url]);
 
   const handleDownloadActivePdf = () => {
     if (foundPdf) {
@@ -65,7 +78,7 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
   // Intercept Ctrl+F to open the in-viewer PDF search bar
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && activeTab?.type === 'pdf' && pdfUrl) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && activeTab?.type === 'pdf' && pdfUrl && viewMode === 'pdf') {
         e.preventDefault();
         setShowSearchBar(true);
         setTimeout(() => searchInputRef.current?.focus(), 50);
@@ -76,7 +89,7 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, pdfUrl, showSearchBar]);
+  }, [activeTab, pdfUrl, showSearchBar, viewMode]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
@@ -160,6 +173,33 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
           {/* Quick Action Buttons */}
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '6px' }}>
             <button
+              onClick={() => setShowDoiModal(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                borderRadius: '6px',
+                background: 'rgba(137, 180, 250, 0.15)',
+                border: '1px solid rgba(137, 180, 250, 0.35)',
+                color: 'var(--accent-primary, #89b4fa)',
+                fontWeight: 600,
+                fontSize: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(137, 180, 250, 0.25)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(137, 180, 250, 0.15)';
+              }}
+            >
+              <Link size={14} />
+              <span>Import Paper by DOI</span>
+            </button>
+
+            <button
               onClick={onNavigateToGrid}
               style={{
                 display: 'flex',
@@ -194,23 +234,23 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
                 gap: '8px',
                 padding: '8px 16px',
                 borderRadius: '6px',
-                background: 'rgba(137, 180, 250, 0.12)',
-                border: '1px solid rgba(137, 180, 250, 0.3)',
-                color: 'var(--accent-primary, #89b4fa)',
+                background: 'var(--bg-tertiary, #11111b)',
+                border: '1px solid var(--border-subtle, #313244)',
+                color: 'var(--text-secondary, #a6adc8)',
                 fontWeight: 600,
                 fontSize: '12px',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
               }}
               onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.background = 'rgba(137, 180, 250, 0.2)';
+                (e.currentTarget as HTMLElement).style.background = 'rgba(137, 180, 250, 0.1)';
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.background = 'rgba(137, 180, 250, 0.12)';
+                (e.currentTarget as HTMLElement).style.background = 'var(--bg-tertiary, #11111b)';
               }}
             >
               <FileArchive size={14} />
-              <span>Open Workspace Hub</span>
+              <span>Workspace Hub</span>
             </button>
           </div>
 
@@ -231,12 +271,12 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
             }}
           >
             <div style={{ fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Keyboard size={13} /> Keyboard Shortcuts
+              <Keyboard size={13} /> Quick Guide
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-subtle, #313244)', paddingTop: '6px' }}>
-              <span>Toggle Left Explorer</span>
-              <kbd style={{ background: 'var(--bg-tertiary, #11111b)', border: '1px solid var(--border-subtle, #313244)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Ctrl + B</kbd>
+              <span>Paste Scientific DOI</span>
+              <span style={{ color: 'var(--accent-primary)' }}>Click "Import Paper by DOI" or 🔗 in Left Explorer</span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -245,11 +285,20 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Open Research Papers</span>
-              <span style={{ color: 'var(--text-muted)' }}>Click paper in Left Explorer</span>
+              <span>Toggle Left Explorer</span>
+              <kbd style={{ background: 'var(--bg-tertiary, #11111b)', border: '1px solid var(--border-subtle, #313244)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>Ctrl + B</kbd>
             </div>
           </div>
         </div>
+
+        <ImportDoiModal
+          isOpen={showDoiModal}
+          onClose={() => setShowDoiModal(false)}
+          onPaperImported={(paper) => {
+            setActivePdf(paper.id);
+            if (onNavigateToPdf) onNavigateToPdf(paper.id);
+          }}
+        />
       </main>
     );
   }
@@ -279,62 +328,138 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
     );
   }
 
-  // 3. PDF Mode
+  // 3. Paper Document Mode (PDF View or Structured Reader View)
+  const hasPdfUrl = Boolean(pdfUrl);
+
   return (
-    <main className="panel central-viewer pdf-mode" style={{ position: 'relative', height: '100%' }}>
-      {/* Floating In-Viewer Controls Overlay */}
-      {pdfUrl && (
+    <main className="panel central-viewer pdf-mode" style={{ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Top Multi-View & Controls Overlay Header */}
+      {foundPdf && (
         <div
-          className="viewer-controls"
           style={{
-            position: 'absolute',
-            top: '6px',
-            right: '12px',
-            zIndex: 20,
+            height: '38px',
+            background: 'var(--bg-tertiary, #11111b)',
+            borderBottom: '1px solid var(--border-subtle, #313244)',
             display: 'flex',
             alignItems: 'center',
-            gap: '4px',
-            background: 'var(--bg-tertiary)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: '6px',
-            padding: '2px 6px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            justifyContent: 'space-between',
+            padding: '0 12px',
+            zIndex: 20,
+            flexShrink: 0,
           }}
         >
-          <button
-            className="control-btn"
-            onClick={handleDownloadActivePdf}
-            title={`Download ${activePdfTitle} to your computer`}
-            style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 7px', color: 'var(--accent-primary)' }}
-          >
-            <Download size={11} /> PDF
-          </button>
-          <button
-            className="control-btn"
-            onClick={() => {
-              setShowSearchBar(true);
-              setTimeout(() => searchInputRef.current?.focus(), 50);
-            }}
-            title="Find text in PDF (Ctrl+F)"
-            style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 7px' }}
-          >
-            <Search size={11} /> Find
-          </button>
-          <button className="control-btn" onClick={handleZoomOut}>Zoom Out (-)</button>
-          <span style={{ fontSize: '10px', color: 'var(--text-secondary)', padding: '0 4px', fontWeight: 600 }}>
-            {Math.round(zoomScale * 100)}%
-          </span>
-          <button className="control-btn" onClick={handleZoomIn}>Zoom In (+)</button>
-          <button className="control-btn" onClick={handleFitWidth}>Fit Width</button>
+          {/* Left: View Mode Segmented Switcher */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-secondary, #181825)', padding: '2px', borderRadius: '6px', border: '1px solid var(--border-subtle, #313244)' }}>
+            <button
+              onClick={() => setViewMode('pdf')}
+              disabled={!hasPdfUrl}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '4px 10px',
+                borderRadius: '4px',
+                border: 'none',
+                background: viewMode === 'pdf' ? 'rgba(137, 180, 250, 0.2)' : 'transparent',
+                color: viewMode === 'pdf' ? 'var(--accent-primary, #89b4fa)' : hasPdfUrl ? 'var(--text-secondary, #a6adc8)' : 'var(--text-muted, #585b70)',
+                fontSize: '11.5px',
+                fontWeight: viewMode === 'pdf' ? 600 : 500,
+                cursor: hasPdfUrl ? 'pointer' : 'not-allowed',
+                opacity: hasPdfUrl ? 1 : 0.5,
+                transition: 'all 0.15s ease',
+              }}
+              title={hasPdfUrl ? 'Switch to PDF Canvas Reader' : 'PDF not available for this abstract-only paper'}
+            >
+              <FileText size={13} />
+              <span>PDF View</span>
+            </button>
+
+            <button
+              onClick={() => setViewMode('reader')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '4px 10px',
+                borderRadius: '4px',
+                border: 'none',
+                background: viewMode === 'reader' ? 'rgba(137, 180, 250, 0.2)' : 'transparent',
+                color: viewMode === 'reader' ? 'var(--accent-primary, #89b4fa)' : 'var(--text-secondary, #a6adc8)',
+                fontSize: '11.5px',
+                fontWeight: viewMode === 'reader' ? 600 : 500,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              title="Switch to Structured Article Reader"
+            >
+              <BookOpen size={13} />
+              <span>Reader View</span>
+            </button>
+          </div>
+
+          {/* Right: PDF Zoom Controls & Actions (Visible when in PDF Mode) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {viewMode === 'pdf' && hasPdfUrl && (
+              <>
+                <button
+                  className="control-btn"
+                  onClick={handleDownloadActivePdf}
+                  title={`Download ${activePdfTitle} to your computer`}
+                  style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 7px', color: 'var(--accent-primary)' }}
+                >
+                  <Download size={11} /> PDF
+                </button>
+
+                <button
+                  className="control-btn"
+                  onClick={() => {
+                    setShowSearchBar(true);
+                    setTimeout(() => searchInputRef.current?.focus(), 50);
+                  }}
+                  title="Find text in PDF (Ctrl+F)"
+                  style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 7px' }}
+                >
+                  <Search size={11} /> Find
+                </button>
+
+                <button className="control-btn" onClick={handleZoomOut}>-</button>
+                <span style={{ fontSize: '10px', color: 'var(--text-secondary)', padding: '0 4px', fontWeight: 600 }}>
+                  {Math.round(zoomScale * 100)}%
+                </span>
+                <button className="control-btn" onClick={handleZoomIn}>+</button>
+                <button className="control-btn" onClick={handleFitWidth}>Fit</button>
+              </>
+            )}
+
+            {foundPdf.doi && (
+              <a
+                href={foundPdf.landingPageUrl || `https://doi.org/${foundPdf.doi}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '11px',
+                  color: 'var(--text-muted, #6c7086)',
+                  textDecoration: 'none',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                }}
+              >
+                <span>DOI</span>
+              </a>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Floating In-Viewer Find Bar */}
-      {showSearchBar && pdfUrl && (
+      {/* Floating In-Viewer Find Bar (PDF Mode) */}
+      {showSearchBar && pdfUrl && viewMode === 'pdf' && (
         <div
           style={{
             position: 'absolute',
-            top: '38px',
+            top: '46px',
             right: '24px',
             zIndex: 100,
             background: 'var(--bg-surface, #252538)',
@@ -418,18 +543,26 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
         </div>
       )}
 
-      <div className="viewer-placeholder-content" style={{ padding: 0, height: 'calc(100% - 32px)' }}>
-        {pdfUrl ? (
-          <PdfReader
-            ref={pdfReaderRef}
-            key={targetPdfId || activePdfTitle}
-            pdfUrl={pdfUrl}
-            zoomScale={zoomScale}
-            onMatchCountChange={(curr, tot) => {
-              setCurrentMatch(curr);
-              setTotalMatches(tot);
-            }}
-          />
+      {/* Main Content Area */}
+      <div style={{ flex: 1, overflow: 'hidden', height: 'calc(100% - 38px)' }}>
+        {foundPdf ? (
+          viewMode === 'reader' || !hasPdfUrl ? (
+            <ArticleReaderView
+              paper={foundPdf}
+              onSwitchToPdf={() => setViewMode('pdf')}
+            />
+          ) : (
+            <PdfReader
+              ref={pdfReaderRef}
+              key={targetPdfId || activePdfTitle}
+              pdfUrl={pdfUrl}
+              zoomScale={zoomScale}
+              onMatchCountChange={(curr, tot) => {
+                setCurrentMatch(curr);
+                setTotalMatches(tot);
+              }}
+            />
+          )
         ) : (
           <div
             style={{
@@ -449,7 +582,7 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
               No Research Paper Selected
             </div>
             <div style={{ fontSize: '12px', maxWidth: '360px', lineHeight: 1.5 }}>
-              Upload a research PDF using the <strong>+</strong> button under <strong>RESEARCH PAPERS</strong> in the left explorer panel to begin synthesis.
+              Upload a research PDF or click <strong>🔗 Import DOI</strong> to begin synthesis.
             </div>
           </div>
         )}
@@ -457,3 +590,4 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
     </main>
   );
 };
+

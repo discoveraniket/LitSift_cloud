@@ -1,14 +1,35 @@
 import Dexie, { Table } from 'dexie';
 import { SchemaColumn, GridRow } from '../types/grid';
 import { AgentMessage } from '../types/agent';
+import { OpenAccessStatus, DocumentSourceType, PaperAuthor, PaperSection, PaperTable, PaperFigure } from '../types/paper';
 
 export interface StoredPdf {
   id: string;
   name: string;
-  blob: Blob;
+  blob?: Blob;
   base64?: string;
   status: 'Ready' | 'Extracted' | 'Error';
   uploadedAt: number;
+  
+  // Rich Paper Metadata
+  doi?: string;
+  pmcid?: string;
+  title?: string;
+  authors?: PaperAuthor[];
+  journal?: string;
+  year?: number;
+  citationCount?: number;
+  oaStatus?: OpenAccessStatus;
+  sourceType?: DocumentSourceType;
+  
+  // Abstract & Structured Content
+  abstractText?: string;
+  sections?: PaperSection[];
+  tables?: PaperTable[];
+  figures?: PaperFigure[];
+  landingPageUrl?: string;
+  pdfDownloadUrl?: string;
+  errorMessage?: string;
 }
 
 export interface StoredGridTable {
@@ -41,3 +62,4 @@ export class LitSiftDatabase extends Dexie {
 }
 
 export const db = new LitSiftDatabase();
+

@@ -1,30 +1,26 @@
 import { create } from 'zustand';
 import { db, StoredPdf } from '../db/litsiftDb';
+import { PaperDocumentInfo } from '../types/paper';
 
-export interface PdfDocumentInfo {
-  id: string;
-  name: string;
-  url: string; // Blob Object URL
-  status: 'Ready' | 'Extracted' | 'Error';
-  file?: File | Blob;
-  base64?: string;
-}
+export type { PaperDocumentInfo as PdfDocumentInfo };
 
 interface PdfState {
-  pdfs: PdfDocumentInfo[];
+  pdfs: PaperDocumentInfo[];
   activePdfId: string;
   isHydrated: boolean;
 
   // Actions
   hydrateFromDb: () => Promise<void>;
-  addPdfFile: (file: File) => Promise<PdfDocumentInfo>;
+  addPdfFile: (file: File) => Promise<PaperDocumentInfo>;
+  addPaperDocument: (paper: PaperDocumentInfo) => Promise<PaperDocumentInfo>;
+  updatePaperDocument: (id: string, updates: Partial<PaperDocumentInfo>) => Promise<void>;
   addPdfUrl: (id: string, name: string, url: string) => Promise<void>;
   removePdf: (id: string) => Promise<void>;
   clearAllPdfs: () => Promise<void>;
   setActivePdf: (id: string) => void;
   setPdfBase64: (id: string, base64: string) => Promise<void>;
-  getPdf: (id: string) => PdfDocumentInfo | undefined;
-  getActivePdf: () => PdfDocumentInfo | undefined;
+  getPdf: (id: string) => PaperDocumentInfo | undefined;
+  getActivePdf: () => PaperDocumentInfo | undefined;
 }
 
 export const usePdfStore = create<PdfState>((set, get) => ({
@@ -36,15 +32,39 @@ export const usePdfStore = create<PdfState>((set, get) => ({
     try {
       const stored = await db.pdfs.toArray();
       if (stored.length > 0) {
-        const loadedPdfs: PdfDocumentInfo[] = stored.map((item) => {
-          const blobUrl = URL.createObjectURL(item.blob);
+        const loadedPdfs: PaperDocumentInfo[] = stored.map((item) => {
+          let blobUrl = '';
+          if (item.blob) {
+            try {
+              blobUrl = URL.createObjectURL(item.blob);
+            } catch (e) {
+              console.warn('Failed to create blob URL for', item.name, e);
+            }
+          }
           return {
             id: item.id,
-            name: item.name,
+            name: item.name || item.title || 'Untitled Paper',
             url: blobUrl,
-            status: item.status,
+            status: item.status || 'Ready',
             file: item.blob,
             base64: item.base64,
+            doi: item.doi,
+            pmcid: item.pmcid,
+            title: item.title,
+            authors: item.authors,
+            journal: item.journal,
+            year: item.year,
+            citationCount: item.citationCount,
+            oaStatus: item.oaStatus || 'unknown',
+            sourceType: item.sourceType || (item.blob ? 'pdf_upload' : 'doi_abstract_only'),
+            abstractText: item.abstractText,
+            sections: item.sections,
+            tables: item.tables,
+            figures: item.figures,
+            landingPageUrl: item.landingPageUrl,
+            pdfDownloadUrl: item.pdfDownloadUrl,
+            uploadedAt: item.uploadedAt || Date.now(),
+            errorMessage: item.errorMessage,
           };
         });
 
@@ -70,12 +90,16 @@ export const usePdfStore = create<PdfState>((set, get) => ({
     const newPdfId = `pdf-${Date.now()}`;
     const blobUrl = URL.createObjectURL(file);
 
-    const newPdf: PdfDocumentInfo = {
+    const newPdf: PaperDocumentInfo = {
       id: newPdfId,
       name: file.name,
+      title: file.name.replace(/\.pdf$/i, ''),
       url: blobUrl,
       status: 'Ready',
       file,
+      oaStatus: 'unknown',
+      sourceType: 'pdf_upload',
+      uploadedAt: Date.now(),
     };
 
     // Save to IndexedDB
@@ -83,8 +107,11 @@ export const usePdfStore = create<PdfState>((set, get) => ({
       const storedPdf: StoredPdf = {
         id: newPdfId,
         name: file.name,
+        title: newPdf.title,
         blob: file,
         status: 'Ready',
+        oaStatus: 'unknown',
+        sourceType: 'pdf_upload',
         uploadedAt: Date.now(),
       };
       await db.pdfs.put(storedPdf);
@@ -101,11 +128,83 @@ export const usePdfStore = create<PdfState>((set, get) => ({
     return newPdf;
   },
 
+  addPaperDocument: async (paper: PaperDocumentInfo) => {
+    // Save to IndexedDB
+    try {
+      const storedPdf: StoredPdf = {
+        id: paper.id,
+        name: paper.name,
+        title: paper.title,
+        blob: paper.file,
+        base64: paper.base64,
+        status: paper.status,
+        doi: paper.doi,
+        pmcid: paper.pmcid,
+        authors: paper.authors,
+        journal: paper.journal,
+        year: paper.year,
+        citationCount: paper.citationCount,
+        oaStatus: paper.oaStatus,
+        sourceType: paper.sourceType,
+        abstractText: paper.abstractText,
+        sections: paper.sections,
+        tables: paper.tables,
+        figures: paper.figures,
+        landingPageUrl: paper.landingPageUrl,
+        pdfDownloadUrl: paper.pdfDownloadUrl,
+        errorMessage: paper.errorMessage,
+        uploadedAt: paper.uploadedAt || Date.now(),
+      };
+      await db.pdfs.put(storedPdf);
+      await db.settings.put({ key: 'activePdfId', value: paper.id });
+    } catch (err) {
+      console.error('Error saving Paper Document to IndexedDB:', err);
+    }
+
+    set((state) => ({
+      pdfs: [...state.pdfs.filter((p) => p.id !== paper.id), paper],
+      activePdfId: paper.id,
+    }));
+
+    return paper;
+  },
+
+  updatePaperDocument: async (id: string, updates: Partial<PaperDocumentInfo>) => {
+    set((state) => ({
+      pdfs: state.pdfs.map((p) => (p.id === id ? { ...p, ...updates } : p)),
+    }));
+
+    try {
+      const existing = await db.pdfs.get(id);
+      if (existing) {
+        const updated: StoredPdf = {
+          ...existing,
+          ...updates,
+          blob: updates.file !== undefined ? updates.file : existing.blob,
+        };
+        await db.pdfs.put(updated);
+      }
+    } catch (err) {
+      console.warn('Error updating paper document in IndexedDB:', err);
+    }
+  },
+
   addPdfUrl: async (id, name, url) => {
     set((state) => {
       if (state.pdfs.some((p) => p.id === id)) return state;
       return {
-        pdfs: [...state.pdfs, { id, name, url, status: 'Ready' }],
+        pdfs: [
+          ...state.pdfs,
+          {
+            id,
+            name,
+            url,
+            status: 'Ready',
+            oaStatus: 'unknown',
+            sourceType: 'pdf_upload',
+            uploadedAt: Date.now(),
+          },
+        ],
       };
     });
   },
@@ -177,3 +276,4 @@ export const usePdfStore = create<PdfState>((set, get) => ({
 
   getActivePdf: () => get().pdfs.find((p) => p.id === get().activePdfId),
 }));
+

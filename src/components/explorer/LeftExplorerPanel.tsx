@@ -4,6 +4,7 @@ import { useAgentStore } from '../../store/useAgentStore';
 import { usePdfStore } from '../../store/usePdfStore';
 import { useLogStore } from '../../store/useLogStore';
 import { downloadPdfFile } from '../../services/workspaceService';
+import { ImportDoiModal } from './ImportDoiModal';
 import {
   ChevronDown,
   ChevronRight,
@@ -19,6 +20,7 @@ import {
   Check,
   Maximize2,
   FileArchive,
+  Link,
 } from 'lucide-react';
 
 interface LeftExplorerPanelProps {
@@ -44,10 +46,12 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   const [logsOpen, setLogsOpen] = useState(true);
   const [activeItem, setActiveItem] = useState<string>('master-grid');
   const [copiedLogs, setCopiedLogs] = useState(false);
+  const [showDoiModal, setShowDoiModal] = useState(false);
 
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
+
 
   const { pdfs, addPdfFile, setActivePdf, removePdf } = usePdfStore();
 
@@ -346,6 +350,21 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span
                 className="vscode-action-icon"
+                title="Import Paper by DOI (Automatic Open Access & Metadata Resolution)"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDoiModal(true);
+                }}
+                style={{
+                  color: 'var(--accent-primary, #89b4fa)',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <Link size={13} />
+              </span>
+              <span
+                className="vscode-action-icon"
                 title="Select Folder (Auto-scans & uploads all PDFs)"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -369,107 +388,180 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
 
           {papersOpen && (
             <div>
-              {pdfs.map((file) => (
+              {pdfs.map((file) => {
+                const isOa = file.oaStatus && file.oaStatus !== 'closed' && file.oaStatus !== 'unknown';
+
+                return (
+                  <div
+                    key={file.id}
+                    className={`vscode-tree-item ${activeItem === file.id ? 'active' : ''}`}
+                    onClick={() => {
+                      setActivePdf(file.id);
+                      onSelectPdf(file.id, file.name);
+                      setActiveItem(file.id);
+                    }}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      padding: '6px 8px',
+                      position: 'relative',
+                      borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
+                    }}
+                  >
+                    {/* Top Row: Icon + Title + Status Badges */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
+                      <FileText
+                        size={13}
+                        color={isOa ? 'var(--accent-success, #a6e3a1)' : 'var(--accent-secondary, #b4befe)'}
+                        style={{ flexShrink: 0 }}
+                      />
+                      
+                      <span
+                        style={{
+                          flex: 1,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          fontSize: '12px',
+                          fontWeight: activeItem === file.id ? 600 : 400,
+                        }}
+                        title={file.title || file.name}
+                      >
+                        {file.title || file.name}
+                      </span>
+
+                      {/* OA Badge */}
+                      {isOa && (
+                        <span
+                          style={{
+                            fontSize: '8.5px',
+                            fontWeight: 700,
+                            padding: '0px 4px',
+                            borderRadius: '4px',
+                            background: 'rgba(166, 227, 161, 0.2)',
+                            color: '#a6e3a1',
+                            flexShrink: 0,
+                          }}
+                        >
+                          OA
+                        </span>
+                      )}
+
+                      {/* Download Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadPdfFile({
+                            name: file.name,
+                            file: file.file,
+                            base64: file.base64,
+                            url: file.url,
+                          });
+                        }}
+                        title={`Download "${file.name}"`}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          padding: '2px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          borderRadius: '3px',
+                          opacity: 0.7,
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.color = 'var(--accent-primary, #89b4fa)';
+                          (e.currentTarget as HTMLElement).style.opacity = '1';
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
+                          (e.currentTarget as HTMLElement).style.opacity = '0.7';
+                        }}
+                      >
+                        <Download size={12} />
+                      </button>
+
+                      {/* Delete Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Delete paper "${file.name}" from your workspace?`)) {
+                            removePdf(file.id);
+                            if (activeItem === file.id) {
+                              onOpenMasterGrid();
+                              setActiveItem('master-grid');
+                            }
+                          }
+                        }}
+                        title={`Delete ${file.name}`}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          padding: '2px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          borderRadius: '3px',
+                          opacity: 0.7,
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.color = 'var(--accent-danger, #f38ba8)';
+                          (e.currentTarget as HTMLElement).style.opacity = '1';
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
+                          (e.currentTarget as HTMLElement).style.opacity = '0.7';
+                        }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+
+                    {/* Bottom Sub-row: Journal, Year, DOI indicator */}
+                    {(file.journal || file.year || file.doi) && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '10px',
+                          color: 'var(--text-muted, #6c7086)',
+                          paddingLeft: '19px',
+                        }}
+                      >
+                        {file.journal && (
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+                            {file.journal}
+                          </span>
+                        )}
+                        {file.year && <span>• {file.year}</span>}
+                        {file.url ? (
+                          <span style={{ color: 'var(--accent-primary, #89b4fa)', fontSize: '9px' }}>[PDF]</span>
+                        ) : (
+                          <span style={{ color: 'var(--accent-warning, #f9e2af)', fontSize: '9px' }}>[Reader]</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {pdfs.length === 0 && (
                 <div
-                  key={file.id}
-                  className={`vscode-tree-item ${activeItem === file.id ? 'active' : ''}`}
-                  onClick={() => {
-                    setActivePdf(file.id);
-                    onSelectPdf(file.id, file.name);
-                    setActiveItem(file.id);
+                  style={{
+                    padding: '12px 10px',
+                    fontSize: '11px',
+                    color: 'var(--text-muted, #6c7086)',
+                    textAlign: 'center',
+                    lineHeight: 1.5,
                   }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
                 >
-                  <FileText size={13} color="var(--accent-secondary)" style={{ flexShrink: 0 }} />
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>
-                    {file.name}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: '9px',
-                      padding: '1px 5px',
-                      borderRadius: '8px',
-                      background: file.status === 'Extracted' ? 'rgba(166, 227, 161, 0.2)' : 'var(--bg-tertiary)',
-                      color: file.status === 'Extracted' ? 'var(--accent-success)' : 'var(--text-secondary)',
-                      border: file.status === 'Extracted' ? '1px solid var(--accent-success)' : '1px solid var(--border-subtle)',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {file.status}
-                  </span>
-
-                  {/* Download Individual PDF Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      downloadPdfFile({
-                        name: file.name,
-                        file: file.file,
-                        base64: file.base64,
-                        url: file.url,
-                      });
-                    }}
-                    title={`Download "${file.name}" to disk`}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      padding: '2px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      borderRadius: '3px',
-                      opacity: 0.7,
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.color = 'var(--accent-primary, #89b4fa)';
-                      (e.currentTarget as HTMLElement).style.opacity = '1';
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
-                      (e.currentTarget as HTMLElement).style.opacity = '0.7';
-                    }}
-                  >
-                    <Download size={12} />
-                  </button>
-
-                  {/* Delete Paper Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (window.confirm(`Delete paper "${file.name}" from your workspace?`)) {
-                        removePdf(file.id);
-                        if (activeItem === file.id) {
-                          onOpenMasterGrid();
-                          setActiveItem('master-grid');
-                        }
-                      }
-                    }}
-                    title={`Delete ${file.name}`}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      padding: '2px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      borderRadius: '3px',
-                      opacity: 0.7,
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.color = 'var(--accent-danger, #f38ba8)';
-                      (e.currentTarget as HTMLElement).style.opacity = '1';
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
-                      (e.currentTarget as HTMLElement).style.opacity = '0.7';
-                    }}
-                  >
-                    <Trash2 size={12} />
-                  </button>
+                  No papers loaded yet. Click <strong>+</strong> or <strong>🔗</strong> to import.
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
@@ -682,6 +774,18 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
           )}
         </div>
       </div>
+
+      {/* Import Paper by DOI Modal */}
+      <ImportDoiModal
+        isOpen={showDoiModal}
+        onClose={() => setShowDoiModal(false)}
+        onPaperImported={(paper) => {
+          setActivePdf(paper.id);
+          onSelectPdf(paper.id, paper.name);
+          setActiveItem(paper.id);
+        }}
+      />
     </aside>
   );
 };
+

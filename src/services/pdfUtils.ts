@@ -10,12 +10,14 @@ export async function getPdfBase64(pdfInfo: PdfDocumentInfo): Promise<string> {
 
     if (pdfInfo.file) {
       blob = pdfInfo.file;
-    } else {
+    } else if (pdfInfo.url) {
       const res = await fetch(pdfInfo.url);
       if (!res.ok) {
         throw new Error(`Failed to fetch PDF from ${pdfInfo.url} (Status ${res.status})`);
       }
       blob = await res.blob();
+    } else {
+      throw new Error(`No PDF binary or URL available for paper "${pdfInfo.name}".`);
     }
 
     const base64 = await new Promise<string>((resolve, reject) => {
