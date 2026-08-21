@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ExternalLink,
   Download,
@@ -17,6 +17,7 @@ import {
 import { PaperDocumentInfo, PaperTable } from '../../types/paper';
 import { useGridStore } from '../../store/useGridStore';
 import { usePdfStore } from '../../store/usePdfStore';
+import { highlightSnippetInContainer, clearActiveHighlights } from '../../services/highlightUtils';
 
 interface ArticleReaderViewProps {
   paper: PaperDocumentInfo;
@@ -31,8 +32,37 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
   const [copiedTableId, setCopiedTableId] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
-  const { addColumn, appendRows } = useGridStore();
+  const mainContainerRef = useRef<HTMLElement>(null);
+
+  const { addColumn, appendRows, activeEvidence } = useGridStore();
   const { updatePaperDocument } = usePdfStore();
+
+  // Auto-scroll and highlight exact sentence when activeEvidence changes
+  useEffect(() => {
+    if (!mainContainerRef.current) return;
+
+    clearActiveHighlights(mainContainerRef.current);
+
+    if (!activeEvidence) return;
+
+    if (activeEvidence.snippetText && activeEvidence.snippetText.trim()) {
+      const matchedEl = highlightSnippetInContainer(mainContainerRef.current, activeEvidence.snippetText);
+      if (matchedEl) {
+        matchedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+    }
+
+    // Fallback: scroll to matching section heading if snippet couldn't be matched
+    if (activeEvidence.sectionName) {
+      const lowerSec = activeEvidence.sectionName.toLowerCase();
+      if (lowerSec.includes('abstract')) {
+        document.getElementById('sec-abstract')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (lowerSec.includes('table')) {
+        document.getElementById('sec-tables')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [activeEvidence]);
 
   // Copy table content as TSV/CSV to clipboard
   const handleCopyTable = (table: PaperTable) => {
@@ -259,6 +289,7 @@ export const ArticleReaderView: React.FC<ArticleReaderViewProps> = ({
 
       {/* Main Reading Area */}
       <main
+        ref={mainContainerRef}
         style={{
           flex: 1,
           overflowY: 'auto',

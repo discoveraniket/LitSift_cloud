@@ -318,6 +318,8 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
             setActiveEvidence({
               pageNumber: citation.pageNumber || 1,
               snippetText: citation.snippetQuote || '',
+              sectionName: citation.sectionName,
+              paragraphNumber: citation.paragraphNumber,
             });
           } else if (row.evidenceMap && row.evidenceMap[colId]) {
             setActiveEvidence(row.evidenceMap[colId]);

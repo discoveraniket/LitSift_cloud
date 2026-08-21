@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useGridStore } from '../../store/useGridStore';
+import { highlightSnippetInContainer, clearActiveHighlights } from '../../services/highlightUtils';
 
 // Set pdfjs worker source using CDN fallback for browser runtime compatibility
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -30,15 +31,26 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
   const searchMatchesRef = useRef<HTMLElement[]>([]);
   const currentMatchIndexRef = useRef<number>(-1);
 
-  // Auto-scroll to activeEvidence page when a cell is selected
+  // Auto-scroll to activeEvidence page and highlight exact sentence snippet
   useEffect(() => {
-    if (!activeEvidence || !containerRef.current) return;
+    if (!containerRef.current) return;
 
-    const pageWrapper = containerRef.current.querySelector(
+    clearActiveHighlights(containerRef.current);
+
+    if (!activeEvidence) return;
+
+    const pageWrapper = containerRef.current.querySelector<HTMLElement>(
       `[data-page-number="${activeEvidence.pageNumber}"]`
     );
 
     if (pageWrapper) {
+      if (activeEvidence.snippetText && activeEvidence.snippetText.trim()) {
+        const matchedEl = highlightSnippetInContainer(pageWrapper, activeEvidence.snippetText);
+        if (matchedEl) {
+          matchedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+      }
       pageWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [activeEvidence]);

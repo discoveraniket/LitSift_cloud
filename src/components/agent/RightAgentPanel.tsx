@@ -86,6 +86,8 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
       setActiveEvidence({
         pageNumber: activeCitation.pageNumber || 1,
         snippetText: activeCitation.snippetQuote || '',
+        sectionName: activeCitation.sectionName,
+        paragraphNumber: activeCitation.paragraphNumber,
       });
     }
   };

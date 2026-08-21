@@ -32,6 +32,11 @@
   --border-subtle: #2a2a3c;
   --border-focus: #89b4fa;
 
+  /* Evidence Highlighting Tokens */
+  --highlight-bg: rgba(137, 180, 250, 0.20);
+  --highlight-glow: rgba(137, 180, 250, 0.35);
+  --highlight-border: #89b4fa;
+
   /* Compact Dimensions */
   --header-height: 30px;
   --panel-header-height: 28px;
@@ -601,6 +606,48 @@ body {
   pointer-events: none;
   z-index: 10;
   box-shadow: 0 0 8px rgba(249, 226, 175, 0.4);
+}
+
+/* Minimalist & Theme-Aligned Evidence Highlight */
+.evidence-highlight-active {
+  background-color: var(--highlight-bg, rgba(137, 180, 250, 0.20)) !important;
+  border-radius: 3px !important;
+  box-shadow: 0 0 8px var(--highlight-glow, rgba(137, 180, 250, 0.35)) !important;
+  animation: evidencePulseGlow 2s ease-in-out infinite alternate !important;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease !important;
+  pointer-events: auto !important;
+  z-index: 5 !important;
+}
+
+/* For PDF.js Text Layer: Text MUST remain transparent so only the crisp canvas glyphs show through without ghosting/shadows */
+.pdf-text-layer .evidence-highlight-active,
+.pdf-text-item.evidence-highlight-active {
+  color: transparent !important;
+  background-color: var(--highlight-bg, rgba(137, 180, 250, 0.20)) !important;
+  mix-blend-mode: multiply !important;
+}
+
+/* For HTML Article Reader: Keep original text crisp and highlight ONLY the matching sentence */
+article .evidence-highlight-active,
+main .evidence-highlight-active,
+mark.evidence-mark-inline {
+  color: inherit !important;
+  background-color: var(--highlight-bg, rgba(137, 180, 250, 0.20)) !important;
+  border-bottom: 2px solid var(--highlight-border, #89b4fa) !important;
+  padding: 1px 3px !important;
+  border-radius: 3px !important;
+  font-weight: 500;
+}
+
+@keyframes evidencePulseGlow {
+  0% {
+    background-color: rgba(137, 180, 250, 0.14);
+    box-shadow: 0 0 3px rgba(137, 180, 250, 0.15);
+  }
+  100% {
+    background-color: rgba(137, 180, 250, 0.26);
+    box-shadow: 0 0 12px var(--highlight-glow, rgba(137, 180, 250, 0.35));
+  }
 }
 
 .ag-header-cell-selected {

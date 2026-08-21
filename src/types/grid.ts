@@ -1,6 +1,8 @@
 export interface EvidenceLocation {
   pageNumber: number;
   snippetText: string;
+  sectionName?: string;
+  paragraphNumber?: string;
   bbox?: { x: number; y: number; width: number; height: number };
 }
 
