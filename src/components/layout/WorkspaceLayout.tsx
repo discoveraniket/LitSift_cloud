@@ -212,6 +212,25 @@ export const WorkspaceLayout: React.FC = () => {
     setActiveTabId('workspace-hub');
   };
 
+  const handleOpenPaperDiscovery = () => {
+    setTabs((prev) => {
+      if (prev.some((t) => t.id === 'paper-discovery')) {
+        return prev;
+      }
+      return [
+        ...prev,
+        {
+          id: 'paper-discovery',
+          type: 'paper_discovery',
+          title: 'Paper Discovery & Ingest',
+          closable: true,
+        },
+      ];
+    });
+
+    setActiveTabId('paper-discovery');
+  };
+
   const handleToggleZenMode = () => {
     if (showLeftPanel || showBottomPanel || showRightPanel) {
       setShowLeftPanel(false);
@@ -359,6 +378,7 @@ export const WorkspaceLayout: React.FC = () => {
                       onOpenMasterGrid={handleOpenMasterGrid}
                       onOpenDebugLogs={() => setShowLogsModal(true)}
                       onOpenWorkspaceHub={handleOpenWorkspaceHub}
+                      onOpenPaperDiscovery={handleOpenPaperDiscovery}
                     />
                   </div>
                   <div
@@ -378,6 +398,7 @@ export const WorkspaceLayout: React.FC = () => {
                   onNavigateToGrid={handleOpenMasterGrid}
                   onNavigateToPdf={handleSelectPdf}
                   onOpenWorkspaceHub={handleOpenWorkspaceHub}
+                  onOpenPaperDiscovery={handleOpenPaperDiscovery}
                 />
               </div>
 

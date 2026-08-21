@@ -4,7 +4,6 @@ import { useAgentStore } from '../../store/useAgentStore';
 import { usePdfStore } from '../../store/usePdfStore';
 import { useLogStore } from '../../store/useLogStore';
 import { downloadPdfFile } from '../../services/workspaceService';
-import { ImportDoiModal } from './ImportDoiModal';
 import {
   ChevronDown,
   ChevronRight,
@@ -21,6 +20,7 @@ import {
   Maximize2,
   FileArchive,
   Link,
+  Search,
 } from 'lucide-react';
 
 interface LeftExplorerPanelProps {
@@ -28,6 +28,7 @@ interface LeftExplorerPanelProps {
   onOpenMasterGrid: () => void;
   onOpenDebugLogs?: () => void;
   onOpenWorkspaceHub?: (section: 'export' | 'import') => void;
+  onOpenPaperDiscovery?: () => void;
 }
 
 export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
@@ -35,6 +36,7 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   onOpenMasterGrid,
   onOpenDebugLogs,
   onOpenWorkspaceHub,
+  onOpenPaperDiscovery,
 }) => {
   const { columns, rows } = useGridStore();
   const { logs, clearLogs } = useLogStore();
@@ -46,7 +48,7 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   const [logsOpen, setLogsOpen] = useState(true);
   const [activeItem, setActiveItem] = useState<string>('master-grid');
   const [copiedLogs, setCopiedLogs] = useState(false);
-  const [showDoiModal, setShowDoiModal] = useState(false);
+
 
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -337,6 +339,19 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                 <Table size={13} color="var(--accent-primary)" />
                 <span>Master Extraction Grid</span>
               </div>
+
+              {onOpenPaperDiscovery && (
+                <div
+                  className={`vscode-tree-item ${activeItem === 'paper-discovery' ? 'active' : ''}`}
+                  onClick={() => {
+                    onOpenPaperDiscovery();
+                    setActiveItem('paper-discovery');
+                  }}
+                >
+                  <Search size={13} color="var(--accent-warning, #f9e2af)" />
+                  <span>Paper Discovery & Ingest</span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -350,10 +365,11 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span
                 className="vscode-action-icon"
-                title="Import Paper by DOI (Automatic Open Access & Metadata Resolution)"
+                title="Search Literature & Ingest DOIs"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setShowDoiModal(true);
+                  onOpenPaperDiscovery?.();
+                  setActiveItem('paper-discovery');
                 }}
                 style={{
                   color: 'var(--accent-primary, #89b4fa)',
@@ -774,17 +790,6 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
           )}
         </div>
       </div>
-
-      {/* Import Paper by DOI Modal */}
-      <ImportDoiModal
-        isOpen={showDoiModal}
-        onClose={() => setShowDoiModal(false)}
-        onPaperImported={(paper) => {
-          setActivePdf(paper.id);
-          onSelectPdf(paper.id, paper.name);
-          setActiveItem(paper.id);
-        }}
-      />
     </aside>
   );
 };
