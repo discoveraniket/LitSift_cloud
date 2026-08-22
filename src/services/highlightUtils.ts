@@ -1,15 +1,10 @@
 /**
- * Accurate & Minimalist Document Highlighting Service
- * Handles cross-span fuzzy text matching, soft glassmorphic pulse highlights,
- * and smooth viewport auto-centering across PDF and Reader views.
+ * Highlight and In-Document Evidence Grounding Utilities
+ * 
+ * Provides robust utilities for locating verbatim sentence citations and cell values
+ * across PDF.js multi-span text layers and structured semantic HTML Article Reader views.
  */
 
-/**
- * Normalizes text for robust searching:
- * - Lowercases all characters
- * - Converts curly quotes, dashes, and smart punctuation to standard ASCII
- * - Collapses consecutive whitespace to a single space
- */
 export function normalizeSearchText(text: string): string {
   if (!text) return '';
   return text
@@ -58,9 +53,7 @@ export function clearActiveHighlights(container: HTMLElement | null | undefined)
 }
 
 /**
- * Triggers a gentle, high-visibility flash pulse animation on all active evidence highlights.
- * Forces a DOM reflow to ensure the CSS keyframe animation restarts reliably on every invocation,
- * even when the highlight was already present.
+ * Triggers a gentle flash pulse animation on all active evidence highlights.
  */
 export function flashActiveHighlights(container: HTMLElement | null | undefined): void {
   if (!container) return;
@@ -68,7 +61,6 @@ export function flashActiveHighlights(container: HTMLElement | null | undefined)
   const highlightedEls = container.querySelectorAll<HTMLElement>('.evidence-highlight-active');
   highlightedEls.forEach((el) => {
     el.classList.remove('evidence-highlight-flash');
-    // Force DOM reflow to reliably restart CSS keyframe animation
     void el.offsetWidth;
     el.classList.add('evidence-highlight-flash');
   });
@@ -76,7 +68,6 @@ export function flashActiveHighlights(container: HTMLElement | null | undefined)
 
 /**
  * Injects gentle keyword glow inside a matched sentence element or mark.
- * If the exact keyword/cell value is present, wraps it in <mark class="evidence-keyword-glow">.
  */
 function applyKeywordGlow(matchedElement: HTMLElement, keyword: string): void {
   if (!matchedElement || !keyword) return;
@@ -84,25 +75,9 @@ function applyKeywordGlow(matchedElement: HTMLElement, keyword: string): void {
   if (cleanKw.length < 2) return;
   const lowerKw = cleanKw.toLowerCase();
 
-  // If the matched element is already the exact keyword mark, apply the class directly
   if ((matchedElement.textContent || '').trim().toLowerCase() === lowerKw) {
     matchedElement.classList.add('evidence-keyword-glow');
     return;
-  }
-
-  // Candidate phrases to search for: full string, punctuation-stripped, and individual tokens
-  const candidates: string[] = [cleanKw];
-  const stripped = cleanKw.replace(/^[-(["']+|[.,;:!?)\]"']+$/g, '');
-  if (stripped.length >= 2 && !candidates.includes(stripped)) {
-    candidates.push(stripped);
-  }
-
-  const tokens = cleanKw.split(/\s+/).filter((t) => t.length >= 3);
-  for (const token of tokens) {
-    const strippedTok = token.replace(/^[-(["']+|[.,;:!?)\]"']+$/g, '');
-    if (strippedTok.length >= 3 && !candidates.includes(strippedTok)) {
-      candidates.push(strippedTok);
-    }
   }
 
   const walker = document.createTreeWalker(matchedElement, NodeFilter.SHOW_TEXT);
@@ -113,31 +88,27 @@ function applyKeywordGlow(matchedElement: HTMLElement, keyword: string): void {
 
     const val = textNode.nodeValue || '';
     const lowerVal = val.toLowerCase();
+    const idx = lowerVal.indexOf(lowerKw);
 
-    for (const cand of candidates) {
-      const lowerCand = cand.toLowerCase();
-      const idx = lowerVal.indexOf(lowerCand);
+    if (idx !== -1) {
+      const parent = textNode.parentNode;
+      if (!parent) continue;
 
-      if (idx !== -1) {
-        const parent = textNode.parentNode;
-        if (!parent) continue;
+      const before = val.substring(0, idx);
+      const matched = val.substring(idx, idx + cleanKw.length);
+      const after = val.substring(idx + cleanKw.length);
 
-        const before = val.substring(0, idx);
-        const matched = val.substring(idx, idx + cand.length);
-        const after = val.substring(idx + cand.length);
+      textNode.nodeValue = before;
 
-        textNode.nodeValue = before;
+      const mark = document.createElement('mark');
+      mark.className = 'evidence-keyword-glow';
+      mark.textContent = matched;
 
-        const mark = document.createElement('mark');
-        mark.className = 'evidence-keyword-glow';
-        mark.textContent = matched;
+      const afterNode = document.createTextNode(after);
 
-        const afterNode = document.createTextNode(after);
-
-        parent.insertBefore(mark, textNode.nextSibling);
-        parent.insertBefore(afterNode, mark.nextSibling);
-        return;
-      }
+      parent.insertBefore(mark, textNode.nextSibling);
+      parent.insertBefore(afterNode, mark.nextSibling);
+      return;
     }
   }
 }
@@ -243,37 +214,21 @@ export function highlightSnippetInContainer(
   }
 
   // -------------------------------------------------------------
-  // STRATEGY 2: Article Reader HTML Matching (Direct Text Nodes & Sentences)
+  // STRATEGY 2: Article Reader HTML Matching (<p>, <td>, <li>, <div>)
   // -------------------------------------------------------------
-  // 2A. Direct exact substring match in text nodes (handles IDs, DOIs, phrases, table cells)
-  const directMark = highlightInTextNodes(container, snippet);
-  if (directMark) {
-    if (keyword && keyword.trim().length >= 2) {
-      applyKeywordGlow(directMark, keyword);
-    }
-    flashActiveHighlights(container);
-    return directMark;
-  }
-
-  // 2B. Fuzzy / Normalized sentence matching across rich block elements
   const candidateEls = Array.from(
-    container.querySelectorAll<HTMLElement>(
-      'p, td, th, li, h1, h2, h3, h4, h5, h6, figcaption, dd, dt, .section-paragraph, .abstract-text, div'
-    )
+    container.querySelectorAll<HTMLElement>('p, td, li, h2, h3, h4, .section-paragraph, .abstract-text')
   );
 
   let bestElement: HTMLElement | null = null;
   let highestScore = 0;
 
   for (const el of candidateEls) {
-    // Skip containers that contain large nested trees
-    if (el.children.length > 8 && el.tagName.toLowerCase() === 'div') continue;
-
     const rawText = el.textContent || '';
     const normElText = normalizeSearchText(rawText);
     if (!normElText) continue;
 
-    // Check if this element contains the snippet
+    // Check if this paragraph/element contains the snippet
     const isExactMatch = normElText.includes(cleanSnippet);
     let isPartialMatch = false;
 
@@ -296,7 +251,7 @@ export function highlightSnippetInContainer(
     }
 
     if (isExactMatch || isPartialMatch) {
-      // Highlight ONLY the exact sentence inside the element
+      // Highlight ONLY the exact sentence inside the element (not the whole paragraph!)
       const markedEl = highlightExactSnippetInHtmlElement(el, snippet, cleanSnippet);
       if (markedEl) {
         if (keyword && keyword.trim().length >= 2) {
@@ -328,62 +283,6 @@ export function highlightSnippetInContainer(
     }
     flashActiveHighlights(container);
     return bestElement;
-  }
-
-  return null;
-}
-
-/**
- * Direct Text Node Matcher:
- * Finds any text node inside container that contains the exact search text (case-insensitive)
- * and wraps the exact matching characters in <mark class="evidence-highlight-active evidence-mark-inline">.
- */
-function highlightInTextNodes(container: HTMLElement, query: string): HTMLElement | null {
-  if (!query || query.trim().length < 2) return null;
-  const trimmed = query.trim();
-  const lowerQuery = trimmed.toLowerCase();
-
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-  let textNode: Text | null = null;
-
-  while ((textNode = walker.nextNode() as Text | null)) {
-    const parentTag = textNode.parentElement?.tagName.toLowerCase();
-    if (
-      parentTag === 'button' ||
-      parentTag === 'nav' ||
-      parentTag === 'script' ||
-      parentTag === 'style' ||
-      textNode.parentElement?.closest('button') ||
-      textNode.parentElement?.closest('nav')
-    ) {
-      continue;
-    }
-
-    const val = textNode.nodeValue || '';
-    const lowerVal = val.toLowerCase();
-    const matchIdx = lowerVal.indexOf(lowerQuery);
-
-    if (matchIdx !== -1) {
-      const parent = textNode.parentNode;
-      if (!parent) continue;
-
-      const before = val.substring(0, matchIdx);
-      const matched = val.substring(matchIdx, matchIdx + trimmed.length);
-      const after = val.substring(matchIdx + trimmed.length);
-
-      textNode.nodeValue = before;
-
-      const mark = document.createElement('mark');
-      mark.className = 'evidence-highlight-active evidence-highlight-flash evidence-mark-inline';
-      mark.textContent = matched;
-
-      const afterNode = document.createTextNode(after);
-
-      parent.insertBefore(mark, textNode.nextSibling);
-      parent.insertBefore(afterNode, mark.nextSibling);
-
-      return mark;
-    }
   }
 
   return null;
@@ -470,34 +369,73 @@ function highlightExactSnippetInHtmlElement(
     let currentOffset = 0;
     let textNode: Text | null = null;
 
+    let startNode: Text | null = null;
+    let startOffsetInNode = 0;
+    let endNode: Text | null = null;
+    let endOffsetInNode = 0;
+
     while ((textNode = treeWalker.nextNode() as Text | null)) {
       const nodeLen = textNode.nodeValue?.length || 0;
       const nodeStart = currentOffset;
       const nodeEnd = currentOffset + nodeLen;
 
-      if (matchStart >= nodeStart && matchEnd <= nodeEnd) {
-        const offsetInNodeStart = matchStart - nodeStart;
-        const offsetInNodeEnd = matchEnd - nodeStart;
+      if (!startNode && matchStart >= nodeStart && matchStart < nodeEnd) {
+        startNode = textNode;
+        startOffsetInNode = matchStart - nodeStart;
+      }
 
-        const matchedText = textNode.nodeValue?.substring(offsetInNodeStart, offsetInNodeEnd) || '';
-        const afterText = textNode.nodeValue?.substring(offsetInNodeEnd) || '';
+      if (!endNode && matchEnd > nodeStart && matchEnd <= nodeEnd) {
+        endNode = textNode;
+        endOffsetInNode = matchEnd - nodeStart;
+      }
 
-        textNode.nodeValue = textNode.nodeValue?.substring(0, offsetInNodeStart) || '';
+      currentOffset += nodeLen;
+    }
+
+    if (startNode && !endNode && textNode) {
+      endNode = textNode;
+      endOffsetInNode = textNode.nodeValue?.length || 0;
+    }
+
+    if (startNode && endNode) {
+      if (startNode === endNode) {
+        const val = startNode.nodeValue || '';
+        const before = val.substring(0, startOffsetInNode);
+        const matched = val.substring(startOffsetInNode, endOffsetInNode);
+        const after = val.substring(endOffsetInNode);
+
+        startNode.nodeValue = before;
 
         const mark = document.createElement('mark');
         mark.className = 'evidence-highlight-active evidence-mark-inline';
-        mark.textContent = matchedText;
+        mark.textContent = matched;
 
-        const afterNode = document.createTextNode(afterText);
+        const afterNode = document.createTextNode(after);
 
-        const parent = textNode.parentNode;
+        const parent = startNode.parentNode;
         if (parent) {
-          parent.insertBefore(mark, textNode.nextSibling);
+          parent.insertBefore(mark, startNode.nextSibling);
           parent.insertBefore(afterNode, mark.nextSibling);
           return mark;
         }
+      } else {
+        try {
+          const range = document.createRange();
+          range.setStart(startNode, startOffsetInNode);
+          range.setEnd(endNode, endOffsetInNode);
+
+          const mark = document.createElement('mark');
+          mark.className = 'evidence-highlight-active evidence-mark-inline';
+
+          const fragment = range.extractContents();
+          mark.appendChild(fragment);
+          range.insertNode(mark);
+
+          return mark;
+        } catch {
+          // fallback to paragraph level
+        }
       }
-      currentOffset += nodeLen;
     }
   }
 

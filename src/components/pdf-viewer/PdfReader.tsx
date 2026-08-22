@@ -32,6 +32,7 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
   const currentMatchIndexRef = useRef<number>(-1);
 
   // Auto-scroll to activeEvidence page and highlight exact sentence snippet with gentle flash
+  // Auto-scroll and highlight exact sentence when activeEvidence changes (with gentle flash)
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -40,24 +41,45 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
       return;
     }
 
-    const pageWrapper = containerRef.current.querySelector<HTMLElement>(
-      `[data-page-number="${activeEvidence.pageNumber}"]`
-    );
+    const searchText = activeEvidence.snippetText?.trim() || activeEvidence.keywordText?.trim() || '';
 
-    if (pageWrapper) {
-      if (activeEvidence.snippetText && activeEvidence.snippetText.trim()) {
-        const matchedEl = highlightSnippetInContainer(
-          pageWrapper,
-          activeEvidence.snippetText,
-          activeEvidence.keywordText
-        );
+    // 1. Try the targeted page first
+    const targetPageWrapper = activeEvidence.pageNumber
+      ? containerRef.current.querySelector<HTMLElement>(`[data-page-number="${activeEvidence.pageNumber}"]`)
+      : null;
+
+    if (targetPageWrapper && searchText) {
+      const matchedEl = highlightSnippetInContainer(
+        targetPageWrapper,
+        searchText,
+        activeEvidence.keywordText
+      );
+      if (matchedEl) {
+        flashActiveHighlights(targetPageWrapper);
+        matchedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+    }
+
+    // 2. Multi-page fallback: search across ALL pages in the document
+    const allPages = Array.from(containerRef.current.querySelectorAll<HTMLElement>('.pdf-page-wrapper'));
+
+    if (searchText) {
+      for (const pageEl of allPages) {
+        if (pageEl === targetPageWrapper) continue; // already checked
+
+        const matchedEl = highlightSnippetInContainer(pageEl, searchText, activeEvidence.keywordText);
         if (matchedEl) {
-          flashActiveHighlights(pageWrapper);
+          flashActiveHighlights(pageEl);
           matchedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
           return;
         }
       }
-      pageWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // 3. Fallback: if text still couldn't be matched, scroll to targeted page
+    if (targetPageWrapper) {
+      targetPageWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [activeEvidence]);
 

@@ -775,11 +775,19 @@ mark.evidence-highlight-flash {
 /* ==========================================================================
    HTML Article Reader Highlighting
    ========================================================================== */
+
+/* Universal mark reset to eliminate default browser neon-yellow user-agent styling */
+mark:not(.reader-search-mark) {
+  background-color: transparent;
+  color: inherit;
+}
+
 article .evidence-highlight-active,
 main .evidence-highlight-active,
-mark.evidence-mark-inline {
-  color: inherit;
-  background-color: var(--highlight-bg, rgba(137, 180, 250, 0.25));
+mark.evidence-mark-inline,
+mark.evidence-highlight-active {
+  color: inherit !important;
+  background-color: var(--highlight-bg, rgba(137, 180, 250, 0.25)) !important;
   border-bottom: 2px solid var(--highlight-border, #89b4fa);
   padding: 1px 3px;
   border-radius: 3px;
@@ -791,37 +799,40 @@ article .evidence-keyword-glow,
 main .evidence-keyword-glow,
 mark.evidence-keyword-glow {
   display: inline;
-  padding: 1px 4px;
+  padding: 1px 2px;
   border-radius: 3px;
-  font-weight: 600;
-  color: #f9e2af;
-  background-color: rgba(249, 226, 175, 0.45);
-  box-shadow: 0 0 0 2px rgba(249, 226, 175, 0.50), 0 0 12px rgba(249, 226, 175, 0.75);
-  animation: keywordGentleGlowFade 2.4s cubic-bezier(0.2, 0.8, 0.4, 1) forwards !important;
+  font-weight: inherit;
+  color: inherit;
+  background-color: transparent;
+  border: none;
+  animation: keywordGentleGlowFade 2.2s cubic-bezier(0.2, 0.8, 0.4, 1) forwards;
   z-index: 6;
 }
 
 @keyframes keywordGentleGlowFade {
   0% {
-    background-color: rgba(249, 226, 175, 0.55);
+    background-color: rgba(249, 226, 175, 0.50);
     box-shadow: 0 0 0 2.5px rgba(249, 226, 175, 0.60), 0 0 14px rgba(249, 226, 175, 0.80);
     color: #f9e2af;
+    font-weight: 600;
   }
-  40% {
-    background-color: rgba(249, 226, 175, 0.38);
-    box-shadow: 0 0 0 1.5px rgba(249, 226, 175, 0.40), 0 0 9px rgba(249, 226, 175, 0.55);
+  35% {
+    background-color: rgba(249, 226, 175, 0.30);
+    box-shadow: 0 0 0 1.5px rgba(249, 226, 175, 0.30), 0 0 8px rgba(249, 226, 175, 0.40);
     color: #f9e2af;
+    font-weight: 600;
   }
   75% {
-    background-color: rgba(249, 226, 175, 0.16);
-    box-shadow: 0 0 0 1px rgba(249, 226, 175, 0.18), 0 0 5px rgba(249, 226, 175, 0.28);
+    background-color: transparent;
+    box-shadow: none;
     color: inherit;
+    font-weight: inherit;
   }
   100% {
-    background-color: var(--highlight-bg, rgba(137, 180, 250, 0.25));
-    box-shadow: 0 0 8px var(--highlight-glow, rgba(137, 180, 250, 0.35));
+    background-color: transparent;
+    box-shadow: none;
     color: inherit;
-    font-weight: 500;
+    font-weight: inherit;
   }
 }
 

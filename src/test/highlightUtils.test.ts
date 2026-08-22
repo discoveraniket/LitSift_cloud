@@ -174,8 +174,44 @@ describe('Document Highlighting Service (highlightUtils)', () => {
 
       expect(matchedEl).not.toBeNull();
       expect(container.querySelectorAll('.evidence-highlight-active').length).toBeGreaterThanOrEqual(1);
-      // No keyword glow mark, but sentence is highlighted
       expect(container.querySelectorAll('mark.evidence-keyword-glow').length).toBe(0);
+    });
+
+    it('accurately wraps sentences spanning across inline tags without turning the entire paragraph into a block', () => {
+      container.innerHTML = `
+        <article>
+          <p>The phage was isolated from wastewater <a href="#">(see Table S1)</a>. Transmission electron microscopy confirmed the <strong>Myoviruses morphology</strong> with distinct tail lengths.</p>
+        </article>
+      `;
+
+      const snippet = 'Transmission electron microscopy confirmed the Myoviruses morphology with distinct tail lengths.';
+      const matchedEl = highlightSnippetInContainer(container, snippet);
+
+      expect(matchedEl).not.toBeNull();
+      expect(matchedEl?.tagName.toLowerCase()).toBe('mark');
+      expect(matchedEl?.classList.contains('evidence-highlight-active')).toBe(true);
+
+      // Verify that the parent <p> did not receive the evidence-highlight-active block class
+      const parentP = container.querySelector('p')!;
+      expect(parentP.classList.contains('evidence-highlight-active')).toBe(false);
+    });
+
+    it('matches paraphrased quotes using sliding n-gram windows and keyword fallback', () => {
+      container.innerHTML = `
+        <article>
+          <p>Phages were classified as Escherichia phage vB_EcoM_fRPOT1 with genome sizes from 170 to 356 kb.</p>
+        </article>
+      `;
+
+      // Paraphrased quote starting with slightly different words
+      const snippet = 'The authors reported that phages were classified as Escherichia phage vB_EcoM_fRPOT1.';
+      const keyword = 'vB_EcoM_fRPOT1';
+
+      const matchedEl = highlightSnippetInContainer(container, snippet, keyword);
+
+      expect(matchedEl).not.toBeNull();
+      expect(container.querySelectorAll('.evidence-highlight-active').length).toBeGreaterThanOrEqual(1);
+      expect(container.textContent).toContain('vB_EcoM_fRPOT1');
     });
   });
 });

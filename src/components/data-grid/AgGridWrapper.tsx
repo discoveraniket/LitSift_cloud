@@ -348,22 +348,6 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
             keywordText: keyword,
           });
           setActiveCitation(null);
-        } else if (
-          keyword &&
-          keyword.length >= 2 &&
-          colId !== 'pdfTitle' &&
-          colId !== 'id' &&
-          colId !== 'aiStatus' &&
-          colId !== '#' &&
-          colId !== '+ Column'
-        ) {
-          // Direct fallback: try highlighting whatever phrase/value is inside the clicked cell!
-          setActiveEvidence({
-            pageNumber: 1,
-            snippetText: keyword,
-            keywordText: keyword,
-          });
-          setActiveCitation(null);
         } else {
           setActiveEvidence(null);
           setActiveCitation(null);
