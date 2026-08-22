@@ -1113,13 +1113,32 @@ Return your response strictly as a JSON object with this format:
 
         const contentsParts: any[] = [];
         if (targetPdf) {
-          const base64Data = await getPdfBase64(targetPdf);
-          contentsParts.push({
-            inlineData: {
-              mimeType: 'application/pdf',
-              data: base64Data,
-            },
-          });
+          let hasPdfBinary = false;
+          if (targetPdf.base64 || targetPdf.file || targetPdf.url) {
+            try {
+              const base64Data = await getPdfBase64(targetPdf);
+              if (base64Data) {
+                contentsParts.push({
+                  inlineData: {
+                    mimeType: 'application/pdf',
+                    data: base64Data,
+                  },
+                });
+                hasPdfBinary = true;
+              }
+            } catch (e: any) {
+              logStore.addLog('warn', `PDF binary read note for "${targetPdf.name}": ${e.message}`);
+            }
+          }
+
+          if (!hasPdfBinary) {
+            const docMarkdown = buildPaperMarkdownContext(targetPdf);
+            if (docMarkdown.trim().length > 0) {
+              contentsParts.push({
+                text: `[DOCUMENT CONTENT: "${targetPdf.title || targetPdf.name}"]\n${docMarkdown}`,
+              });
+            }
+          }
         }
 
         const verifyPrompt = `You are auditing scientific fact-checking evidence for an extracted table cell value.
@@ -1127,7 +1146,7 @@ Target Field: "${targetField}"
 Extracted Claim: "${claimValue}"
 Document Name: "${targetRow.pdfTitle}"
 
-Inspect the attached research paper PDF. Verify whether this extracted claim is supported by the text.
+Inspect the attached research paper content (PDF or text). Verify whether this extracted claim is supported by the text.
 Return your response in JSON format:
 {
   "isSupported": true,

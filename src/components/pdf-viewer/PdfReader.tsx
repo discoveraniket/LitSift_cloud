@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useGridStore } from '../../store/useGridStore';
-import { highlightSnippetInContainer, clearActiveHighlights, flashActiveHighlights } from '../../services/highlightUtils';
+import { highlightPdfSnippet, clearActiveHighlights, flashActiveHighlights } from '../../services/highlightUtils';
 
 // Set pdfjs worker source using CDN fallback for browser runtime compatibility
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -49,7 +49,7 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
       : null;
 
     if (targetPageWrapper && searchText) {
-      const matchedEl = highlightSnippetInContainer(
+      const matchedEl = highlightPdfSnippet(
         targetPageWrapper,
         searchText,
         activeEvidence.keywordText
@@ -68,7 +68,7 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
       for (const pageEl of allPages) {
         if (pageEl === targetPageWrapper) continue; // already checked
 
-        const matchedEl = highlightSnippetInContainer(pageEl, searchText, activeEvidence.keywordText);
+        const matchedEl = highlightPdfSnippet(pageEl, searchText, activeEvidence.keywordText);
         if (matchedEl) {
           flashActiveHighlights(pageEl);
           matchedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });

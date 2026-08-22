@@ -18,7 +18,7 @@ import { PaperDocumentInfo, PaperTable } from '../../types/paper';
 import { useGridStore } from '../../store/useGridStore';
 import { usePdfStore } from '../../store/usePdfStore';
 import {
-  highlightSnippetInContainer,
+  highlightArticleSnippet,
   clearActiveHighlights,
   flashActiveHighlights,
 } from '../../services/highlightUtils';
@@ -75,7 +75,7 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
 
   const search = (query: string) => {
     clearSearch();
-    if (!query || query.trim().length < 2 || !mainContainerRef.current) return;
+    if (!query || !query.trim() || !mainContainerRef.current) return;
 
     const trimmedQuery = query.trim().toLowerCase();
     const walker = document.createTreeWalker(mainContainerRef.current, NodeFilter.SHOW_TEXT);
@@ -187,11 +187,17 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
       return;
     }
 
-    if (activeEvidence.snippetText && activeEvidence.snippetText.trim()) {
-      const matchedEl = highlightSnippetInContainer(
+    const searchText = activeEvidence.snippetText?.trim() || activeEvidence.keywordText?.trim() || '';
+
+    if (searchText) {
+      const matchedEl = highlightArticleSnippet(
         mainContainerRef.current,
-        activeEvidence.snippetText,
-        activeEvidence.keywordText
+        searchText,
+        {
+          keyword: activeEvidence.keywordText,
+          sectionName: activeEvidence.sectionName,
+          paragraphNumber: activeEvidence.paragraphNumber,
+        }
       );
       if (matchedEl) {
         flashActiveHighlights(mainContainerRef.current);
@@ -200,16 +206,28 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
       }
     }
 
-    // Fallback: scroll to matching section heading if snippet couldn't be matched
+    // Dynamic Section Fallback: scroll to matching section heading if snippet couldn't be matched
     if (activeEvidence.sectionName) {
-      const lowerSec = activeEvidence.sectionName.toLowerCase();
+      const lowerSec = activeEvidence.sectionName.toLowerCase().trim();
       if (lowerSec.includes('abstract')) {
         document.getElementById('sec-abstract')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (lowerSec.includes('table')) {
         document.getElementById('sec-tables')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (lowerSec.includes('figure')) {
+        document.getElementById('sec-figures')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        const targetClean = lowerSec.replace(/[^a-z0-9]/g, '');
+        const matchedSec = (paper.sections || []).find((s) => {
+          const sTitle = s.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const sId = s.id.toLowerCase().replace(/[^a-z0-9]/g, '');
+          return sTitle.includes(targetClean) || targetClean.includes(sTitle) || sId === targetClean;
+        });
+        if (matchedSec) {
+          document.getElementById(`sec-${matchedSec.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       }
     }
-  }, [activeEvidence]);
+  }, [activeEvidence, paper.sections]);
 
   // Copy table content as TSV/CSV to clipboard
   const handleCopyTable = (table: PaperTable) => {
@@ -668,8 +686,8 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
           </section>
         )}
 
-        {/* Paywalled / Missing PDF Drag & Drop Upgrade Zone */}
-        {!paper.url && (
+        {/* Paywalled / Missing Full Text Drag & Drop Upgrade Zone (Only shown when no full-text sections exist) */}
+        {!paper.url && (!sections || sections.length === 0) && (
           <div
             onDragOver={(e) => {
               e.preventDefault();
@@ -692,7 +710,7 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
               Have Institutional Access to the Full PDF?
             </h3>
             <p style={{ fontSize: `${12 * fontSizeScale}px`, color: 'var(--text-muted, #6c7086)', margin: '0 0 12px 0' }}>
-              Drag & drop the downloaded PDF here to enable the full PDF Viewer and visual chart extraction.
+              Only the abstract is available from open registries. Drag & drop the downloaded PDF here to enable the full PDF Viewer and visual chart extraction.
             </p>
           </div>
         )}
