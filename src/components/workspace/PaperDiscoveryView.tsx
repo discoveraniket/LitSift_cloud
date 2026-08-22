@@ -11,7 +11,7 @@ import {
   Layers,
   ArrowUpRight,
 } from 'lucide-react';
-import { resolvePaperByDoi, reconstructAbstract } from '../../services/doiService';
+import { resolvePaperByDoi, reconstructAbstract, findExistingPaperByDoi, normalizeDoi } from '../../services/doiService';
 import { usePdfStore } from '../../store/usePdfStore';
 import { PaperDocumentInfo, OpenAccessStatus } from '../../types/paper';
 
@@ -52,29 +52,33 @@ const SAMPLE_DOIS = [
   },
 ];
 
-export const PaperDiscoveryView: React.FC<PaperDiscoveryViewProps> = ({ onNavigateToPdf }) => {
+export const PaperDiscoveryView: React.FC<PaperDiscoveryViewProps> = ({
+  onNavigateToPdf,
+}) => {
   const [activeTab, setActiveTab] = useState<'doi_ingest' | 'search'>('doi_ingest');
 
-  // Single DOI State
+  // 1. Single DOI State
   const [singleDoiInput, setSingleDoiInput] = useState('');
   const [isResolvingSingle, setIsResolvingSingle] = useState(false);
   const [singleProgressMessage, setSingleProgressMessage] = useState('');
   const [singleError, setSingleError] = useState<string | null>(null);
   const [singleSuccessPaper, setSingleSuccessPaper] = useState<PaperDocumentInfo | null>(null);
 
-  // Batch DOI State
+  // 2. Batch DOI State
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [batchDoiText, setBatchDoiText] = useState('');
   const [isResolvingBatch, setIsResolvingBatch] = useState(false);
-  const [batchResults, setBatchResults] = useState<Array<{ doi: string; status: 'pending' | 'resolving' | 'done' | 'error'; title?: string; error?: string }>>([]);
+  const [batchResults, setBatchResults] = useState<
+    Array<{ doi: string; status: 'pending' | 'resolving' | 'done' | 'error'; title?: string; error?: string }>
+  >([]);
 
-  // Search Engine State
+  // 3. Search / Literature Discovery State
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
-  const [oaFilterOnly, setOaFilterOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<'relevance' | 'citations' | 'year'>('relevance');
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'relevance' | 'citations' | 'year'>('relevance');
+  const [oaFilterOnly, setOaFilterOnly] = useState<boolean>(false);
   const [importingDoiMap, setImportingDoiMap] = useState<Record<string, boolean>>({});
 
   const { pdfs, addPaperDocument } = usePdfStore();
@@ -84,6 +88,18 @@ export const PaperDiscoveryView: React.FC<PaperDiscoveryViewProps> = ({ onNaviga
     const doiToFetch = (targetDoi || singleDoiInput).trim();
     if (!doiToFetch) {
       setSingleError('Please enter a DOI or paper link (e.g. 10.1038/s41467-020-17849-0)');
+      return;
+    }
+
+    // Fast Local Cache Check
+    const existing = findExistingPaperByDoi(doiToFetch, pdfs);
+    if (existing) {
+      usePdfStore.getState().setActivePdf(existing.id);
+      setSingleSuccessPaper(existing);
+      setSingleError(null);
+      if (onNavigateToPdf) {
+        setTimeout(() => onNavigateToPdf(existing.id), 500);
+      }
       return;
     }
 
@@ -118,12 +134,24 @@ export const PaperDiscoveryView: React.FC<PaperDiscoveryViewProps> = ({ onNaviga
       return;
     }
 
-    const queue = rawLines.map((doi) => ({ doi, status: 'pending' as const }));
+    // Deduplicate input DOIs in the batch itself
+    const uniqueDois = Array.from(new Set(rawLines.map((d) => normalizeDoi(d)))).filter(Boolean);
+    const queue = uniqueDois.map((doi) => ({ doi, status: 'pending' as const }));
     setBatchResults(queue);
     setIsResolvingBatch(true);
 
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
+
+      // Instant Cache Hit: check if this DOI is already in the workspace
+      const existing = findExistingPaperByDoi(item.doi, pdfs);
+      if (existing) {
+        setBatchResults((prev) =>
+          prev.map((r, idx) => (idx === i ? { ...r, status: 'done', title: `${existing.title} (Already in workspace)` } : r))
+        );
+        continue;
+      }
+
       setBatchResults((prev) =>
         prev.map((r, idx) => (idx === i ? { ...r, status: 'resolving' } : r))
       );
@@ -206,6 +234,14 @@ export const PaperDiscoveryView: React.FC<PaperDiscoveryViewProps> = ({ onNaviga
   const handleImportSearchResult = async (item: SearchResultItem) => {
     if (!item.doi) {
       alert('Paper does not have a valid DOI for resolution.');
+      return;
+    }
+
+    // Fast Cache Hit
+    const existing = findExistingPaperByDoi(item.doi, pdfs);
+    if (existing) {
+      usePdfStore.getState().setActivePdf(existing.id);
+      if (onNavigateToPdf) onNavigateToPdf(existing.id);
       return;
     }
 
@@ -780,7 +816,8 @@ export const PaperDiscoveryView: React.FC<PaperDiscoveryViewProps> = ({ onNaviga
                 </div>
 
                 {searchResults.map((item) => {
-                  const isAlreadyImported = pdfs.some((p) => p.doi === item.doi || p.name === item.title);
+                  const existingPaper = findExistingPaperByDoi(item.doi || '', pdfs) || pdfs.find((p) => p.name === item.title || p.title === item.title);
+                  const isAlreadyImported = Boolean(existingPaper);
                   const isImporting = item.doi ? Boolean(importingDoiMap[item.doi]) : false;
 
                   return (
@@ -888,19 +925,37 @@ export const PaperDiscoveryView: React.FC<PaperDiscoveryViewProps> = ({ onNaviga
 
                       {/* Bottom Action */}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
-                        {isAlreadyImported ? (
-                          <span
+                        {isAlreadyImported && existingPaper ? (
+                          <button
+                            onClick={() => {
+                              usePdfStore.getState().setActivePdf(existingPaper.id);
+                              if (onNavigateToPdf) onNavigateToPdf(existingPaper.id);
+                            }}
+                            title="Paper already loaded in workspace. Click to open in viewer."
                             style={{
+                              background: 'rgba(166, 227, 161, 0.15)',
+                              border: '1px solid rgba(166, 227, 161, 0.35)',
+                              color: '#a6e3a1',
+                              borderRadius: '6px',
+                              padding: '6px 14px',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '12px',
-                              color: '#a6e3a1',
-                              fontWeight: 600,
+                              gap: '6px',
+                              transition: 'all 0.15s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              (e.currentTarget as HTMLElement).style.background = 'rgba(166, 227, 161, 0.25)';
+                            }}
+                            onMouseLeave={(e) => {
+                              (e.currentTarget as HTMLElement).style.background = 'rgba(166, 227, 161, 0.15)';
                             }}
                           >
-                            <CheckCircle2 size={14} /> Already in Workspace
-                          </span>
+                            <CheckCircle2 size={13} />
+                            <span>Open in Viewer ✓</span>
+                          </button>
                         ) : (
                           <button
                             onClick={() => handleImportSearchResult(item)}

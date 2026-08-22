@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Sparkles, Database, FileText, Cpu, ShieldCheck, Heart } from 'lucide-react';
+import { X, Database, FileText, Cpu, ShieldCheck, Heart } from 'lucide-react';
 
 interface AboutModalProps {
   isOpen: boolean;

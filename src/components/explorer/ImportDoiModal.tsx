@@ -7,7 +7,7 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react';
-import { resolvePaperByDoi, DoiResolutionProgress } from '../../services/doiService';
+import { resolvePaperByDoi, findExistingPaperByDoi, DoiResolutionProgress } from '../../services/doiService';
 import { usePdfStore } from '../../store/usePdfStore';
 import { PaperDocumentInfo } from '../../types/paper';
 
@@ -52,6 +52,26 @@ export const ImportDoiModal: React.FC<ImportDoiModalProps> = ({
     const doiToFetch = targetDoi || doiInput;
     if (!doiToFetch.trim()) {
       setErrorMsg('Please enter a valid DOI (e.g. 10.1038/s41467-020-17849-0)');
+      return;
+    }
+
+    // 1. Instant Local Workspace Cache Hit
+    const existingPdfs = usePdfStore.getState().pdfs;
+    const existing = findExistingPaperByDoi(doiToFetch, existingPdfs);
+    if (existing) {
+      usePdfStore.getState().setActivePdf(existing.id);
+      setSuccessPaper(existing);
+      setErrorMsg(null);
+      setProgress({
+        step: 'completed',
+        message: '⚡ Paper is already in your workspace! Switching to viewer...',
+        progressPercent: 100,
+      });
+
+      setTimeout(() => {
+        onPaperImported(existing);
+        handleClose();
+      }, 700);
       return;
     }
 

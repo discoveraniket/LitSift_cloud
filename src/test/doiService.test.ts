@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { normalizeDoi, reconstructAbstract, resolvePaperByDoi } from '../services/doiService';
+import { normalizeDoi, reconstructAbstract, resolvePaperByDoi, findExistingPaperByDoi } from '../services/doiService';
 
 describe('DOI Resolution & Ingestion Service Suite', () => {
   beforeEach(() => {
@@ -156,6 +156,47 @@ describe('DOI Resolution & Ingestion Service Suite', () => {
       expect(paper.url).toBe('');
 
       fetchSpy.mockRestore();
+    });
+  });
+
+  describe('4. findExistingPaperByDoi (Local Duplicate Detection)', () => {
+    const mockPdfs: any[] = [
+      {
+        id: 'doi-10_1038_s41467_020_17849_0',
+        name: 'Nature Communications Paper',
+        title: 'Nature Communications Paper',
+        doi: '10.1038/s41467-020-17849-0',
+      },
+      {
+        id: 'doi-10_1371_journal_pone_0281234',
+        name: 'PLOS ONE Paper',
+        title: 'PLOS ONE Paper',
+        doi: '10.1371/journal.pone.0281234',
+      },
+    ];
+
+    it('finds existing paper by exact DOI string', () => {
+      const match = findExistingPaperByDoi('10.1038/s41467-020-17849-0', mockPdfs);
+      expect(match).toBeDefined();
+      expect(match?.title).toBe('Nature Communications Paper');
+    });
+
+    it('finds existing paper when URL prefix or uppercase is provided', () => {
+      const match = findExistingPaperByDoi('HTTPS://DOI.ORG/10.1038/s41467-020-17849-0', mockPdfs);
+      expect(match).toBeDefined();
+      expect(match?.id).toBe('doi-10_1038_s41467_020_17849_0');
+    });
+
+    it('finds existing paper by matching deterministic ID', () => {
+      const match = findExistingPaperByDoi('doi:10.1371/journal.pone.0281234', mockPdfs);
+      expect(match).toBeDefined();
+      expect(match?.title).toBe('PLOS ONE Paper');
+    });
+
+    it('returns undefined for non-existing DOI or empty input', () => {
+      expect(findExistingPaperByDoi('10.9999/non-existent-doi', mockPdfs)).toBeUndefined();
+      expect(findExistingPaperByDoi('', mockPdfs)).toBeUndefined();
+      expect(findExistingPaperByDoi('10.1038/s41467-020-17849-0', [])).toBeUndefined();
     });
   });
 });

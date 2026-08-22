@@ -27,6 +27,26 @@ export function normalizeDoi(input: string): string {
 }
 
 /**
+ * Checks if a DOI matches any paper already loaded in the workspace.
+ */
+export function findExistingPaperByDoi(
+  doiInput: string,
+  existingPdfs: PaperDocumentInfo[]
+): PaperDocumentInfo | undefined {
+  if (!doiInput || !existingPdfs || existingPdfs.length === 0) return undefined;
+  const target = normalizeDoi(doiInput).toLowerCase();
+  if (!target) return undefined;
+
+  const targetId = `doi-${target.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+  return existingPdfs.find((p) => {
+    if (p.doi && normalizeDoi(p.doi).toLowerCase() === target) return true;
+    if (p.id.toLowerCase() === targetId.toLowerCase()) return true;
+    return false;
+  });
+}
+
+/**
  * Reconstructs clean paragraph text from OpenAlex's abstract_inverted_index.
  */
 export function reconstructAbstract(invertedIndex?: Record<string, number[]>): string {
