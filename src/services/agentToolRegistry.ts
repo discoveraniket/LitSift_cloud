@@ -839,50 +839,84 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
 
       const isAbstractOnly = pdfInfo?.sourceType === 'doi_abstract_only' || (!pdfInfo?.url && !pdfInfo?.file && !pdfInfo?.sections?.length);
 
+      // Construct dynamic structured JSON schema from active table grid columns
+      const columnProperties: Record<string, any> = {};
+      const citationProperties: Record<string, any> = {};
+
+      gridStore.columns.forEach((col) => {
+        const fieldKey = col.field;
+        const headerTitle = col.headerName || col.field;
+
+        columnProperties[fieldKey] = {
+          type: Type.STRING,
+          description: isAbstractOnly
+            ? `Extracted finding for "${headerTitle}" explicitly stated in the abstract. If not disclosed in the abstract, return "Not disclosed in abstract (Requires full PDF)".`
+            : `Extracted scientific finding for "${headerTitle}" from the paper. If not measured, tested, or reported in the document, return "Not reported".`,
+        };
+
+        citationProperties[fieldKey] = {
+          type: Type.OBJECT,
+          description: `Grounded citation for "${headerTitle}". If the parameter is "Not reported", set snippetQuote to "Not reported in document", sectionName to "N/A", and reasoning to an explanation of why the parameter is absent from the paper.`,
+          properties: {
+            pageNumber: {
+              type: Type.INTEGER,
+              description: 'PDF page number (integer, 1 if reading text/abstract)',
+            },
+            sectionName: {
+              type: Type.STRING,
+              description: 'Exact section heading (e.g. Methods §2.1, Results - Table 2, Abstract), or "N/A" if not reported.',
+            },
+            paragraphNumber: {
+              type: Type.STRING,
+              description: 'Paragraph or line location (e.g. Paragraph 2), or "N/A" if not reported.',
+            },
+            snippetQuote: {
+              type: Type.STRING,
+              description: 'The EXACT UNALTERED VERBATIM sentence quote from the paper, or "Not reported in document" if unmentioned.',
+            },
+            reasoning: {
+              type: Type.STRING,
+              description: 'Scientific rationale for why this value was extracted, or explanation of why the parameter is absent from the text.',
+            },
+          },
+          required: ['snippetQuote', 'sectionName', 'reasoning'],
+        };
+      });
+
+      const extractionResponseSchema = {
+        type: Type.OBJECT,
+        properties: {
+          rows: {
+            type: Type.ARRAY,
+            description: 'List of distinct experimental observation rows extracted from the paper.',
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                ...columnProperties,
+                citations: {
+                  type: Type.OBJECT,
+                  description: 'Grounded citation object containing a citation entry for EVERY extracted column field.',
+                  properties: citationProperties,
+                  required: headers,
+                },
+              },
+              required: headers,
+            },
+          },
+        },
+        required: ['rows'],
+      };
+
       const schemaPrompt = `You are extracting structured scientific findings from the research paper "${pdfInfo?.title || pdfInfo?.name || targetPdfTitle}".
 
-Extract concise, accurate values for the following schema columns:
-${headers.map((h, i) => `${i + 1}. "${h}"`).join('\n')}
+Target Schema Columns:
+${gridStore.columns.map((c, i) => `${i + 1}. "${c.headerName}" (field key: "${c.field}")`).join('\n')}
 
-If the paper tests multiple distinct variables, experimental groups, treatments, or pairwise combinations, emit a DISTINCT ROW for each tested subject/observation that has actual experimental results, ignoring background mentions.
-
-${isAbstractOnly ? `[CRITICAL ANTI-HALLUCINATION RULE FOR ABSTRACT-ONLY PAPERS]:
-- This document is currently available as an ABSTRACT and metadata summary only (the full-text PDF is paywalled).
-- You must extract ONLY findings explicitly stated in the provided abstract text.
-- If a requested schema column field is NOT mentioned in the abstract, you MUST record the value as: "Not disclosed in abstract (Requires full PDF)".
-- NEVER guess, extrapolate, or hallucinate metrics that are not in the text.` : ''}
-
-[GROUNDED CITATION & EXACT LINE REQUIREMENTS]:
-For EVERY extracted column value, provide a corresponding grounded citation object in "citations" containing:
-1. "pageNumber": PDF page number (integer) if reading a PDF, or 1 if reading structured text/abstract.
-2. "sectionName": Exact section heading (e.g. "Methods §2.1", "Results - Table 2", "Abstract").
-3. "paragraphNumber": Specific paragraph or line location (e.g. "Paragraph 2", "Line 4").
-4. "snippetQuote": The EXACT UNALTERED VERBATIM sentence/line from the text (crucial for exact browser in-page search and highlighting).
-5. "reasoning": Grounded rationale for why this value was extracted.
-
-Return your response strictly as a JSON object with this format:
-{
-  "rows": [
-    {
-      ${headers.map((h) => `"${h}": "<Extracted value from paper>"`).join(',\n      ')},
-      "citations": {
-        ${headers
-          .slice(0, 3)
-          .map(
-            (h) => `"${h}": {
-          "pageNumber": 1,
-          "sectionName": "Section Name / Results / Abstract",
-          "paragraphNumber": "Paragraph 2",
-          "snippetQuote": "Exact unaltered verbatim sentence quote from paper",
-          "reasoning": "Grounded explanation for extracted value"
-        }`
-          )
-          .join(',\n        ')}
-        /* Provide citation entries for every extracted column field above */
-      }
-    }
-  ]
-}`;
+Core Extraction Rules:
+1. Multi-Observation Rows: If the paper tests multiple distinct variables, experimental groups, treatments, or pairwise combinations, emit a DISTINCT ROW for each tested subject/observation that has actual experimental results, ignoring background mentions.
+2. Missing Values: If a column was not measured, tested, or reported in the paper, set its value to "Not reported".
+3. Grounded Citations: For EVERY column in "citations", provide the exact unaltered verbatim sentence in "snippetQuote" (or "Not reported in document" if absent), sectionName, and reasoning for browser evidence highlighting.
+${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text. For unmentioned fields, use "Not disclosed in abstract (Requires full PDF)".` : ''}`;
 
       contentsParts.push({ text: schemaPrompt });
 
@@ -898,6 +932,7 @@ Return your response strictly as a JSON object with this format:
           config: {
             temperature: 0.1,
             responseMimeType: 'application/json',
+            responseSchema: extractionResponseSchema,
           },
         });
       } catch (firstErr: any) {
@@ -918,6 +953,7 @@ Return your response strictly as a JSON object with this format:
             config: {
               temperature: 0.1,
               responseMimeType: 'application/json',
+              responseSchema: extractionResponseSchema,
             },
           });
         } else {
@@ -980,7 +1016,11 @@ Return your response strictly as a JSON object with this format:
                   k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
                   col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
               )?.[1];
-            rowData[col.field] = val !== undefined && val !== null ? String(val) : '-';
+            let cellStr = val !== undefined && val !== null ? String(val).trim() : 'Not reported';
+            if (cellStr === '-' || cellStr === '' || cellStr.toLowerCase() === 'none' || cellStr.toLowerCase() === 'n/a') {
+              cellStr = 'Not reported';
+            }
+            rowData[col.field] = cellStr;
           });
 
           const rawCitations = r.citations || parsed.citations || {};
@@ -998,16 +1038,31 @@ Return your response strictly as a JSON object with this format:
                   col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
               )?.[1];
 
+            const isUnreported = rowData[col.field] === 'Not reported';
+
             if (citation) {
-              normalizedCitationMap[col.field] = {
+              const citObj = {
                 pageNumber: Number(citation.pageNumber) || 1,
-                sectionName: citation.sectionName || 'Extracted Section',
+                sectionName: citation.sectionName || (isUnreported ? 'N/A' : 'Extracted Section'),
                 paragraphNumber: citation.paragraphNumber || undefined,
                 lineNumber: citation.lineNumber || undefined,
-                snippetQuote: citation.snippetQuote || rowData[col.field] || 'Verified excerpt',
-                reasoning: citation.reasoning || `Extracted value "${rowData[col.field]}" from document`,
-                confidence: citation.confidence || 0.96,
+                snippetQuote: citation.snippetQuote || (isUnreported ? 'Not reported in document' : rowData[col.field]),
+                reasoning: citation.reasoning || (isUnreported ? `The parameter "${col.headerName}" was not reported in the document.` : `Extracted value "${rowData[col.field]}" from document`),
+                confidence: citation.confidence || (isUnreported ? 0.99 : 0.96),
               };
+              normalizedCitationMap[col.field] = citObj;
+              normalizedCitationMap[col.headerName] = citObj;
+            } else if (isUnreported) {
+              // Guaranteed fallback grounding card for unreported cell
+              const fallbackCit = {
+                pageNumber: 1,
+                sectionName: 'N/A',
+                snippetQuote: 'Not reported in document',
+                reasoning: `The parameter "${col.headerName}" was not investigated or reported in this paper.`,
+                confidence: 0.99,
+              };
+              normalizedCitationMap[col.field] = fallbackCit;
+              normalizedCitationMap[col.headerName] = fallbackCit;
             }
           });
 

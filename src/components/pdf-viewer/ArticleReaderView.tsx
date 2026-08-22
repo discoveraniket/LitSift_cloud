@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   ArrowUpRight,
+  Paperclip,
 } from 'lucide-react';
 import { PaperDocumentInfo, PaperTable } from '../../types/paper';
 import { useGridStore } from '../../store/useGridStore';
@@ -270,22 +271,17 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
     alert(`Imported ${newRows.length} rows from "${table.label || 'Table'}" directly into the Master Data Grid.`);
   };
 
-  // Handle Drag & Drop of local PDF onto abstract-only paper
-  const handlePdfDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const files = e.dataTransfer.files;
-    if (!files || files.length === 0) return;
-
-    const file = files[0];
+  // Attach local PDF binary to this paper document (keeps both Reader View and PDF Canvas in workspace)
+  const attachPdfFile = async (file: File) => {
     if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-      alert('Please drop a valid .PDF document.');
+      alert('Please select a valid .PDF document.');
       return;
     }
 
     const blobUrl = URL.createObjectURL(file);
-    
+
     // Read Base64
     const reader = new FileReader();
     reader.onload = async () => {
@@ -301,20 +297,78 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
     reader.readAsDataURL(file);
   };
 
+  // Handle Drag & Drop of local PDF onto paper
+  const handlePdfDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    await attachPdfFile(file);
+  };
+
   const sections = paper.sections || [];
   const tables = paper.tables || [];
   const figures = paper.figures || [];
 
+  const hasRealPdf = Boolean(
+    paper.url &&
+    paper.url.trim().length > 0 &&
+    paper.url !== 'blob:' &&
+    (!paper.file || (paper.file instanceof Blob && paper.file.size > 0)) &&
+    paper.sourceType !== 'doi_abstract_only' &&
+    paper.sourceType !== 'doi_structured'
+  );
+
   return (
     <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsDragOver(true);
+      }}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={handlePdfDrop}
       style={{
         display: 'flex',
         height: '100%',
         background: 'var(--bg-primary, #1e1e2e)',
         color: 'var(--text-primary, #cdd6f4)',
         overflow: 'hidden',
+        position: 'relative',
       }}
     >
+      {/* Visual Glassmorphic Drag & Drop Overlay */}
+      {isDragOver && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(24, 24, 37, 0.92)',
+            backdropFilter: 'blur(6px)',
+            zIndex: 100,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+            border: '2px dashed var(--accent-primary, #89b4fa)',
+            margin: '12px',
+            borderRadius: '12px',
+            pointerEvents: 'none',
+          }}
+        >
+          <Upload size={44} color="var(--accent-primary, #89b4fa)" />
+          <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary, #cdd6f4)', margin: 0 }}>
+            Drop PDF to attach to this paper
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted, #6c7086)', margin: 0 }}>
+            Enables visual PDF Canvas while preserving structured Reader View
+          </p>
+        </div>
+      )}
+
       {/* Sticky Left Navigation Outline */}
       <nav
         style={{
@@ -584,8 +638,22 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
           </div>
 
           {/* Action Toolbar */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '18px' }}>
-            {paper.url && onSwitchToPdf && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginTop: '18px' }}>
+            {/* Hidden File Input for Attaching PDF */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) attachPdfFile(f);
+                e.target.value = '';
+              }}
+            />
+
+            {/* Switch to PDF Canvas Button (when PDF binary is available) */}
+            {hasRealPdf && onSwitchToPdf && (
               <button
                 onClick={onSwitchToPdf}
                 style={{
@@ -601,10 +669,53 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
                   fontWeight: 600,
                   cursor: 'pointer',
                 }}
+                title="Switch to visual PDF canvas with page-by-page rendering"
               >
                 <FileText size={14} />
                 <span>Switch to PDF Canvas</span>
               </button>
+            )}
+
+            {/* Attach PDF / Replace PDF Button */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: hasRealPdf ? 'var(--bg-tertiary, #11111b)' : 'rgba(166, 227, 161, 0.12)',
+                border: `1px solid ${hasRealPdf ? 'var(--border-subtle, #313244)' : 'rgba(166, 227, 161, 0.35)'}`,
+                color: hasRealPdf ? 'var(--text-secondary, #a6adc8)' : 'var(--accent-success, #a6e3a1)',
+                borderRadius: '6px',
+                padding: '6px 12px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+              title={hasRealPdf ? "Replace the attached PDF file" : "Attach a local PDF file to this paper (keeps both Reader View and PDF Canvas in workspace)"}
+            >
+              <Paperclip size={14} />
+              <span>{hasRealPdf ? 'Replace Attached PDF' : 'Attach PDF to Paper'}</span>
+            </button>
+
+            {hasRealPdf && (
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  color: 'var(--accent-success, #a6e3a1)',
+                  background: 'rgba(166, 227, 161, 0.08)',
+                  padding: '5px 8px',
+                  borderRadius: '5px',
+                  border: '1px solid rgba(166, 227, 161, 0.2)',
+                }}
+              >
+                <Check size={12} />
+                <span>PDF Attached</span>
+              </span>
             )}
 
             {paper.pdfDownloadUrl && (

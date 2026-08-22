@@ -459,10 +459,12 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                               </span>
                             )}
                             {file.year && <span>• {file.year}</span>}
-                            {file.url ? (
+                            {file.url && file.sections && file.sections.length > 0 ? (
+                              <span style={{ color: 'var(--accent-success, #a6e3a1)', fontSize: '9px' }}>[PDF + Text]</span>
+                            ) : file.url ? (
                               <span style={{ color: 'var(--accent-primary, #89b4fa)', fontSize: '9px' }}>[PDF]</span>
                             ) : (
-                              <span style={{ color: 'var(--accent-warning, #f9e2af)', fontSize: '9px' }}>[Reader]</span>
+                              <span style={{ color: 'var(--accent-warning, #f9e2af)', fontSize: '9px' }}>[Text]</span>
                             )}
                           </div>
                         )}

@@ -208,7 +208,7 @@ export const useGridStore = create<GridState>((set) => ({
         saveSnapshot(state);
         state.columns.forEach((col) => {
           if (createdRow[col.field] === undefined || createdRow[col.field] === null) {
-            createdRow[col.field] = '-';
+            createdRow[col.field] = 'Not reported';
           }
         });
         state.rows.push(createdRow);
@@ -245,7 +245,7 @@ export const useGridStore = create<GridState>((set) => ({
         if (!state.columns.some((c) => c.field === field)) {
           state.columns.push({ field, headerName: cleanName, editable: true });
           state.rows.forEach((row) => {
-            const val = initialValues?.[row.id] ?? initialValues?.[row.pdfId] ?? initialValues?.[field] ?? '-';
+            const val = initialValues?.[row.id] ?? initialValues?.[row.pdfId] ?? initialValues?.[field] ?? 'Not reported';
             row[field] = val;
             if (citations && citations[row.id]) {
               if (!row.citationMap) row.citationMap = {};
