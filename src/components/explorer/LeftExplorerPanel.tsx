@@ -3,13 +3,12 @@ import { useGridStore } from '../../store/useGridStore';
 import { useAgentStore } from '../../store/useAgentStore';
 import { usePdfStore } from '../../store/usePdfStore';
 import { useLogStore } from '../../store/useLogStore';
-import { downloadPdfFile } from '../../services/workspaceService';
+import { SidebarViewMode } from '../../types/layout';
 import {
   ChevronDown,
   ChevronRight,
   Plus,
   Upload,
-  FileText,
   Table,
   Download,
   Trash2,
@@ -21,54 +20,66 @@ import {
   FileArchive,
   Link,
   Search,
+  CheckCircle2,
+  CircleDot,
+  Database,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 
 interface LeftExplorerPanelProps {
+  activeSidebarView?: SidebarViewMode;
   onSelectPdf: (pdfId: string, title: string) => void;
   onOpenMasterGrid: () => void;
   onOpenDebugLogs?: () => void;
   onOpenWorkspaceHub?: (section: 'export' | 'import') => void;
   onOpenPaperDiscovery?: () => void;
+  onResetWorkspace?: () => void;
 }
 
 export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
+  activeSidebarView = 'explorer',
   onSelectPdf,
   onOpenMasterGrid,
   onOpenDebugLogs,
   onOpenWorkspaceHub,
   onOpenPaperDiscovery,
+  onResetWorkspace,
 }) => {
-  const { columns, rows } = useGridStore();
+  const { columns, rows, clearTable } = useGridStore();
   const { logs, clearLogs } = useLogStore();
+  const { pdfs, addPdfFile, setActivePdf } = usePdfStore();
 
-  const [workspaceOpen, setWorkspaceOpen] = useState(true);
-  const [viewsOpen, setViewsOpen] = useState(true);
+  // Collapsible section state for Explorer view
   const [papersOpen, setPapersOpen] = useState(true);
-  const [schemasOpen, setSchemasOpen] = useState(true);
-  const [logsOpen, setLogsOpen] = useState(true);
+  const [viewsOpen, setViewsOpen] = useState(true);
+
+  // Collapsible section state for Workspace view
+  const [workspaceStatsOpen, setWorkspaceStatsOpen] = useState(true);
+  const [workspaceBundlesOpen, setWorkspaceBundlesOpen] = useState(true);
+  const [csvToolsOpen, setCsvToolsOpen] = useState(true);
+
+  // Collapsible section state for Debug view
+  const [logsStreamOpen, setLogsStreamOpen] = useState(true);
+
   const [activeItem, setActiveItem] = useState<string>('master-grid');
   const [copiedLogs, setCopiedLogs] = useState(false);
-
 
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
-
-
-  const { pdfs, addPdfFile, setActivePdf, removePdf } = usePdfStore();
 
   // Handle PDF Upload (Single or Batch Folder Upload)
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    // Filter only PDF files from the selected files / directory
     const pdfFiles = Array.from(files).filter(
       (f) => f.name.toLowerCase().endsWith('.pdf') || f.type === 'application/pdf'
     );
 
     if (pdfFiles.length === 0) {
-      alert('No PDF documents found in the selected folder.');
+      alert('No PDF documents found in the selected files.');
       e.target.value = '';
       return;
     }
@@ -99,7 +110,6 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
       const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
       if (lines.length === 0) return;
 
-      // Simple CSV parser supporting quotes
       const parseCsvLine = (line: string): string[] => {
         const result: string[] = [];
         let current = '';
@@ -133,7 +143,6 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
       const hasExistingData = gridStore.rows.length > 0 || gridStore.columns.length > 0;
 
       if (!hasExistingData) {
-        // Automatically import immediately if table is currently empty
         gridStore.importCsvDataset(headers, parsedRows);
         useAgentStore.setState((state) => ({
           messages: [
@@ -147,7 +156,6 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
           ],
         }));
       } else {
-        // Save pending CSV import payload and prompt user only if a table already exists
         (window as any).__pendingCsvImport = { headers, parsedRows, filename: file.name };
 
         useAgentStore.setState((state) => ({
@@ -171,7 +179,6 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
       setActiveItem('master-grid');
     };
     reader.readAsText(file);
-    // Reset file input value so user can re-upload same file if needed
     e.target.value = '';
   };
 
@@ -225,7 +232,18 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   const validRowCount = rows.filter((r) => !r.isDraftRow).length;
 
   return (
-    <aside className="panel left-explorer">
+    <aside
+      className="panel left-explorer"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        background: 'var(--bg-secondary, #181825)',
+        borderRight: '1px solid var(--border-subtle, #313244)',
+        userSelect: 'none',
+        overflow: 'hidden',
+      }}
+    >
       {/* Hidden File / Folder Inputs */}
       <input
         type="file"
@@ -252,545 +270,630 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
         style={{ display: 'none' }}
       />
 
-      <div style={{ padding: '4px 0', flex: 1, overflowY: 'auto' }}>
-        {/* Collapsible Section: WORKSPACE PROJECT */}
-        <div>
-          <div className="vscode-tree-header" onClick={() => setWorkspaceOpen(!workspaceOpen)}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {workspaceOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{' '}
-              <FileArchive size={12} color="var(--accent-primary)" /> WORKSPACE
-            </span>
-            <span
-              style={{
-                fontSize: '9px',
-                padding: '0 5px',
-                borderRadius: '8px',
-                background: 'rgba(137, 180, 250, 0.15)',
-                color: 'var(--accent-primary)',
-                fontWeight: 600,
-              }}
-            >
-              {pdfs.length}P • {validRowCount}R
-            </span>
-          </div>
+      {/* VS Code-style Sidebar Header */}
+      <div
+        style={{
+          padding: '8px 12px 6px 12px',
+          fontSize: '11px',
+          fontWeight: 700,
+          letterSpacing: '0.8px',
+          color: 'var(--text-secondary, #a6adc8)',
+          textTransform: 'uppercase',
+          borderBottom: '1px solid var(--border-subtle, #313244)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'var(--bg-tertiary, #11111b)',
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {activeSidebarView === 'explorer' && 'Explorer'}
+          {activeSidebarView === 'workspace' && 'Workspace'}
+          {activeSidebarView === 'debug' && 'Debug & Telemetry'}
+        </span>
 
-          {workspaceOpen && (
-            <div style={{ padding: '4px 8px 6px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <button
-                  className="vscode-tree-item"
-                  style={{
-                    flex: 1,
-                    background: 'var(--accent-primary, #89b4fa)',
-                    color: 'var(--bg-primary, #1e1e2e)',
-                    borderRadius: '4px',
-                    padding: '5px 8px',
-                    justifyContent: 'center',
-                    fontWeight: 700,
-                    fontSize: '11px',
-                  }}
-                  onClick={() => onOpenWorkspaceHub?.('export')}
-                  title="Open Workspace Hub tab to package & export .litsift bundle"
-                >
-                  <Download size={12} />
-                  <span>Export State</span>
-                </button>
+        {activeSidebarView === 'explorer' && (
+          <span
+            style={{
+              fontSize: '9.5px',
+              padding: '1px 6px',
+              borderRadius: '8px',
+              background: 'rgba(137, 180, 250, 0.15)',
+              color: 'var(--accent-primary)',
+              fontWeight: 600,
+            }}
+          >
+            {pdfs.length} papers
+          </span>
+        )}
+      </div>
 
-                <button
-                  className="vscode-tree-item"
-                  style={{
-                    flex: 1,
-                    background: 'var(--bg-tertiary)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '4px',
-                    padding: '5px 8px',
-                    justifyContent: 'center',
-                    fontWeight: 600,
-                    fontSize: '11px',
-                  }}
-                  onClick={() => onOpenWorkspaceHub?.('import')}
-                  title="Open Workspace Hub tab to import .litsift bundle"
-                >
-                  <Upload size={12} color="var(--accent-primary)" />
-                  <span>Import</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Collapsible Section: VIEWS */}
-        <div style={{ marginTop: '6px' }}>
-          <div className="vscode-tree-header" onClick={() => setViewsOpen(!viewsOpen)}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {viewsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} VIEWS
-            </span>
-          </div>
-
-          {viewsOpen && (
-            <div>
-              <div
-                className={`vscode-tree-item ${activeItem === 'master-grid' ? 'active' : ''}`}
-                onClick={() => {
-                  onOpenMasterGrid();
-                  setActiveItem('master-grid');
-                }}
-              >
-                <Table size={13} color="var(--accent-primary)" />
-                <span>Master Extraction Grid</span>
-              </div>
-
-              {onOpenPaperDiscovery && (
-                <div
-                  className={`vscode-tree-item ${activeItem === 'paper-discovery' ? 'active' : ''}`}
-                  onClick={() => {
-                    onOpenPaperDiscovery();
-                    setActiveItem('paper-discovery');
-                  }}
-                >
-                  <Search size={13} color="var(--accent-warning, #f9e2af)" />
-                  <span>Paper Discovery & Ingest</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Collapsible Section: RESEARCH PAPERS */}
-        <div style={{ marginTop: '8px' }}>
-          <div className="vscode-tree-header" onClick={() => setPapersOpen(!papersOpen)}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {papersOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} RESEARCH PAPERS ({pdfs.length})
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span
-                className="vscode-action-icon"
-                title="Search Literature & Ingest DOIs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenPaperDiscovery?.();
-                  setActiveItem('paper-discovery');
-                }}
-                style={{
-                  color: 'var(--accent-primary, #89b4fa)',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                <Link size={13} />
-              </span>
-              <span
-                className="vscode-action-icon"
-                title="Select Folder (Auto-scans & uploads all PDFs)"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  folderInputRef.current?.click();
-                }}
-              >
-                <FolderOpen size={13} color="var(--accent-warning, #f9e2af)" />
-              </span>
-              <span
-                className="vscode-action-icon"
-                title="Upload Single PDF File"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  pdfInputRef.current?.click();
-                }}
-              >
-                <Plus size={14} />
-              </span>
-            </div>
-          </div>
-
-          {papersOpen && (
-            <div>
-              {pdfs.map((file) => {
-                const isOa = file.oaStatus && file.oaStatus !== 'closed' && file.oaStatus !== 'unknown';
-
-                return (
-                  <div
-                    key={file.id}
-                    className={`vscode-tree-item ${activeItem === file.id ? 'active' : ''}`}
-                    onClick={() => {
-                      setActivePdf(file.id);
-                      onSelectPdf(file.id, file.name);
-                      setActiveItem(file.id);
+      {/* Scrollable Main Body */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
+        {/* ========================================================================= */}
+        {/* 1. EXPLORER MODE (Daily Driver: Research Papers on Top, Views on Bottom)  */}
+        {/* ========================================================================= */}
+        {activeSidebarView === 'explorer' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            {/* Top: RESEARCH PAPERS SECTION */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <div className="vscode-tree-header" onClick={() => setPapersOpen(!papersOpen)}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {papersOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} RESEARCH PAPERS ({pdfs.length})
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span
+                    className="vscode-action-icon"
+                    title="Search Literature & Ingest DOIs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenPaperDiscovery?.();
+                      setActiveItem('paper-discovery');
                     }}
                     style={{
+                      color: 'var(--accent-primary, #89b4fa)',
                       display: 'flex',
-                      flexDirection: 'column',
-                      gap: '2px',
-                      padding: '6px 8px',
-                      position: 'relative',
-                      borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
+                      alignItems: 'center',
                     }}
                   >
-                    {/* Top Row: Icon + Title + Status Badges */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
-                      <FileText
-                        size={13}
-                        color={isOa ? 'var(--accent-success, #a6e3a1)' : 'var(--accent-secondary, #b4befe)'}
-                        style={{ flexShrink: 0 }}
-                      />
-                      
-                      <span
-                        style={{
-                          flex: 1,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          fontSize: '12px',
-                          fontWeight: activeItem === file.id ? 600 : 400,
-                        }}
-                        title={file.title || file.name}
-                      >
-                        {file.title || file.name}
-                      </span>
+                    <Link size={13} />
+                  </span>
+                  <span
+                    className="vscode-action-icon"
+                    title="Select Folder (Auto-scans & uploads all PDFs)"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      folderInputRef.current?.click();
+                    }}
+                  >
+                    <FolderOpen size={13} color="var(--accent-warning, #f9e2af)" />
+                  </span>
+                  <span
+                    className="vscode-action-icon"
+                    title="Upload Single PDF File"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      pdfInputRef.current?.click();
+                    }}
+                  >
+                    <Plus size={14} />
+                  </span>
+                </div>
+              </div>
 
-                      {/* OA Badge */}
-                      {isOa && (
-                        <span
-                          style={{
-                            fontSize: '8.5px',
-                            fontWeight: 700,
-                            padding: '0px 4px',
-                            borderRadius: '4px',
-                            background: 'rgba(166, 227, 161, 0.2)',
-                            color: '#a6e3a1',
-                            flexShrink: 0,
-                          }}
-                        >
-                          OA
-                        </span>
-                      )}
+              {papersOpen && (
+                <div style={{ paddingBottom: '8px' }}>
+                  {pdfs.map((file) => {
+                    // Check if this paper has any extracted rows in the master data grid
+                    const isExtracted = rows.some(
+                      (r) =>
+                        !r.isDraftRow &&
+                        (r.pdfId === file.id ||
+                          r.pdfTitle === file.name ||
+                          (file.title && r.pdfTitle === file.title))
+                    );
 
-                      {/* Download Button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          downloadPdfFile({
-                            name: file.name,
-                            file: file.file,
-                            base64: file.base64,
-                            url: file.url,
-                          });
-                        }}
-                        title={`Download "${file.name}"`}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--text-muted)',
-                          cursor: 'pointer',
-                          padding: '2px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          borderRadius: '3px',
-                          opacity: 0.7,
-                        }}
-                        onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLElement).style.color = 'var(--accent-primary, #89b4fa)';
-                          (e.currentTarget as HTMLElement).style.opacity = '1';
-                        }}
-                        onMouseLeave={(e) => {
-                          (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
-                          (e.currentTarget as HTMLElement).style.opacity = '0.7';
-                        }}
-                      >
-                        <Download size={12} />
-                      </button>
+                    const extractedRowCount = rows.filter(
+                      (r) =>
+                        !r.isDraftRow &&
+                        (r.pdfId === file.id ||
+                          r.pdfTitle === file.name ||
+                          (file.title && r.pdfTitle === file.title))
+                    ).length;
 
-                      {/* Delete Button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`Delete paper "${file.name}" from your workspace?`)) {
-                            removePdf(file.id);
-                            if (activeItem === file.id) {
-                              onOpenMasterGrid();
-                              setActiveItem('master-grid');
-                            }
-                          }
-                        }}
-                        title={`Delete ${file.name}`}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--text-muted)',
-                          cursor: 'pointer',
-                          padding: '2px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          borderRadius: '3px',
-                          opacity: 0.7,
-                        }}
-                        onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLElement).style.color = 'var(--accent-danger, #f38ba8)';
-                          (e.currentTarget as HTMLElement).style.opacity = '1';
-                        }}
-                        onMouseLeave={(e) => {
-                          (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
-                          (e.currentTarget as HTMLElement).style.opacity = '0.7';
-                        }}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-
-                    {/* Bottom Sub-row: Journal, Year, DOI indicator */}
-                    {(file.journal || file.year || file.doi) && (
+                    return (
                       <div
+                        key={file.id}
+                        className={`vscode-tree-item ${activeItem === file.id ? 'active' : ''}`}
+                        onClick={() => {
+                          setActivePdf(file.id);
+                          onSelectPdf(file.id, file.name);
+                          setActiveItem(file.id);
+                        }}
                         style={{
                           display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          fontSize: '10px',
-                          color: 'var(--text-muted, #6c7086)',
-                          paddingLeft: '19px',
+                          flexDirection: 'column',
+                          gap: '2px',
+                          padding: '6px 10px 6px 14px',
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.02)',
+                          cursor: 'pointer',
                         }}
                       >
-                        {file.journal && (
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
-                            {file.journal}
+                        {/* Top Row: Single Status Icon + Paper Title */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', width: '100%' }}>
+                          {/* Real-time Extraction Status Indicator */}
+                          {isExtracted ? (
+                            <span
+                              title={`Extraction Complete (${extractedRowCount} row${extractedRowCount > 1 ? 's' : ''} in Data Grid)`}
+                              style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                            >
+                              <CheckCircle2 size={13} color="var(--accent-success, #a6e3a1)" />
+                            </span>
+                          ) : (
+                            <span
+                              title="Extraction Pending / Not started"
+                              style={{ display: 'flex', alignItems: 'center', flexShrink: 0, opacity: 0.6 }}
+                            >
+                              <CircleDot size={13} color="var(--text-muted, #6c7086)" />
+                            </span>
+                          )}
+
+                          <span
+                            style={{
+                              flex: 1,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              fontSize: '11.5px',
+                              fontWeight: activeItem === file.id ? 600 : 400,
+                              color: activeItem === file.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            }}
+                            title={file.title || file.name}
+                          >
+                            {file.title || file.name}
                           </span>
-                        )}
-                        {file.year && <span>• {file.year}</span>}
-                        {file.url ? (
-                          <span style={{ color: 'var(--accent-primary, #89b4fa)', fontSize: '9px' }}>[PDF]</span>
-                        ) : (
-                          <span style={{ color: 'var(--accent-warning, #f9e2af)', fontSize: '9px' }}>[Reader]</span>
+                        </div>
+
+                        {/* Sub-row: Journal & Year Metadata */}
+                        {(file.journal || file.year) && (
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '10px',
+                              color: 'var(--text-muted, #6c7086)',
+                              paddingLeft: '20px',
+                            }}
+                          >
+                            {file.journal && (
+                              <span
+                                style={{
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  maxWidth: '150px',
+                                }}
+                              >
+                                {file.journal}
+                              </span>
+                            )}
+                            {file.year && <span>• {file.year}</span>}
+                            {file.url ? (
+                              <span style={{ color: 'var(--accent-primary, #89b4fa)', fontSize: '9px' }}>[PDF]</span>
+                            ) : (
+                              <span style={{ color: 'var(--accent-warning, #f9e2af)', fontSize: '9px' }}>[Reader]</span>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
 
-              {pdfs.length === 0 && (
-                <div
-                  style={{
-                    padding: '12px 10px',
-                    fontSize: '11px',
-                    color: 'var(--text-muted, #6c7086)',
-                    textAlign: 'center',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  No papers loaded yet. Click <strong>+</strong> or <strong>🔗</strong> to import.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Collapsible Section: SCHEMAS & EXPORT */}
-        <div style={{ marginTop: '8px' }}>
-          <div className="vscode-tree-header" onClick={() => setSchemasOpen(!schemasOpen)}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {schemasOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} SCHEMAS & EXPORT
-            </span>
-            <span
-              className="vscode-action-icon"
-              title="Import CSV Dataset / Schema"
-              onClick={(e) => {
-                e.stopPropagation();
-                csvInputRef.current?.click();
-              }}
-            >
-              <Upload size={13} />
-            </span>
-          </div>
-
-          {schemasOpen && (
-            <div style={{ padding: '4px 8px 4px 18px' }}>
-              <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
-                <button
-                  className="vscode-tree-item"
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '4px',
-                    padding: '6px 8px',
-                    justifyContent: 'center',
-                  }}
-                  onClick={() => csvInputRef.current?.click()}
-                >
-                  <Upload size={12} color="var(--accent-primary)" />
-                  <span>Import CSV Dataset</span>
-                </button>
-
-                <button
-                  className="vscode-tree-item"
-                  style={{
-                    background: 'var(--accent-primary)',
-                    color: 'var(--bg-secondary)',
-                    borderRadius: '4px',
-                    padding: '6px 8px',
-                    justifyContent: 'center',
-                    fontWeight: 600,
-                  }}
-                  onClick={handleExportCsv}
-                >
-                  <Download size={12} />
-                  <span>Export CSV Dataset</span>
-                </button>
-
-                <button
-                  className="vscode-tree-item"
-                  style={{
-                    marginTop: '6px',
-                    background: 'rgba(243, 139, 168, 0.15)',
-                    border: '1px solid var(--accent-danger)',
-                    color: 'var(--accent-danger)',
-                    borderRadius: '4px',
-                    padding: '6px 8px',
-                    justifyContent: 'center',
-                    fontWeight: 600,
-                  }}
-                  onClick={() => useGridStore.getState().clearTable()}
-                  title="Clear entire table schema and all rows (Can be undone via Ctrl+Z)"
-                >
-                  <Trash2 size={12} />
-                  <span>Clear Entire Table</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Collapsible Section: AGENT DEBUG LOGS */}
-        <div style={{ marginTop: '8px' }}>
-          <div className="vscode-tree-header" onClick={() => setLogsOpen(!logsOpen)}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {logsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} DEBUG & TELEMETRY ({logs.length})
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span
-                className="vscode-action-icon"
-                title={copiedLogs ? 'Copied Full Logs!' : 'Copy All Logs to Clipboard'}
-                onClick={handleCopyAllLogs}
-                style={{ color: copiedLogs ? 'var(--accent-success)' : undefined }}
-              >
-                {copiedLogs ? <Check size={13} /> : <Copy size={13} />}
-              </span>
-              {onOpenDebugLogs && (
-                <span
-                  className="vscode-action-icon"
-                  title="Open Detailed Logs Window"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenDebugLogs();
-                  }}
-                >
-                  <Maximize2 size={13} />
-                </span>
-              )}
-              <span
-                className="vscode-action-icon"
-                title="Clear Logs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  clearLogs();
-                }}
-              >
-                <Trash2 size={13} />
-              </span>
-            </div>
-          </div>
-
-          {logsOpen && (
-            <div style={{ padding: '4px 8px 8px 12px' }}>
-              {logs.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: '10.5px', fontStyle: 'italic', padding: '6px 4px' }}>
-                  No logs captured yet.
-                </div>
-              ) : (
-                <div
-                  style={{
-                    maxHeight: '160px',
-                    overflowY: 'auto',
-                    background: '#07080c',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '4px',
-                    padding: '6px',
-                    fontFamily: 'var(--font-mono, monospace)',
-                    fontSize: '9.5px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                  }}
-                >
-                  {logs.slice(-25).map((l) => (
-                    <div key={l.id} style={{ display: 'flex', gap: '4px', lineHeight: '1.3' }}>
-                      <span style={{ color: '#6c7086' }}>{l.timestamp.split(' ')[0]}</span>
-                      <span
-                        style={{
-                          fontWeight: 700,
-                          color:
-                            l.level === 'error'
-                              ? 'var(--accent-danger)'
-                              : l.level === 'warn'
-                              ? 'var(--accent-warning)'
-                              : l.level === 'success'
-                              ? 'var(--accent-success)'
-                              : 'var(--accent-primary)',
-                        }}
-                      >
-                        [{l.level[0].toUpperCase()}]
-                      </span>
-                      <span style={{ color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.message}>
-                        {l.message}
-                      </span>
+                  {pdfs.length === 0 && (
+                    <div
+                      style={{
+                        padding: '16px 12px',
+                        fontSize: '11px',
+                        color: 'var(--text-muted, #6c7086)',
+                        textAlign: 'center',
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      No papers loaded yet.
+                      <div style={{ marginTop: '6px', fontSize: '10px' }}>
+                        Click <strong>+</strong> to upload a PDF or <strong>🔗</strong> for DOI search.
+                      </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
+            </div>
 
-              <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
-                <button
-                  className="vscode-tree-item"
-                  style={{
-                    flex: 1,
-                    background: copiedLogs ? 'rgba(166, 227, 161, 0.2)' : 'var(--bg-tertiary)',
-                    border: '1px solid var(--border-subtle)',
-                    color: copiedLogs ? 'var(--accent-success)' : 'var(--text-primary)',
-                    borderRadius: '4px',
-                    padding: '4px 6px',
-                    justifyContent: 'center',
-                    fontSize: '10.5px',
-                    fontWeight: 600,
-                  }}
-                  onClick={() => handleCopyAllLogs()}
-                >
-                  {copiedLogs ? <Check size={11} /> : <Copy size={11} />}
-                  <span>{copiedLogs ? 'Copied Full Log' : 'Copy All Logs'}</span>
-                </button>
+            {/* Bottom: VIEWS SECTION (Clean Minimalist Placement) */}
+            <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border-subtle, #313244)', paddingTop: '4px' }}>
+              <div className="vscode-tree-header" onClick={() => setViewsOpen(!viewsOpen)}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {viewsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} VIEWS
+                </span>
+              </div>
 
-                {onOpenDebugLogs && (
+              {viewsOpen && (
+                <div style={{ paddingBottom: '6px' }}>
+                  <div
+                    className={`vscode-tree-item ${activeItem === 'master-grid' ? 'active' : ''}`}
+                    onClick={() => {
+                      onOpenMasterGrid();
+                      setActiveItem('master-grid');
+                    }}
+                  >
+                    <Table size={13} color="var(--accent-primary)" />
+                    <span>Master Extraction Grid</span>
+                  </div>
+
+                  {onOpenPaperDiscovery && (
+                    <div
+                      className={`vscode-tree-item ${activeItem === 'paper-discovery' ? 'active' : ''}`}
+                      onClick={() => {
+                        onOpenPaperDiscovery();
+                        setActiveItem('paper-discovery');
+                      }}
+                    >
+                      <Search size={13} color="var(--accent-warning, #f9e2af)" />
+                      <span>Paper Discovery & Ingest</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* 2. WORKSPACE MODE (Project Snapshot, .litsift Bundles, CSV Datasets)       */}
+        {/* ========================================================================= */}
+        {activeSidebarView === 'workspace' && (
+          <div>
+            {/* PROJECT METRICS */}
+            <div>
+              <div className="vscode-tree-header" onClick={() => setWorkspaceStatsOpen(!workspaceStatsOpen)}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {workspaceStatsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{' '}
+                  <Sparkles size={12} color="var(--accent-primary)" /> PROJECT SNAPSHOT
+                </span>
+              </div>
+
+              {workspaceStatsOpen && (
+                <div style={{ padding: '6px 12px' }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '6px',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        background: 'var(--bg-tertiary)',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: '6px',
+                        padding: '8px',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                        {pdfs.length}
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Papers Loaded</div>
+                    </div>
+
+                    <div
+                      style={{
+                        background: 'var(--bg-tertiary)',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: '6px',
+                        padding: '8px',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--accent-success)' }}>
+                        {validRowCount}
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Extracted Rows</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* STATE BUNDLES (.litsift) */}
+            <div style={{ marginTop: '6px' }}>
+              <div className="vscode-tree-header" onClick={() => setWorkspaceBundlesOpen(!workspaceBundlesOpen)}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {workspaceBundlesOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{' '}
+                  <FileArchive size={12} color="var(--accent-secondary)" /> STATE PACKAGES (.LITSIFT)
+                </span>
+              </div>
+
+              {workspaceBundlesOpen && (
+                <div style={{ padding: '6px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <button
                     className="vscode-tree-item"
                     style={{
-                      background: 'rgba(137, 180, 250, 0.12)',
-                      border: '1px solid rgba(137, 180, 250, 0.3)',
+                      background: 'var(--accent-primary, #89b4fa)',
+                      color: 'var(--bg-primary, #1e1e2e)',
+                      borderRadius: '4px',
+                      padding: '6px 8px',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '11px',
+                    }}
+                    onClick={() => onOpenWorkspaceHub?.('export')}
+                    title="Export workspace state bundle (.litsift)"
+                  >
+                    <Download size={12} />
+                    <span>Export State (.litsift)</span>
+                  </button>
+
+                  <button
+                    className="vscode-tree-item"
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '4px',
+                      padding: '6px 8px',
+                      justifyContent: 'center',
+                      fontWeight: 600,
+                      fontSize: '11px',
+                    }}
+                    onClick={() => onOpenWorkspaceHub?.('import')}
+                    title="Import workspace state bundle (.litsift)"
+                  >
+                    <Upload size={12} color="var(--accent-primary)" />
+                    <span>Import State (.litsift)</span>
+                  </button>
+
+                  <button
+                    className="vscode-tree-item"
+                    style={{
+                      background: 'rgba(137, 180, 250, 0.1)',
+                      border: '1px solid rgba(137, 180, 250, 0.25)',
                       color: 'var(--accent-primary)',
                       borderRadius: '4px',
-                      padding: '4px 8px',
+                      padding: '6px 8px',
                       justifyContent: 'center',
-                      fontSize: '10.5px',
+                      fontSize: '11px',
                       fontWeight: 600,
                     }}
-                    onClick={onOpenDebugLogs}
-                    title="Open Full Log Inspector"
+                    onClick={() => onOpenWorkspaceHub?.('export')}
                   >
-                    <Terminal size={11} />
-                    <span>Inspect</span>
+                    <FileArchive size={12} />
+                    <span>Open Full Workspace Hub</span>
                   </button>
+                </div>
+              )}
+            </div>
+
+            {/* CSV DATASETS (Relocated cleanly to Workspace) */}
+            <div style={{ marginTop: '6px' }}>
+              <div className="vscode-tree-header" onClick={() => setCsvToolsOpen(!csvToolsOpen)}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {csvToolsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{' '}
+                  <Database size={12} color="var(--accent-success)" /> CSV DATASETS
+                </span>
+              </div>
+
+              {csvToolsOpen && (
+                <div style={{ padding: '6px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <button
+                    className="vscode-tree-item"
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '4px',
+                      padding: '6px 8px',
+                      justifyContent: 'center',
+                      fontSize: '11px',
+                    }}
+                    onClick={() => csvInputRef.current?.click()}
+                  >
+                    <Upload size={12} color="var(--accent-primary)" />
+                    <span>Import CSV Dataset</span>
+                  </button>
+
+                  <button
+                    className="vscode-tree-item"
+                    style={{
+                      background: 'var(--accent-primary)',
+                      color: 'var(--bg-secondary)',
+                      borderRadius: '4px',
+                      padding: '6px 8px',
+                      justifyContent: 'center',
+                      fontWeight: 600,
+                      fontSize: '11px',
+                    }}
+                    onClick={handleExportCsv}
+                  >
+                    <Download size={12} />
+                    <span>Export CSV Dataset</span>
+                  </button>
+
+                  {/* Danger Zone: Clear Table */}
+                  <button
+                    className="vscode-tree-item"
+                    style={{
+                      marginTop: '4px',
+                      background: 'rgba(243, 139, 168, 0.12)',
+                      border: '1px solid var(--accent-danger)',
+                      color: 'var(--accent-danger)',
+                      borderRadius: '4px',
+                      padding: '6px 8px',
+                      justifyContent: 'center',
+                      fontWeight: 600,
+                      fontSize: '11px',
+                    }}
+                    onClick={() => {
+                      if (window.confirm('Clear entire table schema and all rows? (Can be undone with Ctrl+Z)')) {
+                        clearTable();
+                      }
+                    }}
+                    title="Clear entire table schema and all rows"
+                  >
+                    <Trash2 size={12} />
+                    <span>Clear Entire Table</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Reset Workspace Action */}
+            <div style={{ padding: '10px 12px 6px 12px' }}>
+              <button
+                className="vscode-tree-item"
+                style={{
+                  width: '100%',
+                  background: 'rgba(249, 226, 175, 0.08)',
+                  border: '1px solid var(--accent-warning)',
+                  color: 'var(--accent-warning)',
+                  borderRadius: '4px',
+                  padding: '6px 8px',
+                  justifyContent: 'center',
+                  fontWeight: 600,
+                  fontSize: '11px',
+                }}
+                onClick={onResetWorkspace}
+                title="Start fresh project and clear workspace"
+              >
+                <RotateCcw size={12} />
+                <span>New Project (Reset Workspace)</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* 3. DEBUG & TELEMETRY MODE (Live Monospace Event Stream & Inspector)       */}
+        {/* ========================================================================= */}
+        {activeSidebarView === 'debug' && (
+          <div>
+            <div className="vscode-tree-header" onClick={() => setLogsStreamOpen(!logsStreamOpen)}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {logsStreamOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} LIVE EVENT STREAM ({logs.length})
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span
+                  className="vscode-action-icon"
+                  title={copiedLogs ? 'Copied Full Logs!' : 'Copy All Logs to Clipboard'}
+                  onClick={handleCopyAllLogs}
+                  style={{ color: copiedLogs ? 'var(--accent-success)' : undefined }}
+                >
+                  {copiedLogs ? <Check size={13} /> : <Copy size={13} />}
+                </span>
+                {onOpenDebugLogs && (
+                  <span
+                    className="vscode-action-icon"
+                    title="Open Detailed Logs Window"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenDebugLogs();
+                    }}
+                  >
+                    <Maximize2 size={13} />
+                  </span>
                 )}
+                <span
+                  className="vscode-action-icon"
+                  title="Clear Logs"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearLogs();
+                  }}
+                >
+                  <Trash2 size={13} />
+                </span>
               </div>
             </div>
-          )}
-        </div>
+
+            {logsStreamOpen && (
+              <div style={{ padding: '6px 12px' }}>
+                {logs.length === 0 ? (
+                  <div style={{ color: 'var(--text-muted)', fontSize: '11px', fontStyle: 'italic', padding: '8px 4px' }}>
+                    No telemetry events captured yet.
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      maxHeight: '320px',
+                      overflowY: 'auto',
+                      background: '#07080c',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '6px',
+                      padding: '8px',
+                      fontFamily: 'var(--font-mono, monospace)',
+                      fontSize: '9.5px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                    }}
+                  >
+                    {logs.slice(-40).map((l) => (
+                      <div key={l.id} style={{ display: 'flex', gap: '4px', lineHeight: '1.3' }}>
+                        <span style={{ color: '#6c7086' }}>{l.timestamp.split(' ')[0]}</span>
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            color:
+                              l.level === 'error'
+                                ? 'var(--accent-danger)'
+                                : l.level === 'warn'
+                                ? 'var(--accent-warning)'
+                                : l.level === 'success'
+                                ? 'var(--accent-success)'
+                                : 'var(--accent-primary)',
+                          }}
+                        >
+                          [{l.level[0].toUpperCase()}]
+                        </span>
+                        <span
+                          style={{ color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          title={l.message}
+                        >
+                          {l.message}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+                  <button
+                    className="vscode-tree-item"
+                    style={{
+                      flex: 1,
+                      background: copiedLogs ? 'rgba(166, 227, 161, 0.2)' : 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-subtle)',
+                      color: copiedLogs ? 'var(--accent-success)' : 'var(--text-primary)',
+                      borderRadius: '4px',
+                      padding: '5px 8px',
+                      justifyContent: 'center',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                    }}
+                    onClick={() => handleCopyAllLogs()}
+                  >
+                    {copiedLogs ? <Check size={12} /> : <Copy size={12} />}
+                    <span>{copiedLogs ? 'Copied' : 'Copy All'}</span>
+                  </button>
+
+                  {onOpenDebugLogs && (
+                    <button
+                      className="vscode-tree-item"
+                      style={{
+                        background: 'rgba(137, 180, 250, 0.12)',
+                        border: '1px solid rgba(137, 180, 250, 0.3)',
+                        color: 'var(--accent-primary)',
+                        borderRadius: '4px',
+                        padding: '5px 10px',
+                        justifyContent: 'center',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                      }}
+                      onClick={onOpenDebugLogs}
+                      title="Open Full Log Inspector Modal"
+                    >
+                      <Terminal size={12} />
+                      <span>Inspect</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );
 };
 
+export default LeftExplorerPanel;

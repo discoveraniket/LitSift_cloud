@@ -1,40 +1,32 @@
 import React from 'react';
 import {
   Files,
-  Table,
-  Terminal,
+  FileArchive,
   Settings,
   Maximize2,
-  RotateCcw,
   Bug,
+  HelpCircle,
 } from 'lucide-react';
 import { getSelectedGeminiModel } from '../../services/geminiService';
 import { useLogStore } from '../../store/useLogStore';
+import { SidebarViewMode } from '../../types/layout';
 
 interface ActivityBarProps {
   showLeftPanel: boolean;
-  showBottomPanel: boolean;
-  activeView: 'pdf' | 'master_grid';
-  onToggleLeftPanel: () => void;
-  onToggleBottomPanel: () => void;
-  onOpenMasterGrid: () => void;
-  onOpenDebugLogs: () => void;
+  activeSidebarView: SidebarViewMode;
+  onSelectSidebarView: (view: SidebarViewMode) => void;
   onToggleZenMode: () => void;
   onOpenSettings: () => void;
-  onResetWorkspace: () => void;
+  onOpenAbout: () => void;
 }
 
 export const ActivityBar: React.FC<ActivityBarProps> = ({
   showLeftPanel,
-  showBottomPanel,
-  activeView,
-  onToggleLeftPanel,
-  onToggleBottomPanel,
-  onOpenMasterGrid,
-  onOpenDebugLogs,
+  activeSidebarView,
+  onSelectSidebarView,
   onToggleZenMode,
   onOpenSettings,
-  onResetWorkspace,
+  onOpenAbout,
 }) => {
   const currentModel = getSelectedGeminiModel();
   const logCount = useLogStore((state) => state.logs.length);
@@ -47,30 +39,30 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <span className="activity-logo">⚡</span>
         </div>
 
-        {/* Explorer (Left Panel Toggle) */}
+        {/* 1. Explorer (Research Papers & Views) */}
         <button
-          className={`activity-item ${showLeftPanel ? 'active' : ''}`}
-          onClick={onToggleLeftPanel}
-          title="Explorer (PDF Papers & Schemas)"
+          className={`activity-item ${showLeftPanel && activeSidebarView === 'explorer' ? 'active' : ''}`}
+          onClick={() => onSelectSidebarView('explorer')}
+          title="Explorer (Research Papers & Views)"
         >
           <Files size={19} />
           <span className="activity-tooltip">Explorer</span>
         </button>
 
-        {/* Master Data Grid View Toggle */}
+        {/* 2. Workspace Projects (.litsift bundle state & CSV Data) */}
         <button
-          className={`activity-item ${activeView === 'master_grid' ? 'active' : ''}`}
-          onClick={onOpenMasterGrid}
-          title="Master Extraction Data Grid View"
+          className={`activity-item ${showLeftPanel && activeSidebarView === 'workspace' ? 'active' : ''}`}
+          onClick={() => onSelectSidebarView('workspace')}
+          title="Workspace & Project State (.litsift Packages & CSV Datasets)"
         >
-          <Table size={19} />
-          <span className="activity-tooltip">Data Grid</span>
+          <FileArchive size={19} />
+          <span className="activity-tooltip">Workspace</span>
         </button>
 
-        {/* Debug Logs Viewer Button */}
+        {/* 3. Debug Logs & Telemetry */}
         <button
-          className="activity-item"
-          onClick={onOpenDebugLogs}
+          className={`activity-item ${showLeftPanel && activeSidebarView === 'debug' ? 'active' : ''}`}
+          onClick={() => onSelectSidebarView('debug')}
           title={`Agent Debug & Telemetry Logs (${logCount} events)`}
           style={{ position: 'relative' }}
         >
@@ -95,17 +87,7 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
               {logCount > 99 ? '99+' : logCount}
             </span>
           )}
-          <span className="activity-tooltip">Debug Logs</span>
-        </button>
-
-        {/* Bottom Panel Toggle */}
-        <button
-          className={`activity-item ${showBottomPanel ? 'active' : ''}`}
-          onClick={onToggleBottomPanel}
-          title="Toggle Bottom Extraction Grid & Logs Drawer"
-        >
-          <Terminal size={19} />
-          <span className="activity-tooltip">Bottom Grid</span>
+          <span className="activity-tooltip">Debug & Logs</span>
         </button>
       </div>
 
@@ -120,16 +102,6 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <span className="activity-tooltip">Zen Reader</span>
         </button>
 
-        {/* New Project / Reset Workspace */}
-        <button
-          className="activity-item danger-item"
-          onClick={onResetWorkspace}
-          title="New Project (Reset Workspace & Start Fresh)"
-        >
-          <RotateCcw size={18} color="var(--accent-warning, #f9e2af)" />
-          <span className="activity-tooltip">New Project</span>
-        </button>
-
         {/* Settings Button */}
         <button
           className="activity-item"
@@ -138,6 +110,16 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
         >
           <Settings size={18} />
           <span className="activity-tooltip">Settings</span>
+        </button>
+
+        {/* About LitSift Cloud Button */}
+        <button
+          className="activity-item"
+          onClick={onOpenAbout}
+          title="About LitSift Cloud (Architecture & Shortcuts)"
+        >
+          <HelpCircle size={18} />
+          <span className="activity-tooltip">About</span>
         </button>
       </div>
     </aside>

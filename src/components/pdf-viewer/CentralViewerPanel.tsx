@@ -5,6 +5,7 @@ import {
   ChevronDown,
   X,
   Download,
+  Trash2,
   Table,
   FileArchive,
   Keyboard,
@@ -677,6 +678,35 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
                   <Download size={12} />
                 </button>
               )}
+
+              {/* Delete Paper from Workspace Button */}
+              <button
+                onClick={() => {
+                  if (window.confirm(`Delete paper "${foundPdf.name}" from your workspace?`)) {
+                    usePdfStore.getState().removePdf(foundPdf.id);
+                    onNavigateToGrid?.();
+                  }
+                }}
+                title={`Delete "${foundPdf.name}" from workspace`}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted, #6c7086)',
+                  padding: '3px 6px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  borderRadius: '4px',
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.color = 'var(--accent-danger, #f38ba8)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.color = 'var(--text-muted, #6c7086)';
+                }}
+              >
+                <Trash2 size={12} />
+              </button>
 
               {/* DOI External Link */}
               {foundPdf.doi && (

@@ -8,7 +8,8 @@ import { RightAgentPanel } from '../agent/RightAgentPanel';
 import { BottomGridPanel } from '../data-grid/BottomGridPanel';
 import { SettingsModal } from '../settings/SettingsModal';
 import { DebugLogsModal } from '../agent/DebugLogsModal';
-import { EditorTab } from '../../types/layout';
+import { AboutModal } from './AboutModal';
+import { EditorTab, SidebarViewMode } from '../../types/layout';
 
 import { usePdfStore } from '../../store/usePdfStore';
 import { useGridStore } from '../../store/useGridStore';
@@ -21,6 +22,8 @@ export const WorkspaceLayout: React.FC = () => {
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showLogsModal, setShowLogsModal] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
+  const [activeSidebarView, setActiveSidebarView] = useState<SidebarViewMode>('explorer');
 
   // Dynamic VS Code Editor Tabs State
   const [tabs, setTabs] = useState<EditorTab[]>([
@@ -332,6 +335,16 @@ export const WorkspaceLayout: React.FC = () => {
     window.addEventListener('mouseup', handleMouseUp);
   };
 
+  const handleSelectSidebarView = (view: SidebarViewMode) => {
+    if (showLeftPanel && activeSidebarView === view) {
+      // Toggle sidebar if clicking current active view
+      setShowLeftPanel(false);
+    } else {
+      setActiveSidebarView(view);
+      setShowLeftPanel(true);
+    }
+  };
+
   const currentActiveTab = tabs.find((t) => t.id === activeTabId) || null;
 
   return (
@@ -339,15 +352,11 @@ export const WorkspaceLayout: React.FC = () => {
       {/* 48px VS Code Vertical Activity Bar */}
       <ActivityBar
         showLeftPanel={showLeftPanel}
-        showBottomPanel={showBottomPanel}
-        activeView={currentActiveTab?.type === 'master_grid' ? 'master_grid' : 'pdf'}
-        onToggleLeftPanel={() => setShowLeftPanel(!showLeftPanel)}
-        onToggleBottomPanel={() => setShowBottomPanel(!showBottomPanel)}
-        onOpenMasterGrid={handleOpenMasterGrid}
-        onOpenDebugLogs={() => setShowLogsModal(true)}
+        activeSidebarView={activeSidebarView}
+        onSelectSidebarView={handleSelectSidebarView}
         onToggleZenMode={handleToggleZenMode}
         onOpenSettings={() => setShowSettingsModal(true)}
-        onResetWorkspace={handleResetWorkspace}
+        onOpenAbout={() => setShowAboutModal(true)}
       />
 
       {/* Main Workspace Frame */}
@@ -374,11 +383,13 @@ export const WorkspaceLayout: React.FC = () => {
                 <>
                   <div className="layout-col-left" style={{ width: `${leftWidth}px` }}>
                     <LeftExplorerPanel
+                      activeSidebarView={activeSidebarView}
                       onSelectPdf={handleSelectPdf}
                       onOpenMasterGrid={handleOpenMasterGrid}
                       onOpenDebugLogs={() => setShowLogsModal(true)}
                       onOpenWorkspaceHub={handleOpenWorkspaceHub}
                       onOpenPaperDiscovery={handleOpenPaperDiscovery}
+                      onResetWorkspace={handleResetWorkspace}
                     />
                   </div>
                   <div
@@ -458,6 +469,11 @@ export const WorkspaceLayout: React.FC = () => {
       <DebugLogsModal
         isOpen={showLogsModal}
         onClose={() => setShowLogsModal(false)}
+      />
+
+      <AboutModal
+        isOpen={showAboutModal}
+        onClose={() => setShowAboutModal(false)}
       />
     </div>
   );
