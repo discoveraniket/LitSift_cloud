@@ -368,6 +368,7 @@ function highlightExactSnippetInHtmlElement(
     const treeWalker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     let currentOffset = 0;
     let textNode: Text | null = null;
+    let lastTextNode: Text | null = null;
 
     let startNode: Text | null = null;
     let startOffsetInNode = 0;
@@ -375,6 +376,7 @@ function highlightExactSnippetInHtmlElement(
     let endOffsetInNode = 0;
 
     while ((textNode = treeWalker.nextNode() as Text | null)) {
+      lastTextNode = textNode;
       const nodeLen = textNode.nodeValue?.length || 0;
       const nodeStart = currentOffset;
       const nodeEnd = currentOffset + nodeLen;
@@ -392,9 +394,9 @@ function highlightExactSnippetInHtmlElement(
       currentOffset += nodeLen;
     }
 
-    if (startNode && !endNode && textNode) {
-      endNode = textNode;
-      endOffsetInNode = textNode.nodeValue?.length || 0;
+    if (startNode && !endNode && lastTextNode) {
+      endNode = lastTextNode;
+      endOffsetInNode = lastTextNode.nodeValue?.length || 0;
     }
 
     if (startNode && endNode) {

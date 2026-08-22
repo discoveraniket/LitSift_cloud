@@ -40,9 +40,16 @@ export async function getPdfBase64(pdfInfo: PdfDocumentInfo): Promise<string> {
   }
 }
 
+const BOILERPLATE_SECTION_REGEX =
+  /^(author\s*contributions?|competing\s*interests?|conflicts?\s*of\s*interest|coi|funding|financial\s*disclosure|grant\s*support|data\s*availability|code\s*availability|supplementary|supplemental|acknowledg(e?)ments?|references|bibliography|ethics\s*statement|patient\s*consent|consent\s*for\s*publication|disclaimer)/i;
+
 /**
  * Builds a structured, high-density Markdown representation of a paper document
- * from its metadata, abstract, PMC XML body sections, and semantic tables.
+ * from its metadata, abstract, PMC XML / BioC JSON body sections, and semantic tables.
+ * Applies LLM token optimizations:
+ * - Excludes non-scientific boilerplate sections (Author Contributions, Funding, COI, References)
+ * - Compacts table cell representations without losing data
+ * - Compresses multi-space and consecutive empty line clutter
  */
 export function buildPaperMarkdownContext(paper: any): string {
   const parts: string[] = [];
@@ -61,32 +68,71 @@ export function buildPaperMarkdownContext(paper: any): string {
   parts.push('\n---\n');
 
   // 2. Abstract
-  if (paper.abstractText) {
+  if (paper.abstractText && paper.abstractText.trim()) {
     parts.push(`## Abstract\n${paper.abstractText.trim()}`);
   }
 
-  // 3. Structured Body Sections (e.g. from PMC XML)
+  // 3. Structured Body Sections (excluding administrative boilerplate)
   if (paper.sections && paper.sections.length > 0) {
     paper.sections.forEach((sec: any) => {
-      const headingLevel = sec.heading?.toLowerCase().includes('sub') ? '###' : '##';
-      parts.push(`\n${headingLevel} ${sec.heading || 'Section'}\n${(sec.content || '').trim()}`);
+      const title = (sec.title || sec.heading || 'Section').trim();
+
+      // Check if this section is administrative / non-scientific boilerplate
+      const cleanTitleForCheck = title.split('>').pop()?.trim() || title;
+      if (BOILERPLATE_SECTION_REGEX.test(cleanTitleForCheck.replace(/^[^a-zA-Z0-9]+/, ''))) {
+        return; // Skip non-scientific boilerplate to save 1,500-3,500 prompt tokens
+      }
+
+      const isSub = title.toLowerCase().includes('sub') || title.includes(' > ');
+      const headingLevel = isSub ? '###' : '##';
+      const cleanContent = (sec.content || '').trim();
+
+      if (cleanContent.length > 0) {
+        parts.push(`\n${headingLevel} ${title}\n${cleanContent}`);
+      }
     });
   }
 
-  // 4. Tables
+  // 4. Tables (Compact formatting)
   if (paper.tables && paper.tables.length > 0) {
     parts.push(`\n## Extracted Tables\n`);
     paper.tables.forEach((tbl: any) => {
-      parts.push(`### ${tbl.title || `Table ${tbl.id}`}`);
+      const tableTitle = tbl.label || tbl.title || `Table ${tbl.id}`;
+      parts.push(`### ${tableTitle}`);
       if (tbl.caption) parts.push(`*Caption: ${tbl.caption}*\n`);
-      if (tbl.rows && tbl.rows.length > 0) {
-        const colCount = Math.max(...tbl.rows.map((r: any[]) => r.length), 1);
-        const headerRow = tbl.rows[0];
-        parts.push(`| ${headerRow.map((c: any) => String(c).replace(/\|/g, '\\|')).join(' | ')} |`);
+
+      const rawHeaders: string[] = tbl.headers && tbl.headers.length > 0 ? tbl.headers : [];
+      let rawRows: string[][] = tbl.rows && tbl.rows.length > 0 ? tbl.rows : [];
+
+      if (rawHeaders.length === 0 && rawRows.length > 0) {
+        rawHeaders.push(...rawRows[0]);
+        rawRows = rawRows.slice(1);
+      }
+
+      // Filter out completely empty rows
+      const validRows = rawRows.filter((r: any[]) => r && r.some((c) => c !== undefined && c !== null && String(c).trim().length > 0));
+
+      if (rawHeaders.length > 0 || validRows.length > 0) {
+        const colCount = Math.max(
+          rawHeaders.length,
+          ...validRows.map((r: any[]) => r.length),
+          1
+        );
+
+        const formatCell = (val: any) =>
+          val !== undefined && val !== null
+            ? String(val).replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').replace(/\|/g, '\\|').trim()
+            : '';
+
+        const headerLine = Array.from({ length: colCount }, (_, i) => formatCell(rawHeaders[i] || `Col ${i + 1}`));
+        parts.push(`| ${headerLine.join(' | ')} |`);
         parts.push(`| ${Array(colCount).fill('---').join(' | ')} |`);
-        for (let i = 1; i < tbl.rows.length; i++) {
-          parts.push(`| ${tbl.rows[i].map((c: any) => String(c).replace(/\|/g, '\\|')).join(' | ')} |`);
-        }
+
+        validRows.forEach((row: any[]) => {
+          const rowLine = Array.from({ length: colCount }, (_, i) => formatCell(row[i]));
+          parts.push(`| ${rowLine.join(' | ')} |`);
+        });
+
         parts.push('');
       }
     });
@@ -96,11 +142,11 @@ export function buildPaperMarkdownContext(paper: any): string {
   if (paper.figures && paper.figures.length > 0) {
     parts.push(`\n## Figures & Captions\n`);
     paper.figures.forEach((fig: any) => {
-      parts.push(`### ${fig.title || `Figure ${fig.id}`}`);
+      parts.push(`### ${fig.label || fig.title || `Figure ${fig.id}`}`);
       if (fig.caption) parts.push(`*Caption: ${fig.caption}*\n`);
     });
   }
 
-  return parts.join('\n');
+  return parts.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 

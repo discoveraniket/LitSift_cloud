@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { normalizeDoi, reconstructAbstract, resolvePaperByDoi, findExistingPaperByDoi } from '../services/doiService';
+import {
+  normalizeDoi,
+  reconstructAbstract,
+  resolvePaperByDoi,
+  findExistingPaperByDoi,
+  parseJatsXml,
+  parseBioCJson,
+} from '../services/doiService';
 
 describe('DOI Resolution & Ingestion Service Suite', () => {
   beforeEach(() => {
@@ -197,6 +204,122 @@ describe('DOI Resolution & Ingestion Service Suite', () => {
       expect(findExistingPaperByDoi('10.9999/non-existent-doi', mockPdfs)).toBeUndefined();
       expect(findExistingPaperByDoi('', mockPdfs)).toBeUndefined();
       expect(findExistingPaperByDoi('10.1038/s41467-020-17849-0', [])).toBeUndefined();
+    });
+  });
+
+  describe('5. parseJatsXml (Hierarchical Deduplication & Citation Cleaning)', () => {
+    it('deduplicates parent vs nested child sections and strips inline citation xref tags', () => {
+      const sampleJatsXml = `
+        <article>
+          <body>
+            <sec id="sec-results">
+              <title>Results</title>
+              <p>We isolated 5 broad-spectrum lytic phages <xref ref-type="bibr" rid="B1">[1]</xref>.</p>
+              <sec id="sec-morph">
+                <title>Phage Morphology</title>
+                <p>TEM confirmed Myoviridae morphology <xref ref-type="bibr" rid="B2">[2, 3]</xref>.</p>
+              </sec>
+            </sec>
+            <sec id="sec-methods">
+              <title>Methods</title>
+              <p>Bacterial strains were cultured at 37°C.</p>
+            </sec>
+          </body>
+          <back>
+            <table-wrap id="tbl1">
+              <label>Table 1</label>
+              <caption><p>Burst sizes</p></caption>
+              <table>
+                <thead>
+                  <tr><th>Phage</th><th>Burst Size</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Phage A</td><td>120 PFU</td></tr>
+                </tbody>
+              </table>
+            </table-wrap>
+          </back>
+        </article>
+      `;
+
+      const parsed = parseJatsXml(sampleJatsXml);
+
+      expect(parsed.sections).toHaveLength(3);
+      // Section 1: Parent Results (contains ONLY its direct intro paragraph, stripped of [1])
+      expect(parsed.sections[0].title).toBe('Results');
+      expect(parsed.sections[0].content).toBe('We isolated 5 broad-spectrum lytic phages .');
+
+      // Section 2: Child section with hierarchical title, stripped of [2, 3]
+      expect(parsed.sections[1].title).toBe('Results > Phage Morphology');
+      expect(parsed.sections[1].content).toBe('TEM confirmed Myoviridae morphology .');
+
+      // Section 3: Methods
+      expect(parsed.sections[2].title).toBe('Methods');
+      expect(parsed.sections[2].content).toBe('Bacterial strains were cultured at 37°C.');
+
+      // Tables
+      expect(parsed.tables).toHaveLength(1);
+      expect(parsed.tables[0].label).toBe('Table 1');
+      expect(parsed.tables[0].headers).toEqual(['Phage', 'Burst Size']);
+      expect(parsed.tables[0].rows).toEqual([['Phage A', '120 PFU']]);
+    });
+  });
+
+  describe('6. parseBioCJson & Network Fallback Pipeline', () => {
+    it('parses BioC JSON document passages into structured sections and tables', () => {
+      const mockBioCData = {
+        source: 'PMC',
+        documents: [
+          {
+            id: 'PMC888888',
+            passages: [
+              {
+                infons: { section_type: 'TITLE', type: 'title' },
+                text: 'Genomics of Phage vB_EcoM',
+              },
+              {
+                infons: { section_type: 'ABSTRACT', type: 'abstract' },
+                text: 'Lytic phages represent an alternative to antibiotics in poultry.',
+              },
+              {
+                infons: { section_type: 'INTRO', type: 'title' },
+                text: 'Introduction',
+              },
+              {
+                infons: { section_type: 'INTRO', type: 'paragraph' },
+                text: 'Avian pathogenic E. coli causes massive economic losses [1, 2].',
+              },
+              {
+                infons: { section_type: 'RESULTS', type: 'title' },
+                text: 'Results and Discussion',
+              },
+              {
+                infons: { section_type: 'RESULTS', type: 'paragraph' },
+                text: 'Phage genomes ranged from 170 kb to 356 kb with GC content of 43.7%.',
+              },
+              {
+                infons: { section_type: 'TABLE', type: 'table', title: 'Table 1: Phage Characteristics' },
+                text: "Phage\tGenome (kb)\tGC (%)\nvB_EcoM_fRPOT1\t170.5\t43.68\nvB_EcoM_fRPOT2\t356.2\t43.76",
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = parseBioCJson(mockBioCData);
+
+      expect(result.abstractText).toBe('Lytic phages represent an alternative to antibiotics in poultry.');
+      expect(result.sections).toHaveLength(2);
+      expect(result.sections[0].title).toBe('Introduction');
+      expect(result.sections[0].content).toBe('Avian pathogenic E. coli causes massive economic losses.');
+      expect(result.sections[1].title).toBe('Results and Discussion');
+      expect(result.sections[1].content).toContain('GC content of 43.7%');
+
+      // Table parsing from tab-delimited text
+      expect(result.tables).toHaveLength(1);
+      expect(result.tables[0].headers).toEqual(['Phage', 'Genome (kb)', 'GC (%)']);
+      expect(result.tables[0].rows).toHaveLength(2);
+      expect(result.tables[0].rows[0]).toEqual(['vB_EcoM_fRPOT1', '170.5', '43.68']);
     });
   });
 });

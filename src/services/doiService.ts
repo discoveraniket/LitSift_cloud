@@ -83,8 +83,9 @@ async function blobToBase64(blob: Blob): Promise<string> {
 
 /**
  * Parses XML full text from Europe PMC into structured sections, tables, and figures.
+ * Deduplicates nested sections and strips inline citation noise for clean LLM extraction.
  */
-function parseJatsXml(xmlText: string): {
+export function parseJatsXml(xmlText: string): {
   sections: PaperSection[];
   tables: PaperTable[];
   figures: PaperFigure[];
@@ -102,21 +103,43 @@ function parseJatsXml(xmlText: string): {
     if (body) {
       const secNodes = body.querySelectorAll('sec');
       secNodes.forEach((sec, idx) => {
-        const titleElem = sec.querySelector('title');
-        const title = titleElem?.textContent?.trim() || `Section ${idx + 1}`;
-        
-        // Extract paragraph texts excluding nested child sections
-        const paragraphs: string[] = [];
-        sec.querySelectorAll('p').forEach((p) => {
-          const text = p.textContent?.trim();
-          if (text) paragraphs.push(text);
+        // Build hierarchical title: e.g. "Results > Phage Morphology"
+        const titles: string[] = [];
+        let currSec: Element | null = sec;
+        while (currSec && currSec.tagName.toLowerCase() === 'sec' && currSec !== body) {
+          const directTitle = Array.from(currSec.children).find(
+            (c) => c.tagName.toLowerCase() === 'title'
+          );
+          if (directTitle?.textContent?.trim()) {
+            titles.unshift(directTitle.textContent.trim());
+          }
+          currSec = currSec.parentElement ? currSec.parentElement.closest('sec') : null;
+        }
+
+        const title = titles.length > 0 ? titles.join(' > ') : `Section ${idx + 1}`;
+
+        // Extract paragraphs and list items whose direct parent <sec> is THIS section (no nested duplication)
+        const contentBlocks: string[] = [];
+        const candidateChildren = Array.from(sec.querySelectorAll('p, list-item, disp-quote')).filter(
+          (elem) => elem.closest('sec') === sec
+        );
+
+        candidateChildren.forEach((elem) => {
+          // Clone node to strip <xref ref-type="bibr"> without altering original DOM
+          const clone = elem.cloneNode(true) as HTMLElement;
+          clone.querySelectorAll('xref[ref-type="bibr"]').forEach((xr) => xr.remove());
+
+          const text = clone.textContent?.trim().replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ');
+          if (text && text.length > 0) {
+            contentBlocks.push(text);
+          }
         });
 
-        if (paragraphs.length > 0) {
+        if (contentBlocks.length > 0) {
           sections.push({
             id: sec.getAttribute('id') || `sec-${idx + 1}`,
             title,
-            content: paragraphs.join('\n\n'),
+            content: contentBlocks.join('\n\n'),
           });
         }
       });
@@ -127,7 +150,7 @@ function parseJatsXml(xmlText: string): {
     tableWraps.forEach((tw, idx) => {
       const label = tw.querySelector('label')?.textContent?.trim() || `Table ${idx + 1}`;
       const caption = tw.querySelector('caption')?.textContent?.trim() || '';
-      
+
       const headers: string[] = [];
       const rows: string[][] = [];
 
@@ -138,7 +161,7 @@ function parseJatsXml(xmlText: string): {
       trNodes.forEach((tr) => {
         const rowCells: string[] = [];
         tr.querySelectorAll('td, th').forEach((td) => rowCells.push(td.textContent?.trim() || ''));
-        if (rowCells.length > 0) rows.push(rowCells);
+        if (rowCells.some((c) => c.length > 0)) rows.push(rowCells);
       });
 
       if (headers.length > 0 || rows.length > 0) {
@@ -159,7 +182,7 @@ function parseJatsXml(xmlText: string): {
       const caption = fig.querySelector('caption')?.textContent?.trim() || '';
       const graphic = fig.querySelector('graphic');
       const href = graphic?.getAttribute('xlink:href') || graphic?.getAttribute('href');
-      
+
       figures.push({
         id: fig.getAttribute('id') || `fig-${idx + 1}`,
         label,
@@ -172,6 +195,101 @@ function parseJatsXml(xmlText: string): {
   }
 
   return { sections, tables, figures };
+}
+
+/**
+ * Parses BioC JSON full text from NCBI BioNLP REST API into structured sections and tables.
+ */
+export function parseBioCJson(bioCData: any): {
+  abstractText?: string;
+  sections: PaperSection[];
+  tables: PaperTable[];
+} {
+  const sections: PaperSection[] = [];
+  const tables: PaperTable[] = [];
+  let abstractText = '';
+
+  if (!bioCData || !Array.isArray(bioCData.documents) || bioCData.documents.length === 0) {
+    return { sections, tables };
+  }
+
+  const doc = bioCData.documents[0];
+  const passages = Array.isArray(doc.passages) ? doc.passages : [];
+
+  let currentSectionTitle = 'Introduction';
+  let currentSectionParagraphs: string[] = [];
+  const sectionMap = new Map<string, string[]>();
+
+  for (const passage of passages) {
+    const infons = passage.infons || {};
+    const pType = (infons.type || '').toLowerCase();
+    const secType = (infons.section_type || '').toUpperCase();
+    const rawText = (passage.text || '').trim();
+
+    if (!rawText) continue;
+
+    // Abstract passage
+    if (secType === 'ABSTRACT' || pType === 'abstract') {
+      if (rawText.length > 20) {
+        abstractText = abstractText ? `${abstractText}\n\n${rawText}` : rawText;
+      }
+      continue;
+    }
+
+    // Section title / heading passage
+    if (pType === 'title' || pType === 'section_title' || pType === 'sub_title' || pType === 'heading') {
+      if (currentSectionParagraphs.length > 0 && currentSectionTitle) {
+        const existing = sectionMap.get(currentSectionTitle) || [];
+        sectionMap.set(currentSectionTitle, existing.concat(currentSectionParagraphs));
+        currentSectionParagraphs = [];
+      }
+      currentSectionTitle = rawText;
+      continue;
+    }
+
+    // Table passage
+    if (pType === 'table' || secType === 'TABLE' || infons.file_type === 'table') {
+      const tableRows = rawText
+        .split('\n')
+        .map((line: string) => line.split('\t').map((c) => c.trim()))
+        .filter((r: string[]) => r.some((c) => c.length > 0));
+
+      if (tableRows.length > 0) {
+        tables.push({
+          id: `bioc-table-${tables.length + 1}`,
+          label: `Table ${tables.length + 1}`,
+          caption: infons.caption || infons.title || '',
+          headers: tableRows[0] || [],
+          rows: tableRows.slice(1),
+        });
+      }
+      continue;
+    }
+
+    // Normal paragraph text: clean inline reference numbers if present
+    const cleanText = rawText.replace(/\s*\[\d+(?:[–,\s-]+\d+)*\]/g, '').trim();
+    if (cleanText.length > 0) {
+      currentSectionParagraphs.push(cleanText);
+    }
+  }
+
+  if (currentSectionParagraphs.length > 0 && currentSectionTitle) {
+    const existing = sectionMap.get(currentSectionTitle) || [];
+    sectionMap.set(currentSectionTitle, existing.concat(currentSectionParagraphs));
+  }
+
+  let secIdx = 1;
+  for (const [title, paragraphs] of sectionMap.entries()) {
+    if (paragraphs.length > 0) {
+      sections.push({
+        id: `sec-bioc-${secIdx++}`,
+        title,
+        content: paragraphs.join('\n\n'),
+      });
+    }
+  }
+
+  return { abstractText, sections, tables };
 }
 
 /**
@@ -310,8 +428,10 @@ export async function resolvePaperByDoi(
   let tables: PaperTable[] = [];
   let figures: PaperFigure[] = [];
 
-  // If PMCID is available, attempt to retrieve structured XML from Europe PMC
+  // If PMCID is available, attempt to retrieve structured XML from Europe PMC (JATS XML)
+  // with automatic fallback to NCBI BioC JSON
   if (pmcid) {
+    // Strategy 1: Europe PMC JATS XML (richest structure with HTML tables)
     try {
       const pmcXmlUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/PMC${pmcid}/fullTextXML`;
       const pmcRes = await fetch(pmcXmlUrl);
@@ -323,7 +443,30 @@ export async function resolvePaperByDoi(
         figures = parsed.figures;
       }
     } catch (e) {
-      console.warn('Could not fetch structured XML from PMC:', e);
+      console.warn('Could not fetch structured JATS XML from Europe PMC:', e);
+    }
+
+    // Strategy 2: NCBI BioNLP BioC JSON fallback (if JATS XML is unavailable or returned 0 sections)
+    if (sections.length === 0) {
+      try {
+        const bioCUrl = `https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pmcoa.cgi/BioC_json/PMC${pmcid}/unicode`;
+        const bioCRes = await fetch(bioCUrl);
+        if (bioCRes.ok) {
+          const bioCData = await bioCRes.json();
+          const parsedBioC = parseBioCJson(bioCData);
+          if (parsedBioC.sections.length > 0) {
+            sections = parsedBioC.sections;
+            if (parsedBioC.tables.length > 0 && tables.length === 0) {
+              tables = parsedBioC.tables;
+            }
+            if (parsedBioC.abstractText && (!abstractText || abstractText.length < parsedBioC.abstractText.length)) {
+              abstractText = parsedBioC.abstractText;
+            }
+          }
+        }
+      } catch (bioCErr) {
+        console.warn('Could not fetch structured text from NCBI BioC JSON:', bioCErr);
+      }
     }
   }
 
