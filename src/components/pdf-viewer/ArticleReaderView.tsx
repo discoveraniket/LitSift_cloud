@@ -17,7 +17,11 @@ import {
 import { PaperDocumentInfo, PaperTable } from '../../types/paper';
 import { useGridStore } from '../../store/useGridStore';
 import { usePdfStore } from '../../store/usePdfStore';
-import { highlightSnippetInContainer, clearActiveHighlights } from '../../services/highlightUtils';
+import {
+  highlightSnippetInContainer,
+  clearActiveHighlights,
+  flashActiveHighlights,
+} from '../../services/highlightUtils';
 
 export interface ArticleReaderViewRef {
   search: (query: string) => void;
@@ -174,17 +178,23 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
     clearSearch,
   }));
 
-  // Auto-scroll and highlight exact sentence when activeEvidence changes
+  // Auto-scroll and highlight exact sentence when activeEvidence changes (with gentle flash)
   useEffect(() => {
     if (!mainContainerRef.current) return;
 
-    clearActiveHighlights(mainContainerRef.current);
-
-    if (!activeEvidence) return;
+    if (!activeEvidence) {
+      clearActiveHighlights(mainContainerRef.current);
+      return;
+    }
 
     if (activeEvidence.snippetText && activeEvidence.snippetText.trim()) {
-      const matchedEl = highlightSnippetInContainer(mainContainerRef.current, activeEvidence.snippetText);
+      const matchedEl = highlightSnippetInContainer(
+        mainContainerRef.current,
+        activeEvidence.snippetText,
+        activeEvidence.keywordText
+      );
       if (matchedEl) {
+        flashActiveHighlights(mainContainerRef.current);
         matchedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }

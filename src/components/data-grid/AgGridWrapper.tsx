@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { ColDef, CellValueChangedEvent, CellFocusedEvent, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
+import { ColDef, CellValueChangedEvent, CellFocusedEvent, CellClickedEvent, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import { useGridStore } from '../../store/useGridStore';
+import { usePdfStore } from '../../store/usePdfStore';
 import { GridRow } from '../../types/grid';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
@@ -100,6 +101,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     setSelectedRows,
     selectedColumnField,
     setSelectedColumnField,
+    focusedCell,
     setFocusedCell,
     setActiveEvidence,
     setActiveCitation,
@@ -303,35 +305,86 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     }
   };
 
-  const handleCellFocused = useCallback(
-    (event: CellFocusedEvent<GridRow>) => {
-      setFocusedRowIndex(event.rowIndex);
-      if (event.column && event.rowIndex !== null) {
-        const colId = typeof event.column === 'string' ? event.column : event.column.getColId();
-        const row = rowData[event.rowIndex];
-        if (row && colId) {
-          setFocusedCell({ rowId: row.id, field: colId });
+  const handleCellSelectOrFocus = useCallback(
+    (rowIndex: number | null, column: any, directRowData?: GridRow) => {
+      if ((rowIndex === null && !directRowData) || !column) return;
+      if (rowIndex !== null) setFocusedRowIndex(rowIndex);
+      const colId = typeof column === 'string' ? column : column.getColId();
+      const row = directRowData || (rowIndex !== null ? rowData[rowIndex] : null);
+      if (row && colId) {
+        setFocusedCell({ rowId: row.id, field: colId });
 
-          const citation = row.citationMap ? row.citationMap[colId] : null;
-          if (citation) {
-            setActiveCitation(citation);
-            setActiveEvidence({
-              pageNumber: citation.pageNumber || 1,
-              snippetText: citation.snippetQuote || '',
-              sectionName: citation.sectionName,
-              paragraphNumber: citation.paragraphNumber,
-            });
-          } else if (row.evidenceMap && row.evidenceMap[colId]) {
-            setActiveEvidence(row.evidenceMap[colId]);
-            setActiveCitation(null);
-          } else {
-            setActiveEvidence(null);
-            setActiveCitation(null);
+        // If row has an associated PDF that is not currently active, switch active PDF in usePdfStore
+        const pdfStore = usePdfStore.getState();
+        if (row.pdfId || row.pdfTitle || row['Article DOI'] || row.doi) {
+          const matchedPdf = pdfStore.pdfs.find(
+            (p) =>
+              (row.pdfId && p.id === row.pdfId) ||
+              (row.pdfTitle && (p.name === row.pdfTitle || p.title === row.pdfTitle)) ||
+              (row.doi && p.doi === row.doi) ||
+              (row['Article DOI'] && p.doi === row['Article DOI'])
+          );
+          if (matchedPdf && matchedPdf.id !== pdfStore.activePdfId) {
+            pdfStore.setActivePdf(matchedPdf.id);
           }
+        }
+
+        const cellValue = row[colId];
+        const keyword = cellValue !== undefined && cellValue !== null && typeof cellValue === 'string' ? cellValue.trim() : '';
+
+        const citation = row.citationMap ? row.citationMap[colId] : null;
+        if (citation) {
+          setActiveCitation(citation);
+          setActiveEvidence({
+            pageNumber: citation.pageNumber || 1,
+            snippetText: citation.snippetQuote || '',
+            keywordText: keyword,
+            sectionName: citation.sectionName,
+            paragraphNumber: citation.paragraphNumber,
+          });
+        } else if (row.evidenceMap && row.evidenceMap[colId]) {
+          setActiveEvidence({
+            ...row.evidenceMap[colId],
+            keywordText: keyword,
+          });
+          setActiveCitation(null);
+        } else if (
+          keyword &&
+          keyword.length >= 2 &&
+          colId !== 'pdfTitle' &&
+          colId !== 'id' &&
+          colId !== 'aiStatus' &&
+          colId !== '#' &&
+          colId !== '+ Column'
+        ) {
+          // Direct fallback: try highlighting whatever phrase/value is inside the clicked cell!
+          setActiveEvidence({
+            pageNumber: 1,
+            snippetText: keyword,
+            keywordText: keyword,
+          });
+          setActiveCitation(null);
+        } else {
+          setActiveEvidence(null);
+          setActiveCitation(null);
         }
       }
     },
     [rowData, setFocusedCell, setActiveEvidence, setActiveCitation]
+  );
+
+  const handleCellFocused = useCallback(
+    (event: CellFocusedEvent<GridRow>) => {
+      handleCellSelectOrFocus(event.rowIndex, event.column);
+    },
+    [handleCellSelectOrFocus]
+  );
+
+  const handleCellClicked = useCallback(
+    (event: CellClickedEvent<GridRow>) => {
+      handleCellSelectOrFocus(event.rowIndex, event.column, event.data);
+    },
+    [handleCellSelectOrFocus]
   );
 
   const getRowHeight = useCallback(
@@ -371,6 +424,13 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     }
   }, [rows, columns]);
 
+  // Ensure active focused cell style immediately updates upon click
+  useEffect(() => {
+    if (gridApiRef.current?.api) {
+      gridApiRef.current.api.refreshCells({ force: true });
+    }
+  }, [focusedCell]);
+
   return (
     <div className="ag-theme-quartz-dark" style={{ height: '100%', width: '100%' }}>
       <AgGridReact
@@ -383,11 +443,16 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
           sortable: !isPreviewMode,
           filter: !isPreviewMode,
           editable: true,
+          cellClassRules: {
+            'litsift-cell-active': (params) =>
+              !!focusedCell && params.data?.id === focusedCell.rowId && params.colDef.field === focusedCell.field,
+          },
         }}
         rowDragManaged={true}
         suppressMoveWhenRowDragging={true}
         onCellValueChanged={handleCellValueChanged}
         onCellFocused={handleCellFocused}
+        onCellClicked={handleCellClicked}
         onColumnHeaderClicked={onColumnHeaderClicked}
         getRowHeight={getRowHeight}
         animateRows={true}

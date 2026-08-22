@@ -428,14 +428,82 @@ body {
 .ag-header,
 .ag-header-row,
 .ag-header-cell,
-.ag-row,
-.ag-cell,
 .ag-body-viewport,
 .ag-floating-top,
 .ag-floating-bottom {
   background-color: var(--bg-secondary) !important;
   color: var(--text-primary) !important;
   border-color: var(--border-subtle) !important;
+}
+
+/* AG Grid Selected Row CSS Variables Reset (prevents default grey overlay) */
+.ag-theme-quartz-dark,
+.ag-theme-alpine-dark,
+.ag-theme-alpine,
+.ag-row-selected {
+  --ag-selected-row-background-color: rgba(137, 180, 250, 0.08) !important;
+  --ag-internal-row-overlay-color: transparent !important;
+  --ag-row-hover-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+.ag-root-wrapper .ag-row {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Selected row: Sleek dark blue tint, NOT light grey */
+.ag-root-wrapper .ag-row-selected,
+.ag-root-wrapper .ag-row.ag-row-selected {
+  background-color: rgba(137, 180, 250, 0.08) !important;
+  color: var(--text-primary) !important;
+}
+
+.ag-root-wrapper .ag-row-selected .ag-cell,
+.ag-root-wrapper .ag-row.ag-row-selected .ag-cell {
+  background-color: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+.ag-root-wrapper .ag-row:hover,
+.ag-root-wrapper .ag-row:hover .ag-cell {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+.ag-root-wrapper .ag-row.ag-row-selected:hover,
+.ag-root-wrapper .ag-row.ag-row-selected:hover .ag-cell {
+  background-color: rgba(137, 180, 250, 0.15) !important;
+}
+
+.ag-root-wrapper .ag-cell {
+  background-color: transparent !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle) !important;
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+/* High-Visibility Active & Clicked Cell in Data Grid (High Specificity to beat selected rows) */
+.ag-root-wrapper .ag-row .ag-cell.litsift-cell-active,
+.ag-root-wrapper .ag-row.ag-row-selected .ag-cell.litsift-cell-active,
+.ag-root-wrapper .ag-row .ag-cell.ag-cell-focus,
+.ag-root-wrapper .ag-row.ag-row-selected .ag-cell.ag-cell-focus {
+  background-color: rgba(137, 180, 250, 0.28) !important;
+  color: #ffffff !important;
+  outline: 2px solid #89b4fa !important;
+  outline-offset: -2px !important;
+  box-shadow: inset 0 0 10px rgba(137, 180, 250, 0.5), 0 0 12px rgba(137, 180, 250, 0.6) !important;
+  z-index: 10 !important;
+  animation: cellClickFlash 0.35s ease-out forwards;
+}
+
+@keyframes cellClickFlash {
+  0% {
+    background-color: rgba(137, 180, 250, 0.70);
+    box-shadow: inset 0 0 16px rgba(137, 180, 250, 0.9), 0 0 14px #89b4fa;
+  }
+  100% {
+    background-color: rgba(137, 180, 250, 0.28);
+    box-shadow: inset 0 0 10px rgba(137, 180, 250, 0.5), 0 0 12px rgba(137, 180, 250, 0.6);
+  }
 }
 
 .ag-header,
@@ -610,33 +678,151 @@ body {
 
 /* Minimalist & Theme-Aligned Evidence Highlight */
 .evidence-highlight-active {
-  background-color: var(--highlight-bg, rgba(137, 180, 250, 0.20)) !important;
-  border-radius: 3px !important;
-  box-shadow: 0 0 8px var(--highlight-glow, rgba(137, 180, 250, 0.35)) !important;
-  animation: evidencePulseGlow 2s ease-in-out infinite alternate !important;
-  transition: background-color 0.2s ease, box-shadow 0.2s ease !important;
-  pointer-events: auto !important;
-  z-index: 5 !important;
+  background-color: var(--highlight-bg, rgba(137, 180, 250, 0.25));
+  border-radius: 3px;
+  box-shadow: 0 0 8px var(--highlight-glow, rgba(137, 180, 250, 0.35));
+  animation: evidencePulseGlow 2s ease-in-out infinite alternate;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  pointer-events: auto;
+  z-index: 5;
 }
 
-/* For PDF.js Text Layer: Text MUST remain transparent so only the crisp canvas glyphs show through without ghosting/shadows */
+/* Gentle, elegant flash animation on cell click / re-click */
+.evidence-highlight-flash,
+mark.evidence-highlight-flash {
+  animation: evidenceGentleFlash 0.45s cubic-bezier(0.2, 0.8, 0.4, 1) forwards;
+}
+
+@keyframes evidenceGentleFlash {
+  0% {
+    background-color: rgba(137, 180, 250, 0.52);
+    box-shadow: 0 0 0 3px rgba(137, 180, 250, 0.35), 0 0 12px rgba(137, 180, 250, 0.55);
+  }
+  40% {
+    background-color: rgba(137, 180, 250, 0.36);
+    box-shadow: 0 0 0 1.5px rgba(137, 180, 250, 0.2), 0 0 10px rgba(137, 180, 250, 0.38);
+  }
+  100% {
+    background-color: var(--highlight-bg, rgba(137, 180, 250, 0.22));
+    box-shadow: 0 0 8px var(--highlight-glow, rgba(137, 180, 250, 0.35));
+  }
+}
+
+/* ==========================================================================
+   PDF.js Text Layer Highlights (Guaranteed Transparent Text & Crisp Canvas)
+   ========================================================================== */
+.pdf-text-layer,
+.pdf-text-layer *,
+.pdf-text-item,
+.pdf-text-item * {
+  color: transparent !important;
+  text-shadow: none !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
 .pdf-text-layer .evidence-highlight-active,
 .pdf-text-item.evidence-highlight-active {
   color: transparent !important;
-  background-color: var(--highlight-bg, rgba(137, 180, 250, 0.20)) !important;
-  mix-blend-mode: multiply !important;
+  background-color: var(--highlight-bg, rgba(137, 180, 250, 0.25)) !important;
+  mix-blend-mode: multiply;
+  border-radius: 2px;
+  z-index: 5;
 }
 
-/* For HTML Article Reader: Keep original text crisp and highlight ONLY the matching sentence */
+.pdf-text-layer .evidence-highlight-flash,
+.pdf-text-item.evidence-highlight-flash {
+  color: transparent !important;
+  animation: evidencePdfGentleFlash 0.45s cubic-bezier(0.2, 0.8, 0.4, 1) forwards !important;
+}
+
+@keyframes evidencePdfGentleFlash {
+  0% {
+    background-color: rgba(137, 180, 250, 0.55);
+    box-shadow: 0 0 0 4px rgba(137, 180, 250, 0.35), 0 0 14px rgba(137, 180, 250, 0.60);
+  }
+  40% {
+    background-color: rgba(137, 180, 250, 0.38);
+    box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.20), 0 0 10px rgba(137, 180, 250, 0.40);
+  }
+  100% {
+    background-color: var(--highlight-bg, rgba(137, 180, 250, 0.25));
+    box-shadow: 0 0 8px var(--highlight-glow, rgba(137, 180, 250, 0.35));
+  }
+}
+
+.pdf-text-layer .evidence-keyword-glow,
+.pdf-text-item.evidence-keyword-glow {
+  color: transparent !important;
+  animation: pdfKeywordGlowFade 2.4s cubic-bezier(0.2, 0.8, 0.4, 1) forwards !important;
+  z-index: 6;
+}
+
+@keyframes pdfKeywordGlowFade {
+  0% {
+    background-color: rgba(249, 226, 175, 0.60);
+    box-shadow: 0 0 0 3px rgba(249, 226, 175, 0.65), 0 0 14px rgba(249, 226, 175, 0.80);
+  }
+  40% {
+    background-color: rgba(249, 226, 175, 0.38);
+    box-shadow: 0 0 0 1.5px rgba(249, 226, 175, 0.35), 0 0 8px rgba(249, 226, 175, 0.45);
+  }
+  100% {
+    background-color: var(--highlight-bg, rgba(137, 180, 250, 0.25));
+    box-shadow: 0 0 8px var(--highlight-glow, rgba(137, 180, 250, 0.35));
+  }
+}
+
+/* ==========================================================================
+   HTML Article Reader Highlighting
+   ========================================================================== */
 article .evidence-highlight-active,
 main .evidence-highlight-active,
 mark.evidence-mark-inline {
-  color: inherit !important;
-  background-color: var(--highlight-bg, rgba(137, 180, 250, 0.20)) !important;
-  border-bottom: 2px solid var(--highlight-border, #89b4fa) !important;
-  padding: 1px 3px !important;
-  border-radius: 3px !important;
+  color: inherit;
+  background-color: var(--highlight-bg, rgba(137, 180, 250, 0.25));
+  border-bottom: 2px solid var(--highlight-border, #89b4fa);
+  padding: 1px 3px;
+  border-radius: 3px;
   font-weight: 500;
+}
+
+/* Exact Keyword / Cell Value Glow in HTML Article Reader */
+article .evidence-keyword-glow,
+main .evidence-keyword-glow,
+mark.evidence-keyword-glow {
+  display: inline;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 600;
+  color: #f9e2af;
+  background-color: rgba(249, 226, 175, 0.45);
+  box-shadow: 0 0 0 2px rgba(249, 226, 175, 0.50), 0 0 12px rgba(249, 226, 175, 0.75);
+  animation: keywordGentleGlowFade 2.4s cubic-bezier(0.2, 0.8, 0.4, 1) forwards !important;
+  z-index: 6;
+}
+
+@keyframes keywordGentleGlowFade {
+  0% {
+    background-color: rgba(249, 226, 175, 0.55);
+    box-shadow: 0 0 0 2.5px rgba(249, 226, 175, 0.60), 0 0 14px rgba(249, 226, 175, 0.80);
+    color: #f9e2af;
+  }
+  40% {
+    background-color: rgba(249, 226, 175, 0.38);
+    box-shadow: 0 0 0 1.5px rgba(249, 226, 175, 0.40), 0 0 9px rgba(249, 226, 175, 0.55);
+    color: #f9e2af;
+  }
+  75% {
+    background-color: rgba(249, 226, 175, 0.16);
+    box-shadow: 0 0 0 1px rgba(249, 226, 175, 0.18), 0 0 5px rgba(249, 226, 175, 0.28);
+    color: inherit;
+  }
+  100% {
+    background-color: var(--highlight-bg, rgba(137, 180, 250, 0.25));
+    box-shadow: 0 0 8px var(--highlight-glow, rgba(137, 180, 250, 0.35));
+    color: inherit;
+    font-weight: 500;
+  }
 }
 
 @keyframes evidencePulseGlow {

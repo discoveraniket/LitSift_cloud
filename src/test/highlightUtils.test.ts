@@ -3,6 +3,7 @@ import {
   normalizeSearchText,
   highlightSnippetInContainer,
   clearActiveHighlights,
+  flashActiveHighlights,
 } from '../services/highlightUtils';
 
 describe('Document Highlighting Service (highlightUtils)', () => {
@@ -46,9 +47,14 @@ describe('Document Highlighting Service (highlightUtils)', () => {
       const highlightedSpans = container.querySelectorAll('.evidence-highlight-active');
       expect(highlightedSpans.length).toBeGreaterThanOrEqual(1);
 
-      // Verify that clearActiveHighlights removes all classes
+      // Verify flash class is applied to attract user attention
+      const flashedSpans = container.querySelectorAll('.evidence-highlight-flash');
+      expect(flashedSpans.length).toBeGreaterThanOrEqual(1);
+
+      // Verify that clearActiveHighlights removes all highlight and flash classes
       clearActiveHighlights(container);
       expect(container.querySelectorAll('.evidence-highlight-active').length).toBe(0);
+      expect(container.querySelectorAll('.evidence-highlight-flash').length).toBe(0);
     });
 
     it('matches with partial fuzzy fallback when snippet contains smart quotes or minor variations', () => {
@@ -84,6 +90,7 @@ describe('Document Highlighting Service (highlightUtils)', () => {
       expect(matchedEl).not.toBeNull();
       expect(matchedEl?.tagName.toLowerCase()).toBe('mark');
       expect(matchedEl?.classList.contains('evidence-highlight-active')).toBe(true);
+      expect(matchedEl?.classList.contains('evidence-highlight-flash')).toBe(true);
       expect(matchedEl?.textContent).toBe('The GC content ranged from 43.68% to 43.76%.');
 
       // Verify the parent paragraph is NOT given the highlight class directly
@@ -106,6 +113,69 @@ describe('Document Highlighting Service (highlightUtils)', () => {
 
       expect(matchedEl).toBeNull();
       expect(container.querySelectorAll('.evidence-highlight-active').length).toBe(0);
+    });
+  });
+
+  describe('4. Gentle Flash Attention Trigger (flashActiveHighlights)', () => {
+    it('re-triggers the gentle flash class on existing active highlights when clicked repeatedly', () => {
+      container.innerHTML = `
+        <article>
+          <mark class="evidence-highlight-active evidence-mark-inline">Sample highlighted sentence.</mark>
+        </article>
+      `;
+
+      const mark = container.querySelector('mark')!;
+      expect(mark.classList.contains('evidence-highlight-flash')).toBe(false);
+
+      flashActiveHighlights(container);
+
+      expect(mark.classList.contains('evidence-highlight-flash')).toBe(true);
+
+      // Triggering flash again reliably maintains/re-applies the flash class
+      flashActiveHighlights(container);
+      expect(mark.classList.contains('evidence-highlight-flash')).toBe(true);
+    });
+  });
+
+  describe('5. Keyword Glow Enhancement & Fallback', () => {
+    it('gently glows exact keyword/cell value inside the highlighted sentence', () => {
+      container.innerHTML = `
+        <article>
+          <p>The complete genome sequence was deposited under BioProject PRJNA1256089 in NCBI.</p>
+        </article>
+      `;
+
+      const snippet = 'The complete genome sequence was deposited under BioProject PRJNA1256089 in NCBI.';
+      const keyword = 'PRJNA1256089';
+
+      const matchedEl = highlightSnippetInContainer(container, snippet, keyword);
+
+      expect(matchedEl).not.toBeNull();
+      const keywordMark = container.querySelector('mark.evidence-keyword-glow');
+      expect(keywordMark).not.toBeNull();
+      expect(keywordMark?.textContent).toBe('PRJNA1256089');
+
+      // Verify clean unwrapping
+      clearActiveHighlights(container);
+      expect(container.querySelectorAll('mark.evidence-keyword-glow').length).toBe(0);
+    });
+
+    it('falls back gracefully to line highlight when keyword does not match exactly inside snippet', () => {
+      container.innerHTML = `
+        <article>
+          <p>The GC content ranged from 43.68% to 43.76% across samples.</p>
+        </article>
+      `;
+
+      const snippet = 'The GC content ranged from 43.68% to 43.76% across samples.';
+      const keyword = 'UnrelatedNonMatchingValue';
+
+      const matchedEl = highlightSnippetInContainer(container, snippet, keyword);
+
+      expect(matchedEl).not.toBeNull();
+      expect(container.querySelectorAll('.evidence-highlight-active').length).toBeGreaterThanOrEqual(1);
+      // No keyword glow mark, but sentence is highlighted
+      expect(container.querySelectorAll('mark.evidence-keyword-glow').length).toBe(0);
     });
   });
 });

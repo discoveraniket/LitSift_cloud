@@ -518,7 +518,15 @@ export const useGridStore = create<GridState>((set) => ({
   setSelectedRows: (rowIds) => set({ selectedRowIds: rowIds }),
   setSelectedColumnField: (field) => set({ selectedColumnField: field }),
   setFocusedCell: (cell) => set({ focusedCell: cell }),
-  setActiveEvidence: (evidence) => set({ activeEvidence: evidence }),
+  setActiveEvidence: (evidence) =>
+    set({
+      activeEvidence: evidence
+        ? {
+            ...evidence,
+            flashNonce: Date.now(),
+          }
+        : null,
+    }),
   setActiveCitation: (citation) => set({ activeCitation: citation }),
 
   addCellDiscussionMessage: (rowId, field, userText) =>

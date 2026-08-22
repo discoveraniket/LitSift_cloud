@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useGridStore } from '../../store/useGridStore';
-import { highlightSnippetInContainer, clearActiveHighlights } from '../../services/highlightUtils';
+import { highlightSnippetInContainer, clearActiveHighlights, flashActiveHighlights } from '../../services/highlightUtils';
 
 // Set pdfjs worker source using CDN fallback for browser runtime compatibility
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -31,13 +31,14 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
   const searchMatchesRef = useRef<HTMLElement[]>([]);
   const currentMatchIndexRef = useRef<number>(-1);
 
-  // Auto-scroll to activeEvidence page and highlight exact sentence snippet
+  // Auto-scroll to activeEvidence page and highlight exact sentence snippet with gentle flash
   useEffect(() => {
     if (!containerRef.current) return;
 
-    clearActiveHighlights(containerRef.current);
-
-    if (!activeEvidence) return;
+    if (!activeEvidence) {
+      clearActiveHighlights(containerRef.current);
+      return;
+    }
 
     const pageWrapper = containerRef.current.querySelector<HTMLElement>(
       `[data-page-number="${activeEvidence.pageNumber}"]`
@@ -45,8 +46,13 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
 
     if (pageWrapper) {
       if (activeEvidence.snippetText && activeEvidence.snippetText.trim()) {
-        const matchedEl = highlightSnippetInContainer(pageWrapper, activeEvidence.snippetText);
+        const matchedEl = highlightSnippetInContainer(
+          pageWrapper,
+          activeEvidence.snippetText,
+          activeEvidence.keywordText
+        );
         if (matchedEl) {
+          flashActiveHighlights(pageWrapper);
           matchedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
           return;
         }
