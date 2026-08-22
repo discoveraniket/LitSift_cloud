@@ -5,14 +5,40 @@ import { usePdfStore } from '../store/usePdfStore';
 import { useGridStore } from '../store/useGridStore';
 import { useAgentStore } from '../store/useAgentStore';
 import { useLogStore, LogEntry } from '../store/useLogStore';
+import {
+  OpenAccessStatus,
+  DocumentSourceType,
+  PaperAuthor,
+  PaperSection,
+  PaperTable,
+  PaperFigure,
+} from '../types/paper';
 
 export interface WorkspacePdfItem {
   id: string;
   name: string;
   status: 'Ready' | 'Extracted' | 'Error';
   uploadedAt: number;
-  base64: string;
+  base64?: string;
   sizeBytes?: number;
+
+  // Rich Paper Metadata & Structured Content
+  title?: string;
+  doi?: string;
+  pmcid?: string;
+  authors?: PaperAuthor[];
+  journal?: string;
+  year?: number;
+  citationCount?: number;
+  oaStatus?: OpenAccessStatus;
+  sourceType?: DocumentSourceType;
+  abstractText?: string;
+  sections?: PaperSection[];
+  tables?: PaperTable[];
+  figures?: PaperFigure[];
+  landingPageUrl?: string;
+  pdfDownloadUrl?: string;
+  errorMessage?: string;
 }
 
 export interface WorkspaceMetadata {
@@ -146,35 +172,43 @@ export const exportWorkspaceBundle = async (
   const pdfItems: WorkspacePdfItem[] = [];
 
   // Combine DB & memory PDFs
-  const combinedPdfsMap = new Map<string, { id: string; name: string; blob?: Blob; base64?: string; status: any; uploadedAt: number }>();
+  const combinedPdfsMap = new Map<string, StoredPdf>();
 
   storedPdfs.forEach((p) => {
-    combinedPdfsMap.set(p.id, {
-      id: p.id,
-      name: p.name,
-      blob: p.blob,
-      base64: p.base64,
-      status: p.status,
-      uploadedAt: p.uploadedAt,
-    });
+    combinedPdfsMap.set(p.id, { ...p });
   });
 
   memoryPdfs.forEach((p) => {
-    if (!combinedPdfsMap.has(p.id)) {
-      combinedPdfsMap.set(p.id, {
-        id: p.id,
-        name: p.name,
-        blob: p.file,
-        base64: p.base64,
-        status: p.status,
-        uploadedAt: Date.now(),
-      });
-    }
+    const existing = combinedPdfsMap.get(p.id);
+    combinedPdfsMap.set(p.id, {
+      id: p.id,
+      name: p.name,
+      title: p.title || existing?.title,
+      blob: (p.file instanceof Blob && p.file.size > 0) ? p.file : existing?.blob,
+      base64: p.base64 || existing?.base64,
+      status: p.status || existing?.status || 'Ready',
+      uploadedAt: p.uploadedAt || existing?.uploadedAt || Date.now(),
+      doi: p.doi || existing?.doi,
+      pmcid: p.pmcid || existing?.pmcid,
+      authors: p.authors || existing?.authors,
+      journal: p.journal || existing?.journal,
+      year: p.year || existing?.year,
+      citationCount: p.citationCount || existing?.citationCount,
+      oaStatus: p.oaStatus || existing?.oaStatus,
+      sourceType: p.sourceType || existing?.sourceType,
+      abstractText: p.abstractText || existing?.abstractText,
+      sections: p.sections || existing?.sections,
+      tables: p.tables || existing?.tables,
+      figures: p.figures || existing?.figures,
+      landingPageUrl: p.landingPageUrl || existing?.landingPageUrl,
+      pdfDownloadUrl: p.pdfDownloadUrl || existing?.pdfDownloadUrl,
+      errorMessage: p.errorMessage || existing?.errorMessage,
+    });
   });
 
   for (const item of combinedPdfsMap.values()) {
     let base64 = item.base64 || '';
-    if (!base64 && item.blob) {
+    if (!base64 && item.blob && item.blob.size > 0) {
       try {
         base64 = await blobToBase64(item.blob);
       } catch (e) {
@@ -185,10 +219,26 @@ export const exportWorkspaceBundle = async (
     pdfItems.push({
       id: item.id,
       name: item.name,
+      title: item.title || item.name,
       status: item.status || 'Ready',
       uploadedAt: item.uploadedAt || Date.now(),
-      base64,
-      sizeBytes: item.blob ? item.blob.size : undefined,
+      base64: base64 || undefined,
+      sizeBytes: item.blob ? item.blob.size : (base64 ? Math.round((base64.length * 3) / 4) : 0),
+      doi: item.doi,
+      pmcid: item.pmcid,
+      authors: item.authors,
+      journal: item.journal,
+      year: item.year,
+      citationCount: item.citationCount,
+      oaStatus: item.oaStatus,
+      sourceType: item.sourceType,
+      abstractText: item.abstractText,
+      sections: item.sections,
+      tables: item.tables,
+      figures: item.figures,
+      landingPageUrl: item.landingPageUrl,
+      pdfDownloadUrl: item.pdfDownloadUrl,
+      errorMessage: item.errorMessage,
     });
   }
 
@@ -374,21 +424,44 @@ export const restoreWorkspaceBundle = async (
 
   for (let i = 0; i < restoredPdfs.length; i++) {
     const p = restoredPdfs[i];
-    let pdfBlob: Blob;
+    let pdfBlob: Blob | undefined = undefined;
+    let blobUrl = '';
 
-    if (p.base64) {
-      pdfBlob = base64ToBlob(p.base64);
-    } else {
-      pdfBlob = new Blob([], { type: 'application/pdf' });
+    if (p.base64 && p.base64.trim().length > 0) {
+      try {
+        const decoded = base64ToBlob(p.base64);
+        if (decoded && decoded.size > 0) {
+          pdfBlob = decoded;
+          blobUrl = URL.createObjectURL(decoded);
+        }
+      } catch (err) {
+        console.warn(`Failed to decode base64 for paper ${p.name}:`, err);
+      }
     }
 
     const storedPdf: StoredPdf = {
       id: p.id,
-      name: p.name,
+      name: p.name || p.title || 'Untitled Paper',
+      title: p.title || p.name,
       blob: pdfBlob,
-      base64: p.base64,
+      base64: p.base64 || '',
       status: p.status || 'Ready',
       uploadedAt: p.uploadedAt || Date.now(),
+      doi: p.doi,
+      pmcid: p.pmcid,
+      authors: p.authors,
+      journal: p.journal,
+      year: p.year,
+      citationCount: p.citationCount,
+      oaStatus: p.oaStatus || 'unknown',
+      sourceType: p.sourceType || (pdfBlob ? 'pdf_upload' : (p.sections && p.sections.length > 0 ? 'doi_structured' : 'doi_abstract_only')),
+      abstractText: p.abstractText,
+      sections: p.sections,
+      tables: p.tables,
+      figures: p.figures,
+      landingPageUrl: p.landingPageUrl,
+      pdfDownloadUrl: p.pdfDownloadUrl,
+      errorMessage: p.errorMessage,
     };
 
     try {
@@ -397,24 +470,14 @@ export const restoreWorkspaceBundle = async (
       console.warn(`Error storing PDF ${p.name} to IndexedDB:`, err);
     }
 
-    let blobUrl = '';
-    try {
-      blobUrl = URL.createObjectURL(pdfBlob);
-    } catch (_) {
-      blobUrl = `blob:${p.id}`;
-    }
-
     inMemoryPdfs.push({
-      id: p.id,
-      name: p.name,
-      url: blobUrl,
-      status: p.status || 'Ready',
+      ...storedPdf,
       file: pdfBlob,
-      base64: p.base64,
+      url: blobUrl,
     });
 
     const pct = 30 + Math.round(((i + 1) / (restoredPdfs.length || 1)) * 30);
-    onProgress?.(`Restored PDF ${i + 1} of ${restoredPdfs.length}...`, pct);
+    onProgress?.(`Restored paper ${i + 1} of ${restoredPdfs.length}...`, pct);
   }
 
   onProgress?.('Restoring data grid & citations...', 70);

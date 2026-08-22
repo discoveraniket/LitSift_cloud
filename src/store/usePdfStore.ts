@@ -34,7 +34,7 @@ export const usePdfStore = create<PdfState>((set, get) => ({
       if (stored.length > 0) {
         const loadedPdfs: PaperDocumentInfo[] = stored.map((item) => {
           let blobUrl = '';
-          if (item.blob) {
+          if (item.blob && item.blob.size > 0) {
             try {
               blobUrl = URL.createObjectURL(item.blob);
             } catch (e) {

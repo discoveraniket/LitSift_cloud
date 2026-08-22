@@ -259,5 +259,70 @@ describe('Workspace Service - Export, Import, Base64 & PDF Download Suite', () =
       const logState = useLogStore.getState();
       expect(logState.logs.some((l) => l.message.includes('Genomics_Study'))).toBe(true);
     });
+
+    it('exports and restores text-based structured / abstract papers with 100% metadata fidelity without 0-byte PDF errors', async () => {
+      // 1. Seed store with a text-based paper (no binary PDF)
+      usePdfStore.setState({
+        pdfs: [
+          {
+            id: 'doi-10_1128_spectrum_03979_25',
+            name: 'Genomic characterization of five broad-spectrum lytic phages',
+            title: 'Genomic characterization of five broad-spectrum lytic phages',
+            status: 'Ready',
+            doi: '10.1128/spectrum.03979-25',
+            pmcid: 'PMC42473042',
+            authors: [{ name: 'Midha T' }, { name: 'Vishakha' }, { name: 'Baranwal S' }],
+            journal: 'Microbiol Spectr',
+            year: 2026,
+            oaStatus: 'closed',
+            sourceType: 'doi_structured',
+            abstractText: 'Five lytic bacteriophages were isolated against multidrug-resistant APEC.',
+            sections: [
+              {
+                id: 'sec-results',
+                title: 'Results',
+                content: 'The GC content ranged from 43.68% to 43.76%.',
+              },
+            ],
+            tables: [
+              {
+                id: 'table-1',
+                label: 'Table 1',
+                caption: 'Phage burst sizes and latencies',
+                headers: ['Phage', 'Burst Size'],
+                rows: [['Phage 1', '120 PFU/cell']],
+              },
+            ],
+            uploadedAt: Date.now(),
+          },
+        ],
+        activePdfId: 'doi-10_1128_spectrum_03979_25',
+      });
+
+      // 2. Export bundle
+      const { bundle } = await exportWorkspaceBundle('Phage_Therapy_Workspace');
+
+      expect(bundle.pdfs).toHaveLength(1);
+      expect(bundle.pdfs[0].id).toBe('doi-10_1128_spectrum_03979_25');
+      expect(bundle.pdfs[0].abstractText).toBe('Five lytic bacteriophages were isolated against multidrug-resistant APEC.');
+      expect(bundle.pdfs[0].sections).toHaveLength(1);
+      expect(bundle.pdfs[0].tables).toHaveLength(1);
+      expect(bundle.pdfs[0].sourceType).toBe('doi_structured');
+      expect(bundle.pdfs[0].base64).toBeUndefined();
+
+      // 3. Clear store & restore bundle
+      await restoreWorkspaceBundle(bundle);
+
+      const restoredPdfState = usePdfStore.getState();
+      expect(restoredPdfState.pdfs).toHaveLength(1);
+      const restored = restoredPdfState.pdfs[0];
+
+      expect(restored.id).toBe('doi-10_1128_spectrum_03979_25');
+      expect(restored.abstractText).toBe('Five lytic bacteriophages were isolated against multidrug-resistant APEC.');
+      expect(restored.sections?.[0].title).toBe('Results');
+      expect(restored.tables?.[0].headers).toEqual(['Phage', 'Burst Size']);
+      expect(restored.url).toBe(''); // Empty string, NOT an invalid 0-byte blob!
+      expect(restored.file).toBeUndefined();
+    });
   });
 });

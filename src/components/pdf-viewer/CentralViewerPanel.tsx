@@ -77,12 +77,27 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
   const foundPdf = pdfs.find((p) => p.id === targetPdfId || p.name === activePdfTitle);
   const pdfUrl = foundPdf?.url || '';
 
+  // Whether the active document has a real, non-empty binary PDF
+  const hasRealPdf = Boolean(
+    foundPdf &&
+    foundPdf.url &&
+    foundPdf.url.trim().length > 0 &&
+    foundPdf.url !== 'blob:' &&
+    (!foundPdf.file || (foundPdf.file instanceof Blob && foundPdf.file.size > 0)) &&
+    foundPdf.sourceType !== 'doi_abstract_only' &&
+    foundPdf.sourceType !== 'doi_structured'
+  );
+
   // Auto-switch to Reader mode if document has no PDF binary
   useEffect(() => {
-    if (foundPdf && !foundPdf.url && (foundPdf.abstractText || (foundPdf.sections && foundPdf.sections.length > 0))) {
-      setViewMode('reader');
+    if (foundPdf) {
+      if (!hasRealPdf && (foundPdf.abstractText || (foundPdf.sections && foundPdf.sections.length > 0) || foundPdf.sourceType === 'doi_abstract_only' || foundPdf.sourceType === 'doi_structured')) {
+        setViewMode('reader');
+      } else if (hasRealPdf && viewMode !== 'reader') {
+        setViewMode('pdf');
+      }
     }
-  }, [foundPdf?.id, foundPdf?.url]);
+  }, [foundPdf?.id, foundPdf?.url, hasRealPdf]);
 
   const handleDownloadActivePdf = () => {
     if (foundPdf) {
@@ -759,7 +774,7 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
       {/* Main Document Content Area (Takes 100% of vertical height with 0px top wasted space) */}
       <div style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
         {foundPdf ? (
-          viewMode === 'reader' || !hasPdfUrl ? (
+          viewMode === 'reader' || !hasRealPdf ? (
             <ArticleReaderView
               ref={articleReaderRef}
               paper={foundPdf}
