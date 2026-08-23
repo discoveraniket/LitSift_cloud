@@ -145,6 +145,47 @@ describe('VS Code-style Left Panel & Activity Bar UX', () => {
     expect(screen.getByText('Export CSV Dataset')).toBeInTheDocument();
   });
 
+  it('sorts pending papers to top (newest first) and extracted papers to bottom (oldest at bottom)', () => {
+    usePdfStore.setState({
+      pdfs: [
+        { id: 'p1', name: 'Paper_Old_Extracted.pdf', uploadedAt: 1000 } as any,
+        { id: 'p2', name: 'Paper_New_Extracted.pdf', uploadedAt: 2000 } as any,
+        { id: 'p3', name: 'Paper_Old_Pending.pdf', uploadedAt: 3000 } as any,
+        { id: 'p4', name: 'Paper_New_Pending.pdf', uploadedAt: 4000 } as any,
+      ],
+    });
+
+    // Mark p1 and p2 as extracted
+    useGridStore.setState({
+      rows: [
+        { id: 'r1', pdfId: 'p1', pdfTitle: 'Paper_Old_Extracted.pdf' } as any,
+        { id: 'r2', pdfId: 'p2', pdfTitle: 'Paper_New_Extracted.pdf' } as any,
+      ],
+    });
+
+    render(
+      <LeftExplorerPanel
+        activeSidebarView="explorer"
+        onSelectPdf={vi.fn()}
+        onOpenMasterGrid={vi.fn()}
+      />
+    );
+
+    const renderedTitles = screen.getAllByTitle(/Paper_/i).map((el) => el.getAttribute('title'));
+    
+    // Expected order:
+    // 1. Paper_New_Pending (newest pending)
+    // 2. Paper_Old_Pending (older pending)
+    // 3. Paper_New_Extracted (newer extracted)
+    // 4. Paper_Old_Extracted (oldest extracted at the very bottom)
+    expect(renderedTitles).toEqual([
+      'Paper_New_Pending.pdf',
+      'Paper_Old_Pending.pdf',
+      'Paper_New_Extracted.pdf',
+      'Paper_Old_Extracted.pdf',
+    ]);
+  });
+
   it('renders AboutModal correctly with shortcuts and information', () => {
     const handleClose = vi.fn();
     const { rerender } = render(<AboutModal isOpen={false} onClose={handleClose} />);

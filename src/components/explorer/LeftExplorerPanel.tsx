@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useGridStore } from '../../store/useGridStore';
 import { useAgentStore } from '../../store/useAgentStore';
 import { usePdfStore } from '../../store/usePdfStore';
@@ -231,6 +231,34 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
 
   const validRowCount = rows.filter((r) => !r.isDraftRow).length;
 
+  // Sort papers:
+  // 1. All pending papers at the TOP (newest resolved/added pending papers first)
+  // 2. Extracted (done) papers at the BOTTOM (newest done first, oldest done at the very bottom)
+  const sortedPdfs = useMemo(() => {
+    return [...pdfs].sort((a, b) => {
+      const isExtractedA = rows.some(
+        (r) =>
+          !r.isDraftRow &&
+          (r.pdfId === a.id || r.pdfTitle === a.name || (a.title && r.pdfTitle === a.title))
+      );
+      const isExtractedB = rows.some(
+        (r) =>
+          !r.isDraftRow &&
+          (r.pdfId === b.id || r.pdfTitle === b.name || (b.title && r.pdfTitle === b.title))
+      );
+
+      // 1. Pending papers come before Extracted papers
+      if (!isExtractedA && isExtractedB) return -1;
+      if (isExtractedA && !isExtractedB) return 1;
+
+      // 2. Within the same group (both pending OR both extracted):
+      // Newer papers at top, older papers at bottom (oldest sinks to bottom)
+      const timeA = a.uploadedAt || 0;
+      const timeB = b.uploadedAt || 0;
+      return timeB - timeA;
+    });
+  }, [pdfs, rows]);
+
   return (
     <aside
       className="panel left-explorer"
@@ -308,15 +336,14 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
         )}
       </div>
 
-      {/* Scrollable Main Body */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
-        {/* ========================================================================= */}
-        {/* 1. EXPLORER MODE (Daily Driver: Research Papers on Top, Views on Bottom)  */}
-        {/* ========================================================================= */}
-        {activeSidebarView === 'explorer' && (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            {/* Top: RESEARCH PAPERS SECTION */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      {/* ========================================================================= */}
+      {/* 1. EXPLORER MODE (Daily Driver: Research Papers Scrollable, Views Docked)  */}
+      {/* ========================================================================= */}
+      {activeSidebarView === 'explorer' && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+          {/* Top: RESEARCH PAPERS SECTION (Header fixed, list scrollable) */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ flexShrink: 0 }}>
               <div className="vscode-tree-header" onClick={() => setPapersOpen(!papersOpen)}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   {papersOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} RESEARCH PAPERS ({pdfs.length})
@@ -360,176 +387,191 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                   </span>
                 </div>
               </div>
+            </div>
 
-              {papersOpen && (
-                <div style={{ paddingBottom: '8px' }}>
-                  {pdfs.map((file) => {
-                    // Check if this paper has any extracted rows in the master data grid
-                    const isExtracted = rows.some(
-                      (r) =>
-                        !r.isDraftRow &&
-                        (r.pdfId === file.id ||
-                          r.pdfTitle === file.name ||
-                          (file.title && r.pdfTitle === file.title))
-                    );
+            {papersOpen && (
+              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: '8px' }}>
+                {sortedPdfs.map((file) => {
+                  // Check if this paper has any extracted rows in the master data grid
+                  const isExtracted = rows.some(
+                    (r) =>
+                      !r.isDraftRow &&
+                      (r.pdfId === file.id ||
+                        r.pdfTitle === file.name ||
+                        (file.title && r.pdfTitle === file.title))
+                  );
 
-                    const extractedRowCount = rows.filter(
-                      (r) =>
-                        !r.isDraftRow &&
-                        (r.pdfId === file.id ||
-                          r.pdfTitle === file.name ||
-                          (file.title && r.pdfTitle === file.title))
-                    ).length;
+                  const extractedRowCount = rows.filter(
+                    (r) =>
+                      !r.isDraftRow &&
+                      (r.pdfId === file.id ||
+                        r.pdfTitle === file.name ||
+                        (file.title && r.pdfTitle === file.title))
+                  ).length;
 
-                    return (
-                      <div
-                        key={file.id}
-                        className={`vscode-tree-item ${activeItem === file.id ? 'active' : ''}`}
-                        onClick={() => {
-                          setActivePdf(file.id);
-                          onSelectPdf(file.id, file.name);
-                          setActiveItem(file.id);
-                        }}
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '2px',
-                          padding: '6px 10px 6px 14px',
-                          borderBottom: '1px solid rgba(255, 255, 255, 0.02)',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {/* Top Row: Single Status Icon + Paper Title */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', width: '100%' }}>
-                          {/* Real-time Extraction Status Indicator */}
-                          {isExtracted ? (
+                  return (
+                    <div
+                      key={file.id}
+                      className={`vscode-tree-item ${activeItem === file.id ? 'active' : ''}`}
+                      onClick={() => {
+                        setActivePdf(file.id);
+                        onSelectPdf(file.id, file.name);
+                        setActiveItem(file.id);
+                      }}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '2px',
+                        padding: '6px 10px 6px 14px',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.02)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {/* Top Row: Single Status Icon + Paper Title */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px', width: '100%' }}>
+                        {/* Real-time Extraction Status Indicator */}
+                        {isExtracted ? (
+                          <span
+                            title={`Extraction Complete (${extractedRowCount} row${extractedRowCount > 1 ? 's' : ''} in Data Grid)`}
+                            style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                          >
+                            <CheckCircle2 size={13} color="var(--accent-success, #a6e3a1)" />
+                          </span>
+                        ) : (
+                          <span
+                            title="Extraction Pending / Not started"
+                            style={{ display: 'flex', alignItems: 'center', flexShrink: 0, opacity: 0.6 }}
+                          >
+                            <CircleDot size={13} color="var(--text-muted, #6c7086)" />
+                          </span>
+                        )}
+
+                        <span
+                          style={{
+                            flex: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            fontSize: '11.5px',
+                            fontWeight: activeItem === file.id ? 600 : 400,
+                            color: activeItem === file.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          }}
+                          title={file.title || file.name}
+                        >
+                          {file.title || file.name}
+                        </span>
+                      </div>
+
+                      {/* Sub-row: Journal & Year Metadata */}
+                      {(file.journal || file.year) && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '10px',
+                            color: 'var(--text-muted, #6c7086)',
+                            paddingLeft: '20px',
+                          }}
+                        >
+                          {file.journal && (
                             <span
-                              title={`Extraction Complete (${extractedRowCount} row${extractedRowCount > 1 ? 's' : ''} in Data Grid)`}
-                              style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                              style={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                maxWidth: '150px',
+                              }}
                             >
-                              <CheckCircle2 size={13} color="var(--accent-success, #a6e3a1)" />
-                            </span>
-                          ) : (
-                            <span
-                              title="Extraction Pending / Not started"
-                              style={{ display: 'flex', alignItems: 'center', flexShrink: 0, opacity: 0.6 }}
-                            >
-                              <CircleDot size={13} color="var(--text-muted, #6c7086)" />
+                              {file.journal}
                             </span>
                           )}
-
-                          <span
-                            style={{
-                              flex: 1,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              fontSize: '11.5px',
-                              fontWeight: activeItem === file.id ? 600 : 400,
-                              color: activeItem === file.id ? 'var(--text-primary)' : 'var(--text-secondary)',
-                            }}
-                            title={file.title || file.name}
-                          >
-                            {file.title || file.name}
-                          </span>
+                          {file.year && <span>• {file.year}</span>}
+                          {file.url && file.sections && file.sections.length > 0 ? (
+                            <span style={{ color: 'var(--accent-success, #a6e3a1)', fontSize: '9px' }}>[PDF + Text]</span>
+                          ) : file.url ? (
+                            <span style={{ color: 'var(--accent-primary, #89b4fa)', fontSize: '9px' }}>[PDF]</span>
+                          ) : (
+                            <span style={{ color: 'var(--accent-warning, #f9e2af)', fontSize: '9px' }}>[Text]</span>
+                          )}
                         </div>
-
-                        {/* Sub-row: Journal & Year Metadata */}
-                        {(file.journal || file.year) && (
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              fontSize: '10px',
-                              color: 'var(--text-muted, #6c7086)',
-                              paddingLeft: '20px',
-                            }}
-                          >
-                            {file.journal && (
-                              <span
-                                style={{
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                  maxWidth: '150px',
-                                }}
-                              >
-                                {file.journal}
-                              </span>
-                            )}
-                            {file.year && <span>• {file.year}</span>}
-                            {file.url && file.sections && file.sections.length > 0 ? (
-                              <span style={{ color: 'var(--accent-success, #a6e3a1)', fontSize: '9px' }}>[PDF + Text]</span>
-                            ) : file.url ? (
-                              <span style={{ color: 'var(--accent-primary, #89b4fa)', fontSize: '9px' }}>[PDF]</span>
-                            ) : (
-                              <span style={{ color: 'var(--accent-warning, #f9e2af)', fontSize: '9px' }}>[Text]</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {pdfs.length === 0 && (
-                    <div
-                      style={{
-                        padding: '16px 12px',
-                        fontSize: '11px',
-                        color: 'var(--text-muted, #6c7086)',
-                        textAlign: 'center',
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      No papers loaded yet.
-                      <div style={{ marginTop: '6px', fontSize: '10px' }}>
-                        Click <strong>+</strong> to upload a PDF or <strong>🔗</strong> for DOI search.
-                      </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
+                  );
+                })}
 
-            {/* Bottom: VIEWS SECTION (Clean Minimalist Placement) */}
-            <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border-subtle, #313244)', paddingTop: '4px' }}>
-              <div className="vscode-tree-header" onClick={() => setViewsOpen(!viewsOpen)}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  {viewsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} VIEWS
-                </span>
-              </div>
-
-              {viewsOpen && (
-                <div style={{ paddingBottom: '6px' }}>
+                {pdfs.length === 0 && (
                   <div
-                    className={`vscode-tree-item ${activeItem === 'master-grid' ? 'active' : ''}`}
-                    onClick={() => {
-                      onOpenMasterGrid();
-                      setActiveItem('master-grid');
+                    style={{
+                      padding: '16px 12px',
+                      fontSize: '11px',
+                      color: 'var(--text-muted, #6c7086)',
+                      textAlign: 'center',
+                      lineHeight: 1.5,
                     }}
                   >
-                    <Table size={13} color="var(--accent-primary)" />
-                    <span>Master Extraction Grid</span>
-                  </div>
-
-                  {onOpenPaperDiscovery && (
-                    <div
-                      className={`vscode-tree-item ${activeItem === 'paper-discovery' ? 'active' : ''}`}
-                      onClick={() => {
-                        onOpenPaperDiscovery();
-                        setActiveItem('paper-discovery');
-                      }}
-                    >
-                      <Search size={13} color="var(--accent-warning, #f9e2af)" />
-                      <span>Paper Discovery & Ingest</span>
+                    No papers loaded yet.
+                    <div style={{ marginTop: '6px', fontSize: '10px' }}>
+                      Click <strong>+</strong> to upload a PDF or <strong>🔗</strong> for DOI search.
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Bottom: VIEWS SECTION (Permanently Docked at Bottom of Sidebar) */}
+          <div
+            style={{
+              flexShrink: 0,
+              borderTop: '1px solid var(--border-subtle, #313244)',
+              paddingTop: '4px',
+              background: 'var(--bg-secondary, #181825)',
+              zIndex: 5,
+            }}
+          >
+            <div className="vscode-tree-header" onClick={() => setViewsOpen(!viewsOpen)}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {viewsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} VIEWS
+              </span>
+            </div>
+
+            {viewsOpen && (
+              <div style={{ paddingBottom: '6px' }}>
+                <div
+                  className={`vscode-tree-item ${activeItem === 'master-grid' ? 'active' : ''}`}
+                  onClick={() => {
+                    onOpenMasterGrid();
+                    setActiveItem('master-grid');
+                  }}
+                >
+                  <Table size={13} color="var(--accent-primary)" />
+                  <span>Master Extraction Grid</span>
+                </div>
+
+                {onOpenPaperDiscovery && (
+                  <div
+                    className={`vscode-tree-item ${activeItem === 'paper-discovery' ? 'active' : ''}`}
+                    onClick={() => {
+                      onOpenPaperDiscovery();
+                      setActiveItem('paper-discovery');
+                    }}
+                  >
+                    <Search size={13} color="var(--accent-warning, #f9e2af)" />
+                    <span>Paper Discovery & Ingest</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2 & 3. WORKSPACE & DEBUG MODES (Scroll naturally in vertical container)  */}
+      {/* ========================================================================= */}
+      {activeSidebarView !== 'explorer' && (
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '4px 0' }}>
 
         {/* ========================================================================= */}
         {/* 2. WORKSPACE MODE (Project Snapshot, .litsift Bundles, CSV Datasets)       */}
@@ -894,8 +936,9 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
           </div>
         )}
       </div>
-    </aside>
-  );
+    )}
+  </aside>
+);
 };
 
 export default LeftExplorerPanel;
