@@ -33,6 +33,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     selectedColumnField,
     deleteColumn,
     focusedCell,
+    selectedCells,
     updateCell,
     mergeSelectedRows,
     splitSelectedRow,
@@ -60,6 +61,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       deleteColumn(selectedColumnField);
     } else if (selectedRowIds.length > 0) {
       selectedRowIds.forEach((id) => deleteRow(id));
+    } else if (selectedCells.length > 0) {
+      selectedCells.forEach((c) => updateCell(c.rowId, c.field, ''));
     } else if (focusedCell) {
       updateCell(focusedCell.rowId, focusedCell.field, '');
     }
@@ -89,7 +92,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedColumnField, selectedRowIds, focusedCell, undo, redo]);
+  }, [selectedColumnField, selectedRowIds, selectedCells, focusedCell, undo, redo]);
 
   const handleMerge = () => {
     if (selectedRowIds.length >= 2) {
@@ -105,7 +108,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     }
   };
 
-  const deleteDisabled = !selectedColumnField && selectedRowIds.length === 0 && !focusedCell;
+  const deleteDisabled =
+    !selectedColumnField && selectedRowIds.length === 0 && selectedCells.length === 0 && !focusedCell;
 
   return (
     <footer className="status-bar">
@@ -126,6 +130,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
                   ? `Delete selected column`
                   : selectedRowIds.length > 0
                   ? `Delete ${selectedRowIds.length} selected row(s)`
+                  : selectedCells.length > 0
+                  ? `Clear ${selectedCells.length} selected cell(s)`
                   : focusedCell
                   ? `Clear active cell content`
                   : `Select column, row, or cell to delete`
