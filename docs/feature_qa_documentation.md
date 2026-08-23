@@ -106,3 +106,24 @@ A comprehensive guide explaining the implemented capabilities, architecture, and
 
 ### Q: How are agent messages formatted in the chat interface?
 **A:** All agent messages are rendered using GitHub Flavored Markdown (`marked`), supporting bold typography, numbered/bulleted lists, inline code chips, syntax blocks, and styled Markdown tables.
+
+---
+
+## 9. Selective Section Filtering & Token Optimization Policy
+
+### Q: Which sections of a research paper are sent to the LLM during extraction?
+**A:** When building the high-density structured Markdown representation of a paper (`buildPaperMarkdownContext`), LitSift Cloud applies a balanced filtering strategy that saves **1,200 – 3,000 prompt tokens per paper** without losing critical scientific information:
+
+#### 1. Preserved Scientific & Repository Sections (Included in LLM Context):
+* **Data Availability & Code Availability**: Preserved because they contain essential accession codes (NCBI GenBank IDs, BioProject/BioSample IDs, SRA run accessions, Zenodo/Figshare DOIs, GitHub repositories).
+* **Supplementary Material / Supplemental Data**: Preserved because they describe online datasets, expanded host ranges, primer sequences, and additional experimental profiles.
+* **Ethics Statement / Animal Care / Patient Consent**: Preserved because they contain IACUC approval numbers, IRB clearance IDs, and animal/patient model parameters.
+* **Acknowledgments**: Preserved because they credit sequencing centers, imaging facilities, and researchers providing gifted strains or plasmids.
+* **All Core Scientific Sections**: Abstract, Introduction, Materials & Methods, Results, Discussion, Conclusion, and all Extracted Tables / Figure Captions.
+
+#### 2. Filtered Administrative Boilerplate (Excluded from LLM Context):
+* **Author Contributions** (CRediT taxonomy role lists).
+* **Funding Statement & Financial Disclosures** (Grant agency codes).
+* **Competing Interests / Conflict of Interest / COI** (Standard legal declarations).
+* **References & Bibliography** (Long lists of cited works, which constitute the majority of non-scientific token bloat).
+

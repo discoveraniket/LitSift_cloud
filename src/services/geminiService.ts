@@ -182,6 +182,17 @@ export async function processAgentInteraction(
     );
     const isFollowup = pastNonWelcomeMessages.length > 1;
 
+    // Calculate baseline token count from previous turns to subtract it from this turn's prompt/cached tokens
+    let historyBaselineTokens = 0;
+    if (isFollowup) {
+      const lastAgentMsg = [...pastNonWelcomeMessages]
+        .reverse()
+        .find((m) => m.sender === 'agent' && m.promptTokens !== undefined);
+      if (lastAgentMsg) {
+        historyBaselineTokens = (lastAgentMsg.promptTokens ?? 0) + (lastAgentMsg.candidateTokens ?? 0);
+      }
+    }
+
     // Inject focused cell metadata if a cell is currently selected
     const gridStore = useGridStore.getState();
     const focusedCell = gridStore.focusedCell;
@@ -329,6 +340,10 @@ CUMULATIVE MULTI-DOCUMENT DATASET INTEGRITY:
 - NEVER delete or overwrite existing table rows belonging to other research papers (which have different article DOIs or paper titles).
 - When extracting findings from the active paper, append the new findings to the dataset while leaving rows from other papers completely intact.
 - If the user specifically asks to edit, merge, or disaggregate existing rows from the active paper, perform updates directly on those specific rows.
+
+DOCUMENT CONTEXT & STRIPPED ADMINISTRATIVE SECTIONS POLICY:
+- Non-scientific administrative boilerplate sections (specifically: References / Bibliography, Author Contributions, Funding Statements / Financial Disclosures, and Competing Interests / Conflict of Interest declarations) are intentionally stripped off before the paper text is sent to you.
+- If the user asks questions regarding citations from the References list, specific grant/funding bodies, author CRediT contribution roles, or COI statements that are absent from the provided text, explicitly and politely inform the user that these administrative boilerplate sections were intentionally stripped off prior to ingestion to save context tokens, and that they can check the original PDF or publisher portal for those specific details.
 
 You have access to a rich declarative tool suite:
 - Document extraction & verification: extractPDFData, verifyEvidenceCitation, queryGridData
@@ -484,10 +499,10 @@ Execute all required tool actions to fulfill the user's instructions and summari
 
       const genDurationSec = ((performance.now() - genStartTime) / 1000).toFixed(2);
       const usage = lastUsage;
-      const promptTokens = usage?.promptTokenCount ?? 0;
+      const promptTokens = Math.max(0, (usage?.promptTokenCount ?? 0) - historyBaselineTokens);
       const candidateTokens = usage?.candidatesTokenCount ?? 0;
       const stepThinkingTokens = usage?.thinkingTokenCount ?? usage?.reasoningTokenCount ?? 0;
-      const cachedTokens = usage?.cachedContentTokenCount;
+      const cachedTokens = Math.max(0, (usage?.cachedContentTokenCount ?? 0) - historyBaselineTokens);
 
       totalThinkingTokens += stepThinkingTokens;
       totalPromptTokens += promptTokens;

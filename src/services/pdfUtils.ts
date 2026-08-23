@@ -41,13 +41,14 @@ export async function getPdfBase64(pdfInfo: PdfDocumentInfo): Promise<string> {
 }
 
 const BOILERPLATE_SECTION_REGEX =
-  /^(author\s*contributions?|competing\s*interests?|conflicts?\s*of\s*interest|coi|funding|financial\s*disclosure|grant\s*support|data\s*availability|code\s*availability|supplementary|supplemental|acknowledg(e?)ments?|references|bibliography|ethics\s*statement|patient\s*consent|consent\s*for\s*publication|disclaimer)/i;
+  /^(author('?s)?\s*contributions?|competing\s*interests?|conflicts?\s*of\s*interest|coi|funding|financial\s*disclosure|grant\s*support|references|bibliography|disclaimer)/i;
 
 /**
  * Builds a structured, high-density Markdown representation of a paper document
  * from its metadata, abstract, PMC XML / BioC JSON body sections, and semantic tables.
- * Applies LLM token optimizations:
- * - Excludes non-scientific boilerplate sections (Author Contributions, Funding, COI, References)
+ * Applies selective section filtering:
+ * - PRESERVES scientific & repository sections: Data Availability, Supplementary Material, Ethics Statement, Acknowledgments
+ * - EXCLUDES pure administrative boilerplate: Author Contributions, Funding, Competing Interests, References
  * - Compacts table cell representations without losing data
  * - Compresses multi-space and consecutive empty line clutter
  */
@@ -146,6 +147,8 @@ export function buildPaperMarkdownContext(paper: any): string {
       if (fig.caption) parts.push(`*Caption: ${fig.caption}*\n`);
     });
   }
+
+  parts.push('\n---\n*Note: Non-scientific administrative boilerplate sections (References, Author Contributions, Funding Statements, Competing Interests) were intentionally omitted from this text representation to optimize context tokens.*');
 
   return parts.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }

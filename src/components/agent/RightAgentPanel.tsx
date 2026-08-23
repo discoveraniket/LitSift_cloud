@@ -446,8 +446,8 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
                     )}
 
                     {msg.promptTokens !== undefined && (
-                      <span title={`Input Prompt Tokens: ${msg.promptTokens.toLocaleString()}`}>
-                        {msg.promptTokens.toLocaleString()} in
+                      <span title={`Input Prompt Tokens: ${msg.promptTokens.toLocaleString()} (Cached: ${(msg.cachedTokens || 0).toLocaleString()})`}>
+                        {Math.max(0, msg.promptTokens - (msg.cachedTokens || 0)).toLocaleString()} in
                       </span>
                     )}
 

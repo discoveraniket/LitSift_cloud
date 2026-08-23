@@ -103,13 +103,22 @@ describe('pdfUtils - LLM Markdown Context Builder Suite', () => {
     expect(markdown).toContain('### Methods > Phage Isolation\nPhages were isolated from environmental wastewater samples.');
     expect(markdown).toContain('### Results > Burst Size Analysis\nThe GC content ranged from 43.68% to 43.76%.');
 
-    // 4. Administrative Boilerplate Filtered Out
-    expect(markdown).not.toContain('Conflict of Interest');
-    expect(markdown).not.toContain('Funding Statement');
-    expect(markdown).not.toContain('Data Availability');
-    expect(markdown).not.toContain('Author Contributions');
-    expect(markdown).not.toContain('Acknowledgments');
+    // 4. Data Availability & Acknowledgments Preserved
+    expect(markdown).toContain('## Data Availability\nGenomic data are deposited under BioProject PRJNA1256089.');
+    expect(markdown).toContain('## Acknowledgments\nWe thank the core sequencing facility for technical support.');
+
+    // 5. Pure Administrative Boilerplate Filtered Out (section headings & contents omitted)
+    expect(markdown).not.toContain('## Conflict of Interest');
+    expect(markdown).not.toContain('The authors declare that they have no competing interests');
+    expect(markdown).not.toContain('## Funding Statement');
+    expect(markdown).not.toContain('This work was supported by NIH grant');
+    expect(markdown).not.toContain('## Author Contributions');
+    expect(markdown).not.toContain('SJ conceived the study');
     expect(markdown).not.toContain('## References');
+    expect(markdown).not.toContain('1. Smith J et al. Nature 2020');
+
+    // 6. Intentional Omission Note Included
+    expect(markdown).toContain('Note: Non-scientific administrative boilerplate sections');
 
     // 5. Compact Table Rendering
     expect(markdown).toContain('## Extracted Tables');
