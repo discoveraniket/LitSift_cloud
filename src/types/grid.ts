@@ -49,6 +49,7 @@ export interface GridState {
   selectedRowIds: string[];
   selectedColumnField?: string;
   focusedCell?: { rowId: string; field: string } | null;
+  isTableSelected?: boolean;
   activeEvidence?: EvidenceLocation | null;
   activeCitation?: CellCitation | null;
   
@@ -76,6 +77,7 @@ export interface GridState {
   setSelectedRows: (rowIds: string[]) => void;
   setSelectedColumnField: (field?: string) => void;
   setFocusedCell: (cell: { rowId: string; field: string } | null) => void;
+  setSelectedTable: (selected: boolean) => void;
   setActiveEvidence: (evidence: EvidenceLocation | null) => void;
   setActiveCitation: (citation: CellCitation | null) => void;
   addCellDiscussionMessage: (rowId: string, field: string, userText: string) => void;

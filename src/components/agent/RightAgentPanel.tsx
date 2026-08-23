@@ -50,6 +50,9 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
     columns,
     activeCitation,
     focusedCell,
+    selectedRowIds,
+    selectedColumnField,
+    isTableSelected,
     resetActiveSelection,
     setActiveEvidence,
   } = useGridStore();
@@ -105,8 +108,51 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
     });
   };
 
-  // Resolve focused cell metadata for context capsule
-  const focusedCellInfo = focusedCell
+  // Resolve active selection metadata for context capsule
+  const isValidFocusedCell =
+    focusedCell &&
+    focusedCell.field !== '0' &&
+    focusedCell.field !== 'rowNum' &&
+    columns.some((c) => c.field === focusedCell.field);
+
+  let selectionContextInfo: {
+    type: 'cell' | 'row' | 'column' | 'table';
+    title: string;
+    subtitle?: string;
+  } | null = null;
+
+  if (isValidFocusedCell && focusedCell) {
+    const colName = columns.find((c) => c.field === focusedCell.field)?.headerName || focusedCell.field;
+    const row = rows.find((r) => r.id === focusedCell.rowId);
+    selectionContextInfo = {
+      type: 'cell',
+      title: `Cell: ${colName}`,
+      subtitle: row?.pdfTitle || 'Selected Row',
+    };
+  } else if (selectedRowIds.length > 0) {
+    const row = rows.find((r) => r.id === selectedRowIds[0]);
+    const rowIndex = rows.findIndex((r) => r.id === selectedRowIds[0]);
+    selectionContextInfo = {
+      type: 'row',
+      title: `Row ${rowIndex >= 0 ? rowIndex + 1 : 1}: ${row?.pdfTitle || 'Active Row'}`,
+      subtitle: `${columns.length} columns`,
+    };
+  } else if (selectedColumnField) {
+    const col = columns.find((c) => c.field === selectedColumnField);
+    selectionContextInfo = {
+      type: 'column',
+      title: `Column: ${col?.headerName || selectedColumnField}`,
+      subtitle: `${rows.length} rows`,
+    };
+  } else if (isTableSelected) {
+    selectionContextInfo = {
+      type: 'table',
+      title: `Entire Table (${rows.length} rows, ${columns.length} cols)`,
+      subtitle: 'Full Dataset Scope',
+    };
+  }
+
+  const focusedCellInfo = isValidFocusedCell && focusedCell
     ? {
         headerName: columns.find((c) => c.field === focusedCell.field)?.headerName || focusedCell.field,
         pdfTitle: rows.find((r) => r.id === focusedCell.rowId)?.pdfTitle,
@@ -549,6 +595,7 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
         onCancel={cancelInteraction}
         isThinking={isThinking}
         focusedCellInfo={focusedCellInfo}
+        selectionContextInfo={selectionContextInfo}
         onClearCellFocus={() => resetActiveSelection()}
         activePdfTitle={activePdfTitle}
         gridColumnCount={columns.length}

@@ -193,12 +193,21 @@ export async function processAgentInteraction(
       }
     }
 
-    // Inject focused cell metadata if a cell is currently selected
+    // Multi-Level Context Injection: Cell -> Row -> Column -> Entire Table
     const gridStore = useGridStore.getState();
     const focusedCell = gridStore.focusedCell;
+    const selectedRowIds = gridStore.selectedRowIds;
+    const selectedColumnField = gridStore.selectedColumnField;
+    const isTableSelected = gridStore.isTableSelected;
     let finalPromptText = userPrompt;
 
-    if (focusedCell) {
+    const isValidFocusedCell =
+      focusedCell &&
+      focusedCell.field !== '0' &&
+      focusedCell.field !== 'rowNum' &&
+      gridStore.columns.some((c) => c.field === focusedCell.field);
+
+    if (isValidFocusedCell && focusedCell) {
       const row = gridStore.rows.find((r) => r.id === focusedCell.rowId);
       const col = gridStore.columns.find((c) => c.field === focusedCell.field);
       const cellValue = row ? row[focusedCell.field] || 'Empty' : 'Unknown';
@@ -223,23 +232,68 @@ export async function processAgentInteraction(
 ${userPrompt}
 
 (Note: If this requires updating, modifying, or populating the table, invoke the appropriate tools.)`;
-    } else if (gridStore.rows.length > 0) {
-      // Inject concise table state summary in global mode
+    } else if (selectedRowIds.length > 0) {
+      const selectedRow = gridStore.rows.find((r) => r.id === selectedRowIds[0]);
+      if (selectedRow) {
+        logStore.addLog('info', `Injecting active row context for "${selectedRow.pdfTitle || activePdfTitle}" [${selectedRow.id}]`);
+        const rowFields = gridStore.columns
+          .map((c) => {
+            const val = selectedRow[c.field] || '-';
+            const cit = selectedRow.citationMap?.[c.field];
+            const citInfo =
+              cit?.snippetQuote && cit.snippetQuote !== 'Not reported in document'
+                ? ` (Evidence: "${cit.snippetQuote}" [${cit.sectionName || 'Section N/A'}, P.${cit.pageNumber || '1'}])`
+                : '';
+            return `  • ${c.headerName} (${c.field}): "${val}"${citInfo}`;
+          })
+          .join('\n');
+
+        finalPromptText = `[ACTIVE ROW CONTEXT]
+- Selected Observation Row: "${selectedRow.pdfTitle || activePdfTitle}" (Row ID: ${selectedRow.id})
+- Extracted Column Values & Grounded Evidence:
+${rowFields}
+
+[USER INSTRUCTION]:
+${userPrompt}
+
+(Note: If this requires updating, modifying, splitting, or verifying this specific row, invoke the appropriate tools.)`;
+      }
+    } else if (selectedColumnField) {
+      const targetCol = gridStore.columns.find((c) => c.field === selectedColumnField);
+      if (targetCol) {
+        logStore.addLog('info', `Injecting active column context for "${targetCol.headerName}" (${targetCol.field})`);
+        const populatedRows = gridStore.rows.filter((r) => !r.isDraftRow);
+        const colValues = populatedRows
+          .map((r, i) => `  • Row ${i + 1} ("${r.pdfTitle || activePdfTitle}"): "${r[targetCol.field] || '-'}"`)
+          .join('\n');
+
+        finalPromptText = `[ACTIVE COLUMN CONTEXT]
+- Selected Target Column: "${targetCol.headerName}" (Field Key: "${targetCol.field}")
+- Values across observations in dataset (${populatedRows.length} rows):
+${colValues || '  (No data rows)'}
+
+[USER INSTRUCTION]:
+${userPrompt}
+
+(Note: If this requires standardizing, editing, or evaluating this column across rows, invoke the appropriate tools.)`;
+      }
+    } else if (isTableSelected || gridStore.rows.length > 0) {
+      // Inject concise table state summary in table/global mode
       const populatedRows = gridStore.rows.filter((r) => !r.isDraftRow);
       const colsSummary = gridStore.columns.map((c) => `${c.headerName} (${c.field})`).join(', ');
       const rowsSummary = populatedRows
-        .slice(0, 5)
+        .slice(0, 10)
         .map((r, i) => {
           const rowFields = gridStore.columns
-            .slice(0, 5)
+            .slice(0, 6)
             .map((c) => `${c.headerName}: "${r[c.field] || '-'}"`)
             .join(', ');
           return `  • Row ${i + 1} (ID: ${r.id}, Paper: "${r.pdfTitle || activePdfTitle}"): ${rowFields}`;
         })
         .join('\n');
 
-      finalPromptText = `[CURRENT DATA GRID STATE]
-- Active Columns: ${colsSummary || 'None'}
+      finalPromptText = `[CURRENT DATA GRID STATE${isTableSelected ? ' - ENTIRE TABLE SELECTED' : ''}]
+- Active Columns (${gridStore.columns.length}): ${colsSummary || 'None'}
 - Existing Table Rows in Workspace (${populatedRows.length}):
 ${rowsSummary || '  (No populated rows)'}
 

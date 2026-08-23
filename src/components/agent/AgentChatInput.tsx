@@ -21,6 +21,11 @@ interface AgentChatInputProps {
     pdfTitle?: string;
     field: string;
   } | null;
+  selectionContextInfo?: {
+    type: 'cell' | 'row' | 'column' | 'table';
+    title: string;
+    subtitle?: string;
+  } | null;
   onClearCellFocus?: () => void;
   activePdfTitle?: string;
   gridColumnCount?: number;
@@ -35,6 +40,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
   onCancel,
   isThinking,
   focusedCellInfo,
+  selectionContextInfo,
   onClearCellFocus,
   activePdfTitle,
   gridColumnCount = 0,
@@ -60,8 +66,14 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
     }
   };
 
-  const placeholderText = focusedCellInfo
-    ? `Ask about or update "${focusedCellInfo.headerName}"...`
+  const activeContext = selectionContextInfo || (focusedCellInfo ? {
+    type: 'cell' as const,
+    title: `Cell: ${focusedCellInfo.headerName}`,
+    subtitle: focusedCellInfo.pdfTitle,
+  } : null);
+
+  const placeholderText = activeContext
+    ? `Ask about or update ${activeContext.title}...`
     : activePdfTitle
     ? `Ask LitSift Agent or extract data from "${activePdfTitle}"...`
     : "Type instructions e.g. 'extract table data', 'add column'...";
@@ -83,7 +95,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
           display: 'flex',
           flexDirection: 'column',
           background: 'var(--bg-tertiary)',
-          border: focusedCellInfo
+          border: activeContext
             ? '1px solid var(--accent-primary)'
             : isThinking
             ? '1px solid rgba(137, 180, 250, 0.4)'
@@ -104,7 +116,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
             marginBottom: '6px',
           }}
         >
-          {focusedCellInfo ? (
+          {activeContext ? (
             <div
               style={{
                 display: 'flex',
@@ -119,18 +131,21 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
                 fontWeight: 600,
               }}
             >
-              <Target size={11} />
-              <span>Cell: {focusedCellInfo.headerName}</span>
-              {focusedCellInfo.pdfTitle && (
+              {activeContext.type === 'cell' && <Target size={11} />}
+              {activeContext.type === 'row' && <FileText size={11} />}
+              {activeContext.type === 'column' && <Table size={11} />}
+              {activeContext.type === 'table' && <Table size={11} />}
+              <span>{activeContext.title}</span>
+              {activeContext.subtitle && (
                 <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>
-                  ({focusedCellInfo.pdfTitle})
+                  ({activeContext.subtitle})
                 </span>
               )}
               {onClearCellFocus && (
                 <button
                   type="button"
                   onClick={onClearCellFocus}
-                  title="Remove cell target focus"
+                  title="Remove target selection"
                   style={{
                     background: 'transparent',
                     border: 'none',

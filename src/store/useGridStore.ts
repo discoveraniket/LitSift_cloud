@@ -50,6 +50,7 @@ export const useGridStore = create<GridState>((set) => ({
   columns: [],
   rows: [],
   selectedRowIds: [],
+  isTableSelected: false,
 
   hydrateFromDb: async () => {
     try {
@@ -72,6 +73,7 @@ export const useGridStore = create<GridState>((set) => ({
       activeEvidence: null,
       selectedRowIds: [],
       selectedColumnField: undefined,
+      isTableSelected: false,
     }),
 
   updateCell: (rowId, field, value) =>
@@ -515,9 +517,36 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
-  setSelectedRows: (rowIds) => set({ selectedRowIds: rowIds }),
-  setSelectedColumnField: (field) => set({ selectedColumnField: field }),
-  setFocusedCell: (cell) => set({ focusedCell: cell }),
+  setSelectedRows: (rowIds) =>
+    set({
+      selectedRowIds: rowIds,
+      focusedCell: null,
+      selectedColumnField: undefined,
+      isTableSelected: false,
+    }),
+  setSelectedColumnField: (field) =>
+    set({
+      selectedColumnField: field,
+      focusedCell: null,
+      selectedRowIds: [],
+      isTableSelected: false,
+    }),
+  setFocusedCell: (cell) =>
+    set({
+      focusedCell: cell,
+      selectedRowIds: [],
+      selectedColumnField: undefined,
+      isTableSelected: false,
+    }),
+  setSelectedTable: (selected) =>
+    set({
+      isTableSelected: selected,
+      focusedCell: null,
+      selectedRowIds: [],
+      selectedColumnField: undefined,
+      activeCitation: null,
+      activeEvidence: null,
+    }),
   setActiveEvidence: (evidence) =>
     set({
       activeEvidence: evidence

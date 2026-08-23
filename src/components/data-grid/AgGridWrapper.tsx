@@ -98,11 +98,14 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     updateCell,
     addColumn,
     renameColumn,
+    selectedRowIds,
     setSelectedRows,
     selectedColumnField,
     setSelectedColumnField,
     focusedCell,
     setFocusedCell,
+    isTableSelected,
+    setSelectedTable,
     setActiveEvidence,
     setActiveCitation,
   } = useGridStore();
@@ -135,7 +138,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   // Construct AG Grid column definitions using stable headerComponent reference
   const colDefs = useMemo<ColDef<GridRow>[]>(() => {
     const dynamicCols: ColDef<GridRow>[] = columns.map((col) => {
-      const isColSelected = isPreviewMode && selectedColumnField === col.field;
+      const isColSelected = selectedColumnField === col.field;
       return {
         field: col.field,
         headerName: col.headerName,
@@ -199,7 +202,24 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     });
 
     const rowNumCol: ColDef<GridRow> = {
+      colId: 'rowNum',
       headerName: '#',
+      headerComponent: () => (
+        <div
+          title="Click to Select Entire Table"
+          onClick={() => setSelectedTable(true)}
+          style={{
+            cursor: 'pointer',
+            textAlign: 'center',
+            width: '100%',
+            userSelect: 'none',
+            color: isTableSelected ? 'var(--accent-primary)' : 'inherit',
+            fontWeight: isTableSelected ? 700 : 600,
+          }}
+        >
+          {isTableSelected ? '⊞' : '#'}
+        </div>
+      ),
       width: 50,
       pinned: 'left',
       sortable: false,
@@ -210,11 +230,16 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         if (params.data?.isDraftRow) return '*';
         return (params.node?.rowIndex ?? 0) + 1;
       },
-      cellStyle: {
-        fontWeight: 600,
-        fontSize: '11px',
-        color: 'var(--text-secondary)',
-        textAlign: 'center',
+      cellStyle: (params) => {
+        const isRowSelected = selectedRowIds.includes(params.data?.id);
+        return {
+          fontWeight: 600,
+          fontSize: '11px',
+          color: isRowSelected ? 'var(--accent-primary)' : 'var(--text-secondary)',
+          backgroundColor: isRowSelected ? 'rgba(137, 180, 250, 0.18)' : 'transparent',
+          textAlign: 'center',
+          cursor: 'pointer',
+        };
       },
     };
 
@@ -312,6 +337,17 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
       const colId = typeof column === 'string' ? column : column.getColId();
       const row = directRowData || (rowIndex !== null ? rowData[rowIndex] : null);
       if (row && colId) {
+        // If clicking the row index helper column (#), select the entire row instead of a fake "0" field
+        if (colId === 'rowNum' || colId === '0' || colId === '#') {
+          setSelectedRows([row.id]);
+          return;
+        }
+
+        // If clicking the "+ Column" helper column, ignore cell focus
+        if (colId === '+ Column' || colId === 'addCol') {
+          return;
+        }
+
         setFocusedCell({ rowId: row.id, field: colId });
 
         // If row has an associated PDF that is not currently active, switch active PDF in usePdfStore
@@ -387,11 +423,14 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     setSelectedRows(ids);
   };
 
-  // Header click handler for preview mode column selection
+  // Header click handler for column selection and entire table selection
   const onColumnHeaderClicked = (event: any) => {
-    if (!isPreviewMode) return;
     const field = event.column?.getColId();
-    if (field && field !== 'pdfTitle' && field !== '#' && field !== '+ Column') {
+    if (field === 'rowNum' || field === '0' || field === '#') {
+      setSelectedTable(true);
+      return;
+    }
+    if (field && field !== 'pdfTitle' && field !== '+ Column' && field !== 'addCol') {
       if (selectedColumnField === field) {
         setSelectedColumnField(undefined); // Toggle off if clicked twice
       } else {
