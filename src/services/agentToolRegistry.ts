@@ -103,7 +103,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
           description: 'Exact quote or evidence passage from the research paper.',
         },
       },
-      required: ['newValue'],
+      required: ['newValue', 'reasoning', 'sectionName', 'snippetQuote'],
     },
     execute: async (args: any, mode: AgentExecutionMode): Promise<ToolExecutionResult> => {
       try {
@@ -250,7 +250,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
               pageNumber: { type: Type.NUMBER, description: 'Page number' },
               snippetQuote: { type: Type.STRING, description: 'Exact quote snippet' },
             },
-            required: ['field', 'newValue'],
+            required: ['field', 'newValue', 'reasoning', 'sectionName', 'snippetQuote'],
           },
         },
       },
@@ -319,14 +319,14 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
               },
               citations: {
                 type: Type.OBJECT,
-                description: 'Optional evidence citation map containing pageNumber, sectionName, snippetQuote, reasoning for columns.',
+                description: 'Required evidence citation map containing pageNumber, sectionName, snippetQuote, reasoning for columns.',
               },
               pdfTitle: {
                 type: Type.STRING,
                 description: 'Optional name of the research paper this row belongs to.',
               },
             },
-            required: ['fields'],
+            required: ['fields', 'citations'],
           },
         },
         pdfTitle: {
@@ -416,12 +416,16 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
           type: Type.OBJECT,
           description: 'Key-value map of column fields or header names to their new updated values (e.g. {"latent_period_min": "~7 min", "burst_size": "105 PFU/cell"}).',
         },
+        citations: {
+          type: Type.OBJECT,
+          description: 'Required evidence citation map containing pageNumber, sectionName, snippetQuote, reasoning for all updated columns.',
+        },
         reasoning: {
           type: Type.STRING,
           description: 'Explanation of the updates performed on this row.',
         },
       },
-      required: ['fields'],
+      required: ['fields', 'citations', 'reasoning'],
     },
     execute: async (args: any): Promise<ToolExecutionResult> => {
       try {
@@ -433,7 +437,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         if (!args.fields || typeof args.fields !== 'object') throw new Error('Parameter "fields" must be an object.');
 
         logStore.addLog('info', `Updating row ${targetRowId} with ${Object.keys(args.fields).length} field(s)`);
-        gridStore.updateRow(targetRowId, args.fields);
+        gridStore.updateRow(targetRowId, args.fields, args.citations);
         logStore.addLog('success', `Row ${targetRowId} updated`);
 
         return {
@@ -630,12 +634,20 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
             description: 'Atomic row object mapping column fields to values.',
           },
         },
+        citations: {
+          type: Type.ARRAY,
+          description: 'Required array of evidence citation maps corresponding to each replacement row (containing pageNumber, sectionName, snippetQuote, reasoning for columns).',
+          items: {
+            type: Type.OBJECT,
+            description: 'Citation map for the replacement row.',
+          },
+        },
         reasoning: {
           type: Type.STRING,
           description: 'Scientific rationale for disaggregating this row.',
         },
       },
-      required: ['replacementRows'],
+      required: ['replacementRows', 'citations', 'reasoning'],
     },
     execute: async (args: any): Promise<ToolExecutionResult> => {
       try {
@@ -649,7 +661,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         }
 
         logStore.addLog('info', `Disaggregating row ${targetRowId} into ${args.replacementRows.length} atomic sub-rows`);
-        gridStore.disaggregateRow(targetRowId, args.replacementRows);
+        gridStore.disaggregateRow(targetRowId, args.replacementRows, args.citations);
         logStore.addLog('success', `Row ${targetRowId} disaggregated into ${args.replacementRows.length} atomic rows`);
 
         return {
