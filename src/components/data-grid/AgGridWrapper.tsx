@@ -103,7 +103,9 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     selectedColumnField,
     setSelectedColumnField,
     focusedCell,
-    setFocusedCell,
+    selectedCells,
+    setSelectedCells,
+    toggleCellSelection,
     isTableSelected,
     setSelectedTable,
     setActiveEvidence,
@@ -336,7 +338,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   };
 
   const handleCellSelectOrFocus = useCallback(
-    (rowIndex: number | null, column: any, directRowData?: GridRow) => {
+    (rowIndex: number | null, column: any, directRowData?: GridRow, isMultiToggle = false) => {
       if ((rowIndex === null && !directRowData) || !column) return;
       if (rowIndex !== null) setFocusedRowIndex(rowIndex);
       const colId = typeof column === 'string' ? column : column.getColId();
@@ -344,7 +346,15 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
       if (row && colId) {
         // If clicking the row index helper column (#), select the entire row instead of a fake "0" field
         if (colId === 'rowNum' || colId === '0' || colId === '#') {
-          setSelectedRows([row.id]);
+          if (isMultiToggle) {
+            const current = useGridStore.getState().selectedRowIds;
+            const updated = current.includes(row.id)
+              ? current.filter((id) => id !== row.id)
+              : [...current, row.id];
+            setSelectedRows(updated);
+          } else {
+            setSelectedRows([row.id]);
+          }
           return;
         }
 
@@ -353,7 +363,11 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
           return;
         }
 
-        setFocusedCell({ rowId: row.id, field: colId });
+        if (isMultiToggle) {
+          toggleCellSelection({ rowId: row.id, field: colId });
+        } else {
+          setSelectedCells([{ rowId: row.id, field: colId }]);
+        }
 
         // If row has an associated PDF that is not currently active, switch active PDF in usePdfStore
         const pdfStore = usePdfStore.getState();
@@ -395,19 +409,23 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         }
       }
     },
-    [rowData, setFocusedCell, setActiveEvidence, setActiveCitation]
+    [rowData, setSelectedCells, toggleCellSelection, setSelectedRows, setActiveEvidence, setActiveCitation]
   );
 
   const handleCellFocused = useCallback(
     (event: CellFocusedEvent<GridRow>) => {
-      handleCellSelectOrFocus(event.rowIndex, event.column);
+      if (event.rowIndex !== null) {
+        setFocusedRowIndex(event.rowIndex);
+      }
     },
-    [handleCellSelectOrFocus]
+    []
   );
 
   const handleCellClicked = useCallback(
     (event: CellClickedEvent<GridRow>) => {
-      handleCellSelectOrFocus(event.rowIndex, event.column, event.data);
+      const mouseEvent = event.event as MouseEvent;
+      const isMultiKey = Boolean(mouseEvent?.ctrlKey || mouseEvent?.metaKey || mouseEvent?.shiftKey);
+      handleCellSelectOrFocus(event.rowIndex, event.column, event.data, isMultiKey);
     },
     [handleCellSelectOrFocus]
   );
@@ -421,12 +439,6 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     },
     [focusedRowIndex]
   );
-
-  const onSelectionChanged = (event: any) => {
-    const selectedRows: GridRow[] = event.api.getSelectedRows();
-    const ids = selectedRows.map((r) => r.id);
-    setSelectedRows(ids);
-  };
 
   // Header click handler for column selection and entire table selection
   const onColumnHeaderClicked = (event: any) => {
@@ -443,17 +455,12 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
       }
     }
   };
-
   // Cleanly refresh cells when columns or rows update without interrupting active cell editors
   useEffect(() => {
     if (gridApiRef.current?.api) {
-      // Only refresh cells if the user is not actively editing a cell
-      const editingCells = gridApiRef.current.api.getEditingCells();
-      if (!editingCells || editingCells.length === 0) {
-        gridApiRef.current.api.refreshCells();
-      }
+      gridApiRef.current.api.refreshCells({ force: true });
     }
-  }, [rows, columns, focusedCell]);
+  }, [focusedCell, selectedCells]);
 
   return (
     <div className="ag-theme-quartz-dark" style={{ height: '100%', width: '100%' }}>
@@ -469,7 +476,8 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
           editable: true,
           cellClassRules: {
             'litsift-cell-active': (params) =>
-              !!focusedCell && params.data?.id === focusedCell.rowId && params.colDef.field === focusedCell.field,
+              selectedCells.some((c) => c.rowId === params.data?.id && c.field === params.colDef.field) ||
+              (!!focusedCell && params.data?.id === focusedCell.rowId && params.colDef.field === focusedCell.field),
             'cell-pending-review': (params) => {
               const field = params.colDef.field;
               if (!field || !params.data) return false;
@@ -489,7 +497,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         getRowHeight={getRowHeight}
         animateRows={true}
         rowSelection="multiple"
-        onSelectionChanged={onSelectionChanged}
+        suppressRowClickSelection={true}
         rowClassRules={{
           'row-pending-review': (params) =>
             params.data?.aiStatus === 'Pending Review' &&

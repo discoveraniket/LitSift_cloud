@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   Send,
   Square,
@@ -8,7 +8,23 @@ import {
   Target,
   Cpu,
   ChevronDown,
+  Layers,
 } from 'lucide-react';
+
+export interface ContextItemDetail {
+  id: string;
+  title: string;
+  subtitle?: string;
+  value?: string;
+  quote?: string;
+  onRemove?: () => void;
+}
+
+export interface SelectionContextInfo {
+  type: 'cells' | 'row' | 'column' | 'table';
+  summaryLabel: string;
+  items: ContextItemDetail[];
+}
 
 interface AgentChatInputProps {
   inputPrompt: string;
@@ -21,12 +37,8 @@ interface AgentChatInputProps {
     pdfTitle?: string;
     field: string;
   } | null;
-  selectionContextInfo?: {
-    type: 'cell' | 'row' | 'column' | 'table';
-    title: string;
-    subtitle?: string;
-  } | null;
-  onClearCellFocus?: () => void;
+  selectionContextInfo?: SelectionContextInfo | null;
+  onClearAllSelection?: () => void;
   activePdfTitle?: string;
   gridColumnCount?: number;
   selectedModel?: string;
@@ -39,15 +51,16 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
   onSend,
   onCancel,
   isThinking,
-  focusedCellInfo,
   selectionContextInfo,
-  onClearCellFocus,
+  onClearAllSelection,
   activePdfTitle,
   gridColumnCount = 0,
   selectedModel,
   onOpenSettings,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [showContextPopover, setShowContextPopover] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   // Dynamic textarea height adjustment
   useEffect(() => {
@@ -56,6 +69,19 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
     }
   }, [inputPrompt]);
+
+  // Close popover when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setShowContextPopover(false);
+      }
+    };
+    if (showContextPopover) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showContextPopover]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -66,17 +92,8 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
     }
   };
 
-  const activeContext = selectionContextInfo || (focusedCellInfo ? {
-    type: 'cell' as const,
-    title: `Cell: ${focusedCellInfo.headerName}`,
-    subtitle: focusedCellInfo.pdfTitle,
-  } : null);
-
-  const placeholderText = activeContext
-    ? `Ask about or update ${activeContext.title}...`
-    : activePdfTitle
-    ? `Ask LitSift Agent or extract data from "${activePdfTitle}"...`
-    : "Type instructions e.g. 'extract table data', 'add column'...";
+  const hasDynamicSelection = Boolean(selectionContextInfo && selectionContextInfo.items.length > 0);
+  const dynamicCount = selectionContextInfo?.items.length || 0;
 
   return (
     <div
@@ -95,7 +112,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
           display: 'flex',
           flexDirection: 'column',
           background: 'var(--bg-tertiary)',
-          border: activeContext
+          border: hasDynamicSelection
             ? '1px solid var(--accent-primary)'
             : isThinking
             ? '1px solid rgba(137, 180, 250, 0.4)'
@@ -106,115 +123,332 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
           transition: 'all 0.15s ease',
         }}
       >
-        {/* Context Capsule Bar */}
+        {/* Top Minimal Context Icon Bar */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            flexWrap: 'wrap',
-            marginBottom: '6px',
+            marginBottom: '4px',
+            position: 'relative',
           }}
         >
-          {activeContext ? (
-            <div
+          {/* Minimal Single Context View Button (Antigravity-Style) */}
+          <div ref={popoverRef} style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setShowContextPopover((prev) => !prev)}
+              title={
+                hasDynamicSelection
+                  ? `Context Active: ${selectionContextInfo?.summaryLabel} (Click to inspect or dismiss)`
+                  : 'View Attached Prompt Contexts (PDF, Dataset Schema)'
+              }
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '5px',
-                background: 'rgba(137, 180, 250, 0.15)',
-                border: '1px solid var(--accent-primary)',
-                borderRadius: '4px',
+                gap: '4px',
+                background: showContextPopover
+                  ? 'rgba(137, 180, 250, 0.22)'
+                  : hasDynamicSelection
+                  ? 'rgba(137, 180, 250, 0.14)'
+                  : 'rgba(255, 255, 255, 0.05)',
+                border: hasDynamicSelection
+                  ? '1px solid var(--accent-primary)'
+                  : '1px solid var(--border-subtle)',
+                borderRadius: '5px',
                 padding: '2px 6px',
                 fontSize: '10px',
-                color: 'var(--accent-primary)',
-                fontWeight: 600,
+                color: hasDynamicSelection ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                fontWeight: 500,
+                cursor: 'pointer',
+                userSelect: 'none',
+                transition: 'all 0.15s ease',
               }}
             >
-              {activeContext.type === 'cell' && <Target size={11} />}
-              {activeContext.type === 'row' && <FileText size={11} />}
-              {activeContext.type === 'column' && <Table size={11} />}
-              {activeContext.type === 'table' && <Table size={11} />}
-              <span>{activeContext.title}</span>
-              {activeContext.subtitle && (
-                <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>
-                  ({activeContext.subtitle})
+              <Layers size={11} color={hasDynamicSelection ? 'var(--accent-primary)' : 'var(--text-muted)'} />
+              <span>Context</span>
+              {hasDynamicSelection && (
+                <span
+                  style={{
+                    background: 'var(--accent-primary)',
+                    color: 'var(--bg-secondary)',
+                    borderRadius: '10px',
+                    padding: '0 4px',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    lineHeight: '13px',
+                  }}
+                >
+                  {dynamicCount}
                 </span>
               )}
-              {onClearCellFocus && (
-                <button
-                  type="button"
-                  onClick={onClearCellFocus}
-                  title="Remove target selection"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '1px',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-danger)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-                >
-                  <X size={11} />
-                </button>
-              )}
-            </div>
-          ) : (
-            <>
-              {activePdfTitle && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '4px',
-                    padding: '2px 6px',
-                    fontSize: '10px',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  <FileText size={10} color="var(--accent-primary)" />
-                  <span style={{ maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {activePdfTitle}
-                  </span>
-                </div>
-              )}
+            </button>
 
-              {gridColumnCount > 0 && (
+            {/* Context Details Inspector Popover */}
+            {showContextPopover && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: 0,
+                  marginBottom: '8px',
+                  width: '330px',
+                  maxHeight: '320px',
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '8px',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
+                  zIndex: 1000,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden',
+                }}
+              >
+                {/* Popover Header */}
                 <div
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px',
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '4px',
-                    padding: '2px 6px',
-                    fontSize: '10px',
-                    color: 'var(--text-secondary)',
+                    justifyContent: 'space-between',
+                    padding: '7px 10px',
+                    background: 'var(--bg-tertiary)',
+                    borderBottom: '1px solid var(--border-subtle)',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
                   }}
                 >
-                  <Table size={10} color="var(--accent-secondary, #cba6f7)" />
-                  <span>{gridColumnCount} column{gridColumnCount > 1 ? 's' : ''}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Layers size={12} color="var(--accent-primary)" />
+                    <span>Attached Prompt Contexts</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowContextPopover(false)}
+                    title="Close popover"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      padding: '2px',
+                    }}
+                  >
+                    <X size={12} />
+                  </button>
                 </div>
-              )}
-            </>
-          )}
+
+                {/* Popover Body */}
+                <div
+                  style={{
+                    overflowY: 'auto',
+                    padding: '8px 10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                  }}
+                >
+                  {/* Dynamic Selection Section (Dismissible) */}
+                  {hasDynamicSelection && (
+                    <div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          fontSize: '9.5px',
+                          fontWeight: 700,
+                          color: 'var(--accent-primary)',
+                          marginBottom: '4px',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                        }}
+                      >
+                        <span>Active Grid Selection ({dynamicCount})</span>
+                        {onClearAllSelection && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClearAllSelection();
+                              setShowContextPopover(false);
+                            }}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--accent-danger)',
+                              cursor: 'pointer',
+                              fontSize: '9.5px',
+                              fontWeight: 600,
+                              padding: 0,
+                            }}
+                          >
+                            Clear Selection
+                          </button>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {selectionContextInfo?.items.map((item) => (
+                          <div
+                            key={item.id}
+                            style={{
+                              padding: '5px 7px',
+                              background: 'rgba(137, 180, 250, 0.08)',
+                              border: '1px solid rgba(137, 180, 250, 0.25)',
+                              borderRadius: '5px',
+                              fontSize: '10.5px',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '4px' }}>
+                              <div style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{item.title}</div>
+                              {item.onRemove && (
+                                <button
+                                  type="button"
+                                  onClick={item.onRemove}
+                                  title="Remove item from selection"
+                                  style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'var(--text-muted)',
+                                    cursor: 'pointer',
+                                    padding: 0,
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-danger)')}
+                                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+                                >
+                                  <X size={11} />
+                                </button>
+                              )}
+                            </div>
+                            {item.value && (
+                              <div style={{ color: 'var(--text-secondary)', marginTop: '2px', fontFamily: 'var(--font-mono, monospace)', fontSize: '10px' }}>
+                                Value: <span style={{ color: 'var(--text-primary)' }}>{item.value}</span>
+                              </div>
+                            )}
+                            {item.quote && item.quote !== 'N/A' && item.quote !== 'Not reported in document' && (
+                              <div style={{ color: 'var(--text-muted)', fontSize: '9.5px', fontStyle: 'italic', marginTop: '2px' }}>
+                                "{item.quote.slice(0, 90)}{item.quote.length > 90 ? '...' : ''}"
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Permanent Workspace Context (Static, non-dismissible) */}
+                  <div>
+                    <div
+                      style={{
+                        fontSize: '9.5px',
+                        fontWeight: 700,
+                        color: 'var(--text-secondary)',
+                        marginBottom: '4px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                      }}
+                    >
+                      Permanent Grounding Context
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {/* Active PDF Root Doc */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          background: 'rgba(255, 255, 255, 0.03)',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: '5px',
+                          padding: '5px 7px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                          <FileText size={11} color="var(--accent-primary)" style={{ flexShrink: 0 }} />
+                          <div style={{ overflow: 'hidden' }}>
+                            <div
+                              style={{
+                                fontSize: '10.5px',
+                                fontWeight: 500,
+                                color: 'var(--text-primary)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: '210px',
+                              }}
+                              title={activePdfTitle || 'Root Document'}
+                            >
+                              {activePdfTitle || 'Root Research Document'}
+                            </div>
+                            <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Root Grounding Document</div>
+                          </div>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '9px',
+                            background: 'rgba(166, 227, 161, 0.15)',
+                            color: '#a6e3a1',
+                            padding: '1px 4px',
+                            borderRadius: '3px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Static
+                        </span>
+                      </div>
+
+                      {/* Master Data Grid Schema */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          background: 'rgba(255, 255, 255, 0.03)',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: '5px',
+                          padding: '5px 7px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Table size={11} color="var(--accent-secondary, #cba6f7)" style={{ flexShrink: 0 }} />
+                          <div>
+                            <div style={{ fontSize: '10.5px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                              Master Data Grid
+                            </div>
+                            <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>
+                              {gridColumnCount} columns defined
+                            </div>
+                          </div>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '9px',
+                            background: 'rgba(166, 227, 161, 0.15)',
+                            color: '#a6e3a1',
+                            padding: '1px 4px',
+                            borderRadius: '3px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Static
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Prompt Input Textarea */}
+        {/* Clean Prompt Input Textarea */}
         <textarea
           ref={textareaRef}
           value={inputPrompt}
           onChange={(e) => setInputPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isThinking}
-          placeholder={placeholderText}
+          placeholder="Ask anything about this paper or dataset..."
           rows={1}
           style={{
             width: '100%',

@@ -50,6 +50,8 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
     columns,
     activeCitation,
     focusedCell,
+    selectedCells,
+    removeSelectedCell,
     selectedRowIds,
     selectedColumnField,
     isTableSelected,
@@ -108,57 +110,94 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
     });
   };
 
-  // Resolve active selection metadata for context capsule
-  const isValidFocusedCell =
-    focusedCell &&
-    focusedCell.field !== '0' &&
-    focusedCell.field !== 'rowNum' &&
-    columns.some((c) => c.field === focusedCell.field);
+  // Resolve active selection metadata for Antigravity-style context inspector
+  const validSelectedCells = (selectedCells || []).filter(
+    (c) => c.field !== '0' && c.field !== 'rowNum' && columns.some((col) => col.field === c.field)
+  );
 
   let selectionContextInfo: {
-    type: 'cell' | 'row' | 'column' | 'table';
-    title: string;
-    subtitle?: string;
+    type: 'cells' | 'row' | 'column' | 'table';
+    summaryLabel: string;
+    items: Array<{
+      id: string;
+      title: string;
+      subtitle?: string;
+      value?: string;
+      quote?: string;
+      onRemove?: () => void;
+    }>;
   } | null = null;
 
-  if (isValidFocusedCell && focusedCell) {
-    const colName = columns.find((c) => c.field === focusedCell.field)?.headerName || focusedCell.field;
-    const row = rows.find((r) => r.id === focusedCell.rowId);
+  if (validSelectedCells.length > 0) {
+    const firstCol = columns.find((c) => c.field === validSelectedCells[0].field);
+    const summary = validSelectedCells.length === 1
+      ? `Cell: ${firstCol?.headerName || validSelectedCells[0].field}`
+      : `${validSelectedCells.length} Cells`;
+
     selectionContextInfo = {
-      type: 'cell',
-      title: `Cell: ${colName}`,
-      subtitle: row?.pdfTitle || 'Selected Row',
+      type: 'cells',
+      summaryLabel: summary,
+      items: validSelectedCells.map((c) => {
+        const row = rows.find((r) => r.id === c.rowId);
+        const rowIndex = rows.findIndex((r) => r.id === c.rowId);
+        const col = columns.find((cl) => cl.field === c.field);
+        const cit = row?.citationMap?.[c.field];
+        return {
+          id: `${c.rowId}-${c.field}`,
+          title: `Row ${rowIndex >= 0 ? rowIndex + 1 : '?'}: ${col?.headerName || c.field}`,
+          subtitle: row?.pdfTitle || 'Active Paper',
+          value: row ? String(row[c.field] ?? 'Empty') : 'Unknown',
+          quote: cit?.snippetQuote,
+          onRemove: () => removeSelectedCell(c),
+        };
+      }),
     };
   } else if (selectedRowIds.length > 0) {
-    const row = rows.find((r) => r.id === selectedRowIds[0]);
-    const rowIndex = rows.findIndex((r) => r.id === selectedRowIds[0]);
+    const firstRowIndex = rows.findIndex((r) => r.id === selectedRowIds[0]);
     selectionContextInfo = {
       type: 'row',
-      title: `Row ${rowIndex >= 0 ? rowIndex + 1 : 1}: ${row?.pdfTitle || 'Active Row'}`,
-      subtitle: `${columns.length} columns`,
+      summaryLabel: selectedRowIds.length === 1
+        ? `Row ${firstRowIndex >= 0 ? firstRowIndex + 1 : 1}`
+        : `${selectedRowIds.length} Rows`,
+      items: selectedRowIds.map((rowId) => {
+        const row = rows.find((r) => r.id === rowId);
+        const rowIndex = rows.findIndex((r) => r.id === rowId);
+        return {
+          id: rowId,
+          title: `Row ${rowIndex >= 0 ? rowIndex + 1 : '?'}: ${row?.pdfTitle || 'Selected Observation'}`,
+          subtitle: `${columns.length} columns`,
+          onRemove: () => resetActiveSelection(),
+        };
+      }),
     };
   } else if (selectedColumnField) {
     const col = columns.find((c) => c.field === selectedColumnField);
     selectionContextInfo = {
       type: 'column',
-      title: `Column: ${col?.headerName || selectedColumnField}`,
-      subtitle: `${rows.length} rows`,
+      summaryLabel: `Col: ${col?.headerName || selectedColumnField}`,
+      items: [
+        {
+          id: selectedColumnField,
+          title: `Column: ${col?.headerName || selectedColumnField}`,
+          subtitle: `${rows.length} rows in dataset`,
+          onRemove: () => resetActiveSelection(),
+        },
+      ],
     };
   } else if (isTableSelected) {
     selectionContextInfo = {
       type: 'table',
-      title: `Entire Table (${rows.length} rows, ${columns.length} cols)`,
-      subtitle: 'Full Dataset Scope',
+      summaryLabel: `Entire Table (${rows.length} rows)`,
+      items: [
+        {
+          id: 'table',
+          title: `Full Dataset Grid`,
+          subtitle: `${rows.length} rows, ${columns.length} columns`,
+          onRemove: () => resetActiveSelection(),
+        },
+      ],
     };
   }
-
-  const focusedCellInfo = isValidFocusedCell && focusedCell
-    ? {
-        headerName: columns.find((c) => c.field === focusedCell.field)?.headerName || focusedCell.field,
-        pdfTitle: rows.find((r) => r.id === focusedCell.rowId)?.pdfTitle,
-        field: focusedCell.field,
-      }
-    : null;
 
   return (
     <aside
@@ -594,9 +633,8 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
         onSend={handleSend}
         onCancel={cancelInteraction}
         isThinking={isThinking}
-        focusedCellInfo={focusedCellInfo}
         selectionContextInfo={selectionContextInfo}
-        onClearCellFocus={() => resetActiveSelection()}
+        onClearAllSelection={() => resetActiveSelection()}
         activePdfTitle={activePdfTitle}
         gridColumnCount={columns.length}
         selectedModel={getSelectedGeminiModel()}

@@ -50,6 +50,7 @@ export const useGridStore = create<GridState>((set) => ({
   columns: [],
   rows: [],
   selectedRowIds: [],
+  selectedCells: [],
   isTableSelected: false,
 
   hydrateFromDb: async () => {
@@ -69,6 +70,7 @@ export const useGridStore = create<GridState>((set) => ({
   resetActiveSelection: () =>
     set({
       focusedCell: null,
+      selectedCells: [],
       activeCitation: null,
       activeEvidence: null,
       selectedRowIds: [],
@@ -556,6 +558,7 @@ export const useGridStore = create<GridState>((set) => ({
     set({
       selectedRowIds: rowIds,
       focusedCell: null,
+      selectedCells: [],
       selectedColumnField: undefined,
       isTableSelected: false,
     }),
@@ -563,20 +566,53 @@ export const useGridStore = create<GridState>((set) => ({
     set({
       selectedColumnField: field,
       focusedCell: null,
+      selectedCells: [],
       selectedRowIds: [],
       isTableSelected: false,
     }),
   setFocusedCell: (cell) =>
     set({
       focusedCell: cell,
+      selectedCells: cell ? [cell] : [],
       selectedRowIds: [],
       selectedColumnField: undefined,
       isTableSelected: false,
+    }),
+  setSelectedCells: (cells) =>
+    set({
+      selectedCells: cells,
+      focusedCell: cells.length > 0 ? cells[cells.length - 1] : null,
+      selectedRowIds: [],
+      selectedColumnField: undefined,
+      isTableSelected: false,
+    }),
+  toggleCellSelection: (cell) =>
+    set((state) => {
+      const exists = state.selectedCells.some((c) => c.rowId === cell.rowId && c.field === cell.field);
+      const updated = exists
+        ? state.selectedCells.filter((c) => !(c.rowId === cell.rowId && c.field === cell.field))
+        : [...state.selectedCells, cell];
+      return {
+        selectedCells: updated,
+        focusedCell: updated.length > 0 ? updated[updated.length - 1] : null,
+        selectedRowIds: [],
+        selectedColumnField: undefined,
+        isTableSelected: false,
+      };
+    }),
+  removeSelectedCell: (cell) =>
+    set((state) => {
+      const updated = state.selectedCells.filter((c) => !(c.rowId === cell.rowId && c.field === cell.field));
+      return {
+        selectedCells: updated,
+        focusedCell: updated.length > 0 ? updated[updated.length - 1] : null,
+      };
     }),
   setSelectedTable: (selected) =>
     set({
       isTableSelected: selected,
       focusedCell: null,
+      selectedCells: [],
       selectedRowIds: [],
       selectedColumnField: undefined,
       activeCitation: null,

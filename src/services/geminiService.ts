@@ -193,36 +193,65 @@ export async function processAgentInteraction(
       }
     }
 
-    // Multi-Level Context Injection: Cell -> Row -> Column -> Entire Table
+    // Multi-Level Context Injection: Multi-Cell -> Single Cell -> Row -> Column -> Entire Table
     const gridStore = useGridStore.getState();
     const focusedCell = gridStore.focusedCell;
+    const selectedCells = (gridStore.selectedCells || []).filter(
+      (c) => c.field !== '0' && c.field !== 'rowNum' && gridStore.columns.some((col) => col.field === c.field)
+    );
     const selectedRowIds = gridStore.selectedRowIds;
     const selectedColumnField = gridStore.selectedColumnField;
     const isTableSelected = gridStore.isTableSelected;
     let finalPromptText = userPrompt;
 
-    const isValidFocusedCell =
-      focusedCell &&
-      focusedCell.field !== '0' &&
-      focusedCell.field !== 'rowNum' &&
-      gridStore.columns.some((c) => c.field === focusedCell.field);
+    if (selectedCells.length > 1) {
+      logStore.addLog('info', `Injecting multi-cell comparative context for ${selectedCells.length} cells`);
+      const cellsFormatted = selectedCells
+        .map((c, i) => {
+          const row = gridStore.rows.find((r) => r.id === c.rowId);
+          const col = gridStore.columns.find((cl) => cl.field === c.field);
+          const cellValue = row ? row[c.field] || 'Empty' : 'Unknown';
+          const citation = row?.citationMap?.[c.field];
+          const quote = citation?.snippetQuote || 'N/A';
+          const loc = `Page ${citation?.pageNumber || 'N/A'}, Section: ${citation?.sectionName || 'N/A'}`;
+          const reason = citation?.reasoning || 'N/A';
 
-    if (isValidFocusedCell && focusedCell) {
-      const row = gridStore.rows.find((r) => r.id === focusedCell.rowId);
-      const col = gridStore.columns.find((c) => c.field === focusedCell.field);
-      const cellValue = row ? row[focusedCell.field] || 'Empty' : 'Unknown';
-      const citation = row?.citationMap?.[focusedCell.field] || gridStore.activeCitation;
+          return `Target Cell ${i + 1}:
+  - Target Column: "${col?.headerName || c.field}" (Field Key: "${c.field}")
+  - Observation Row: "${row?.pdfTitle || activePdfTitle}" (Row ID: ${c.rowId})
+  - Current Extracted Value: "${cellValue}"
+  - Evidence Quote: "${quote}" (${loc})
+  - Existing AI Reasoning: "${reason}"`;
+        })
+        .join('\n\n');
 
-      logStore.addLog('info', `Injecting active cell context for column "${col?.headerName || focusedCell.field}"`, {
-        rowId: focusedCell.rowId,
-        field: focusedCell.field,
+      finalPromptText = `[ACTIVE MULTI-CELL COMPARISON CONTEXT - ${selectedCells.length} TARGET CELLS SELECTED]
+${cellsFormatted}
+
+[RELATIONSHIP & COMPARISON OBJECTIVE]:
+The user has explicitly selected these ${selectedCells.length} distinct cells to evaluate their interrelationship, correlation, discrepancy, cross-validation, or coupled dependencies. Analyze their relationship thoroughly based on the source papers and extracted data.
+
+[USER INSTRUCTION]:
+${userPrompt}
+
+(Note: If this requires updating, synchronizing, or verifying these cells, invoke the appropriate tools.)`;
+    } else if (selectedCells.length === 1 || (focusedCell && focusedCell.field !== '0' && focusedCell.field !== 'rowNum' && gridStore.columns.some((c) => c.field === focusedCell.field))) {
+      const activeC = selectedCells.length === 1 ? selectedCells[0] : focusedCell!;
+      const row = gridStore.rows.find((r) => r.id === activeC.rowId);
+      const col = gridStore.columns.find((c) => c.field === activeC.field);
+      const cellValue = row ? row[activeC.field] || 'Empty' : 'Unknown';
+      const citation = row?.citationMap?.[activeC.field] || gridStore.activeCitation;
+
+      logStore.addLog('info', `Injecting active cell context for column "${col?.headerName || activeC.field}"`, {
+        rowId: activeC.rowId,
+        field: activeC.field,
         cellValue,
         citation,
       });
 
       finalPromptText = `[ACTIVE CELL CONTEXT]
-- Selected Row: "${row?.pdfTitle || activePdfTitle}" (Row ID: ${focusedCell.rowId})
-- Target Column: "${col?.headerName || focusedCell.field}" (Field: ${focusedCell.field})
+- Selected Row: "${row?.pdfTitle || activePdfTitle}" (Row ID: ${activeC.rowId})
+- Target Column: "${col?.headerName || activeC.field}" (Field: ${activeC.field})
 - Current Extracted Value: "${cellValue}"
 - Grounded Evidence Quote: "${citation?.snippetQuote || 'N/A'}"
 - Source Location: Page ${citation?.pageNumber || 'N/A'}, Section: ${citation?.sectionName || 'N/A'}
