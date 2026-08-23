@@ -102,6 +102,7 @@ export const useGridStore = create<GridState>((set) => ({
           } else {
             row.aiStatus = 'Confirmed';
           }
+          persistToStorage(state.columns, state.rows);
         }
       })
     ),

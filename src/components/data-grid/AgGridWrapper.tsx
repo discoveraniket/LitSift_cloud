@@ -231,7 +231,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         return (params.node?.rowIndex ?? 0) + 1;
       },
       cellStyle: (params) => {
-        const isRowSelected = selectedRowIds.includes(params.data?.id);
+        const isRowSelected = !!params.data?.id && selectedRowIds.includes(params.data.id);
         return {
           fontWeight: 600,
           fontSize: '11px',
@@ -439,20 +439,16 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     }
   };
 
-  // Ensure AG Grid reactively updates and repaints all modified cells & new columns
+  // Cleanly refresh cells when columns or rows update without interrupting active cell editors
   useEffect(() => {
     if (gridApiRef.current?.api) {
-      gridApiRef.current.api.redrawRows();
-      gridApiRef.current.api.refreshCells({ force: true });
+      // Only refresh cells if the user is not actively editing a cell
+      const editingCells = gridApiRef.current.api.getEditingCells();
+      if (!editingCells || editingCells.length === 0) {
+        gridApiRef.current.api.refreshCells();
+      }
     }
-  }, [rows, columns]);
-
-  // Ensure active focused cell style immediately updates upon click
-  useEffect(() => {
-    if (gridApiRef.current?.api) {
-      gridApiRef.current.api.refreshCells({ force: true });
-    }
-  }, [focusedCell]);
+  }, [rows, columns, focusedCell]);
 
   return (
     <div className="ag-theme-quartz-dark" style={{ height: '100%', width: '100%' }}>
@@ -473,6 +469,9 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         }}
         rowDragManaged={true}
         suppressMoveWhenRowDragging={true}
+        stopEditingWhenCellsLoseFocus={true}
+        undoRedoCellEditing={true}
+        undoRedoCellEditingLimit={20}
         onCellValueChanged={handleCellValueChanged}
         onCellFocused={handleCellFocused}
         onCellClicked={handleCellClicked}
