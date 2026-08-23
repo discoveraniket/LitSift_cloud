@@ -189,7 +189,16 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
             const row = state.rows.find((r: any) => r.id === targetRow.id);
             if (row) {
               row[targetField] = newValue;
-              row.aiStatus = mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed';
+              if (mode === 'human_in_loop') {
+                if (!row.pendingReviewFields) row.pendingReviewFields = [];
+                if (!row.pendingReviewFields.includes(targetField)) {
+                  row.pendingReviewFields.push(targetField);
+                }
+              } else {
+                if (row.pendingReviewFields) {
+                  row.pendingReviewFields = row.pendingReviewFields.filter((f: string) => f !== targetField);
+                }
+              }
               if (!row.citationMap) row.citationMap = {};
               row.citationMap[targetField] = {
                 pageNumber: resolvedPage,
@@ -278,6 +287,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
             sectionName: u.sectionName,
             pageNumber: u.pageNumber,
             snippetQuote: u.snippetQuote,
+            isAiPending: _mode === 'human_in_loop',
           }))
         );
 

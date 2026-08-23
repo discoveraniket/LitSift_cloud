@@ -38,6 +38,7 @@ export interface GridRow {
   pdfId: string;
   pdfTitle: string;
   aiStatus: 'Confirmed' | 'Pending Review';
+  pendingReviewFields?: string[]; // Specific column fields awaiting human review
   evidenceMap?: Record<string, EvidenceLocation>;
   citationMap?: Record<string, CellCitation>; // Maps column field -> Rich Cell Citation
   [key: string]: any;
@@ -57,7 +58,7 @@ export interface GridState {
   hydrateFromDb: () => Promise<void>;
   resetActiveSelection: () => void;
   updateCell: (rowId: string, field: string, value: any) => void;
-  batchUpdateCells: (updates: Array<{ rowId: string; field: string; value: any; reasoning?: string; sectionName?: string; pageNumber?: number; snippetQuote?: string }>) => void;
+  batchUpdateCells: (updates: Array<{ rowId: string; field: string; value: any; reasoning?: string; sectionName?: string; pageNumber?: number; snippetQuote?: string; isAiPending?: boolean }>) => void;
   updateCellCitation: (rowId: string, field: string, citation: CellCitation) => void;
   updateRow: (rowId: string, fields: Record<string, any>, citations?: Record<string, any>) => void;
   addRow: (pdfId?: string, pdfTitle?: string) => void;

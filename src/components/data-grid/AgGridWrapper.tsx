@@ -169,7 +169,12 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
               fontStyle: 'normal',
             };
           }
-          if (params.data?.aiStatus === 'Pending Review') {
+          const isCellPending =
+            params.data?.pendingReviewFields?.includes(col.field) ||
+            (params.data?.aiStatus === 'Pending Review' &&
+              (!params.data?.pendingReviewFields || params.data.pendingReviewFields.length === 0));
+
+          if (isCellPending) {
             return {
               backgroundColor: 'rgba(249, 226, 175, 0.18)',
               color: '#f9e2af',
@@ -465,6 +470,11 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
           cellClassRules: {
             'litsift-cell-active': (params) =>
               !!focusedCell && params.data?.id === focusedCell.rowId && params.colDef.field === focusedCell.field,
+            'cell-pending-review': (params) => {
+              const field = params.colDef.field;
+              if (!field || !params.data) return false;
+              return Boolean(params.data.pendingReviewFields?.includes(field));
+            },
           },
         }}
         rowDragManaged={true}
@@ -481,7 +491,9 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         rowSelection="multiple"
         onSelectionChanged={onSelectionChanged}
         rowClassRules={{
-          'row-pending-review': (params) => params.data?.aiStatus === 'Pending Review',
+          'row-pending-review': (params) =>
+            params.data?.aiStatus === 'Pending Review' &&
+            (!params.data?.pendingReviewFields || params.data.pendingReviewFields.length === 0),
           'row-confirmed': (params) => params.data?.aiStatus === 'Confirmed',
           'row-draft': (params) => !!params.data?.isDraftRow,
         }}

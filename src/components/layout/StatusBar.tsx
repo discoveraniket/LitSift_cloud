@@ -47,7 +47,9 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     ? columns.find((c) => c.field === focusedCell.field)?.headerName || focusedCell.field
     : null;
 
-  const hasPendingEdits = rows.some((r) => r.aiStatus === 'Pending Review');
+  const hasPendingEdits = rows.some(
+    (r) => r.aiStatus === 'Pending Review' || (r.pendingReviewFields && r.pendingReviewFields.length > 0)
+  );
 
   const handleExtractData = () => {
     sendMessage(`Extract paper data from ${activePdfName}`);

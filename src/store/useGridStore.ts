@@ -83,6 +83,10 @@ export const useGridStore = create<GridState>((set) => ({
         const row = state.rows.find((r) => r.id === rowId);
         if (row) {
           row[field] = value;
+          // Clear pending review flag for this specific field if it was edited
+          if (row.pendingReviewFields) {
+            row.pendingReviewFields = row.pendingReviewFields.filter((f) => f !== field);
+          }
           if (row.isDraftRow) {
             row.isDraftRow = false;
             row.aiStatus = 'Confirmed';
@@ -100,7 +104,9 @@ export const useGridStore = create<GridState>((set) => ({
             };
             state.rows.push(newDraftRow);
           } else {
-            row.aiStatus = 'Confirmed';
+            if (!row.pendingReviewFields || row.pendingReviewFields.length === 0) {
+              row.aiStatus = 'Confirmed';
+            }
           }
           persistToStorage(state.columns, state.rows);
         }
@@ -115,7 +121,19 @@ export const useGridStore = create<GridState>((set) => ({
           const row = state.rows.find((r) => r.id === u.rowId);
           if (row) {
             row[u.field] = u.value;
-            row.aiStatus = 'Confirmed';
+            if (u.isAiPending) {
+              if (!row.pendingReviewFields) row.pendingReviewFields = [];
+              if (!row.pendingReviewFields.includes(u.field)) {
+                row.pendingReviewFields.push(u.field);
+              }
+            } else {
+              if (row.pendingReviewFields) {
+                row.pendingReviewFields = row.pendingReviewFields.filter((f) => f !== u.field);
+              }
+              if (!row.pendingReviewFields || row.pendingReviewFields.length === 0) {
+                row.aiStatus = 'Confirmed';
+              }
+            }
             if (u.reasoning || u.snippetQuote || u.sectionName || u.pageNumber) {
               if (!row.citationMap) row.citationMap = {};
               row.citationMap[u.field] = {
@@ -467,9 +485,15 @@ export const useGridStore = create<GridState>((set) => ({
         saveSnapshot(state);
         if (rowId) {
           const row = state.rows.find((r) => r.id === rowId);
-          if (row) row.aiStatus = 'Confirmed';
+          if (row) {
+            row.aiStatus = 'Confirmed';
+            row.pendingReviewFields = [];
+          }
         } else {
-          state.rows.forEach((r) => (r.aiStatus = 'Confirmed'));
+          state.rows.forEach((r) => {
+            r.aiStatus = 'Confirmed';
+            r.pendingReviewFields = [];
+          });
         }
       })
     ),
@@ -479,9 +503,19 @@ export const useGridStore = create<GridState>((set) => ({
       produce((state: GridState) => {
         saveSnapshot(state);
         if (rowId) {
-          state.rows = state.rows.filter((r) => r.id !== rowId);
+          const row = state.rows.find((r) => r.id === rowId);
+          if (row) {
+            if (row.aiStatus === 'Pending Review') {
+              state.rows = state.rows.filter((r) => r.id !== rowId);
+            } else {
+              row.pendingReviewFields = [];
+            }
+          }
         } else {
           state.rows = state.rows.filter((r) => r.aiStatus !== 'Pending Review');
+          state.rows.forEach((r) => {
+            r.pendingReviewFields = [];
+          });
         }
       })
     ),

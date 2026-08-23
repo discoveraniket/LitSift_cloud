@@ -528,6 +528,17 @@ body {
   background-color: rgba(249, 226, 175, 0.24) !important;
 }
 
+/* Specific Cell-Level AI Pending Verification */
+.ag-root-wrapper .ag-cell.cell-pending-review {
+  background-color: rgba(249, 226, 175, 0.20) !important;
+  color: #f9e2af !important;
+  box-shadow: inset 0 0 0 1px rgba(249, 226, 175, 0.5) !important;
+}
+
+.ag-root-wrapper .ag-cell.cell-pending-review:hover {
+  background-color: rgba(249, 226, 175, 0.30) !important;
+}
+
 .panel {
   height: 100%;
   background: var(--bg-secondary);

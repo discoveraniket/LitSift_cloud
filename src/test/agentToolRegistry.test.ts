@@ -101,7 +101,7 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(row?.sampleSize).toBe('500');
   });
 
-  it('executes updateCell tool and updates the grid store with reasoning and citation', async () => {
+  it('executes updateCell tool and updates the grid store with reasoning, citation, and cell-level pending verification', async () => {
     const result = await agentToolsRegistry.updateCell.execute(
       {
         rowId: 'row-1',
@@ -121,12 +121,12 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     const state = useGridStore.getState();
     const updatedRow = state.rows.find((r) => r.id === 'row-1');
     expect(updatedRow?.methodology).toBe('Updated Phage Therapy Test');
-    expect(updatedRow?.aiStatus).toBe('Pending Review');
+    expect(updatedRow?.pendingReviewFields).toContain('methodology');
     expect(updatedRow?.citationMap?.methodology?.reasoning).toBe('Verified in section 3');
     expect(updatedRow?.citationMap?.methodology?.pageNumber).toBe(3);
   });
 
-  it('executes batchUpdateCells across multiple cells', async () => {
+  it('executes batchUpdateCells across multiple cells with cell-level pending review', async () => {
     const result = await agentToolsRegistry.batchUpdateCells.execute(
       {
         updates: [
@@ -140,7 +140,9 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(result.success).toBe(true);
     const state = useGridStore.getState();
     expect(state.rows.find((r) => r.id === 'row-1')?.methodology).toBe('Method A');
+    expect(state.rows.find((r) => r.id === 'row-1')?.pendingReviewFields).toContain('methodology');
     expect(state.rows.find((r) => r.id === 'row-2')?.sampleSize).toBe('250');
+    expect(state.rows.find((r) => r.id === 'row-2')?.pendingReviewFields).toContain('sampleSize');
   });
 
   it('executes renameColumn and deleteColumn tools', async () => {
@@ -228,5 +230,32 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
+  });
+
+  it('clears cell-level pending verification on confirmAIEdits, rejectAIEdits, or manual edit', () => {
+    const store = useGridStore.getState();
+    // Simulate pending cell
+    useGridStore.setState((prev) => ({
+      ...prev,
+      rows: prev.rows.map((r) =>
+        r.id === 'row-1' ? { ...r, pendingReviewFields: ['methodology'] } : r
+      ),
+    }));
+
+    expect(useGridStore.getState().rows.find((r) => r.id === 'row-1')?.pendingReviewFields).toContain('methodology');
+
+    // Confirm AI edits clears pendingReviewFields
+    store.confirmAIEdits();
+    expect(useGridStore.getState().rows.find((r) => r.id === 'row-1')?.pendingReviewFields).toHaveLength(0);
+
+    // Add pending field and test manual cell update
+    useGridStore.setState((prev) => ({
+      ...prev,
+      rows: prev.rows.map((r) =>
+        r.id === 'row-1' ? { ...r, pendingReviewFields: ['methodology'] } : r
+      ),
+    }));
+    store.updateCell('row-1', 'methodology', 'Manual override text');
+    expect(useGridStore.getState().rows.find((r) => r.id === 'row-1')?.pendingReviewFields).toHaveLength(0);
   });
 });
