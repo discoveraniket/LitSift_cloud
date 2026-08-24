@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, X, Key, Cpu, Check, ShieldCheck, Plus, Zap } from 'lucide-react';
+import { Settings, X, Key, Cpu, Check, ShieldCheck, Plus, Zap, ExternalLink } from 'lucide-react';
 import { getGeminiApiKey, getSelectedGeminiModel, setSelectedGeminiModel } from '../../services/geminiService';
 import { useAgentStore } from '../../store/useAgentStore';
 
@@ -121,6 +121,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setSelectedGeminiModel(currentModel);
     if (apiKeyInput.trim()) {
       localStorage.setItem('LITSIFT_GEMINI_API_KEY', apiKeyInput.trim());
+    } else {
+      localStorage.removeItem('LITSIFT_GEMINI_API_KEY');
     }
     setSavedSuccess(true);
     setTimeout(() => {
@@ -400,9 +402,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 boxSizing: 'border-box',
               }}
             />
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <ShieldCheck size={12} color="var(--accent-success)" />
-              Key detected from environment variable `GEMINI_API_KEY` or local storage.
+            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <ShieldCheck size={12} color="var(--accent-success)" />
+                <span>Stored securely in local browser storage (BYOK).</span>
+              </div>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: 'var(--accent-primary, #89b4fa)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  textDecoration: 'none',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                }}
+              >
+                Get a free key <ExternalLink size={10} />
+              </a>
             </div>
           </div>
         </div>

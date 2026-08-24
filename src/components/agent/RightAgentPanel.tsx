@@ -12,17 +12,11 @@ import {
 } from 'lucide-react';
 import { useAgentStore } from '../../store/useAgentStore';
 import { useGridStore } from '../../store/useGridStore';
-import { marked } from 'marked';
+import { renderSafeMarkdown } from '../../utils/markdownUtils';
 import { getSelectedGeminiModel } from '../../services/geminiService';
 import { ThoughtAccordion } from './ThoughtAccordion';
 import { AgentToolStepper } from './AgentToolStepper';
 import { AgentChatInput } from './AgentChatInput';
-
-// Configure marked options for clean GitHub-style Markdown rendering
-marked.setOptions({
-  gfm: true,
-  breaks: true,
-});
 
 interface RightAgentPanelProps {
   activePdfTitle?: string;
@@ -462,7 +456,7 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
                 {!isUser ? (
                   <div
                     className="chat-markdown vscode-markdown"
-                    dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) as string }}
+                    dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(msg.text) }}
                   />
                 ) : (
                   <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
@@ -617,7 +611,7 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
               <div
                 className="chat-markdown vscode-markdown"
                 style={{ marginTop: '8px', padding: '0 4px' }}
-                dangerouslySetInnerHTML={{ __html: marked.parse(streamingText) as string }}
+                dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(streamingText) }}
               />
             )}
           </div>

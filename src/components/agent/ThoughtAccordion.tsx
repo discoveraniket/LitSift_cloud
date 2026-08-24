@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Copy, Check } from 'lucide-react';
-import { marked } from 'marked';
+import { renderSafeMarkdown } from '../../utils/markdownUtils';
 
 interface ThoughtAccordionProps {
   thought?: string;
@@ -127,7 +127,7 @@ export const ThoughtAccordion: React.FC<ThoughtAccordionProps> = ({
         >
           {thought ? (
             <div className="vscode-thought-markdown">
-              <div dangerouslySetInnerHTML={{ __html: marked.parse(thought) as string }} />
+              <div dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(thought) }} />
               {isActive && (
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                   <span className="pulsing-dot" />

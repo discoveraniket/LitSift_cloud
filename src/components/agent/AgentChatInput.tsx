@@ -5,7 +5,6 @@ import {
   X,
   FileText,
   Table,
-  Target,
   Cpu,
   ChevronDown,
   Layers,
