@@ -29,7 +29,7 @@ Bring your Google Gemini API key to start extracting research data directly in y
 
 Systematic literature reviews and meta-analyses are among the most valuable assets in scientific research — yet synthesizing hundreds of papers remains painfully manual.
 
-> **The 4-Month Reality:**  
+> **The Reality:**  
 > A junior researcher given 300 academic PDFs typically spends **months** manually reading each paper, copying data points into Excel line-by-line, and double-checking methodology. 
 >
 > Generic AI search engines act as **"black boxes"** — they hallucinate numbers, misquote sample sizes, and lack the rigorous auditability required for peer-reviewed research.
