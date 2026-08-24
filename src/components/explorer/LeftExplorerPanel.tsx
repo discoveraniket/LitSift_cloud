@@ -62,7 +62,7 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   // Collapsible section state for Debug view
   const [logsStreamOpen, setLogsStreamOpen] = useState(true);
 
-  const [activeItem, setActiveItem] = useState<string>('master-grid');
+  const [activeItem, setActiveItem] = useState<string>('workspace-hub');
   const [copiedLogs, setCopiedLogs] = useState(false);
 
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -538,6 +538,19 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
 
             {viewsOpen && (
               <div style={{ paddingBottom: '6px' }}>
+                {onOpenWorkspaceHub && (
+                  <div
+                    className={`vscode-tree-item ${activeItem === 'workspace-hub' ? 'active' : ''}`}
+                    onClick={() => {
+                      onOpenWorkspaceHub('import');
+                      setActiveItem('workspace-hub');
+                    }}
+                  >
+                    <FileArchive size={13} color="var(--accent-primary, #89b4fa)" />
+                    <span>Workspace Project Hub</span>
+                  </div>
+                )}
+
                 <div
                   className={`vscode-tree-item ${activeItem === 'master-grid' ? 'active' : ''}`}
                   onClick={() => {

@@ -28,18 +28,24 @@ export const WorkspaceLayout: React.FC = () => {
   // Dynamic VS Code Editor Tabs State
   const [tabs, setTabs] = useState<EditorTab[]>([
     {
+      id: 'workspace-hub',
+      type: 'workspace_hub',
+      title: 'Workspace Hub',
+      closable: true,
+    },
+    {
       id: 'master-grid',
       type: 'master_grid',
       title: 'Master Data Grid',
       closable: true,
     },
   ]);
-  const [activeTabId, setActiveTabId] = useState<string>('master-grid');
-  const [initialHubSection, setInitialHubSection] = useState<'export' | 'import'>('export');
+  const [activeTabId, setActiveTabId] = useState<string>('workspace-hub');
+  const [initialHubSection, setInitialHubSection] = useState<'export' | 'import'>('import');
   const [pendingWorkspaceFile, setPendingWorkspaceFile] = useState<File | null>(null);
 
   // Side Panel Toggle States
-  const [showLeftPanel, setShowLeftPanel] = useState(true);
+  const [showLeftPanel, setShowLeftPanel] = useState(false);
   const [showBottomPanel, setShowBottomPanel] = useState(true);
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [isGridMaximized, setIsGridMaximized] = useState(false);
