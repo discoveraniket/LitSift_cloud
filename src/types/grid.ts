@@ -61,7 +61,7 @@ export interface GridState {
   updateCell: (rowId: string, field: string, value: any) => void;
   batchUpdateCells: (updates: Array<{ rowId: string; field: string; value: any; reasoning?: string; sectionName?: string; pageNumber?: number; snippetQuote?: string; isAiPending?: boolean }>) => void;
   updateCellCitation: (rowId: string, field: string, citation: CellCitation) => void;
-  updateRow: (rowId: string, fields: Record<string, any>, citations?: Record<string, any>) => void;
+  updateRow: (rowId: string, fields: Record<string, any>, citations?: Record<string, any>, aiStatus?: 'Confirmed' | 'Pending Review') => void;
   addRow: (pdfId?: string, pdfTitle?: string) => void;
   appendRow: (row: Partial<GridRow>) => GridRow;
   deleteRow: (rowId: string) => void;

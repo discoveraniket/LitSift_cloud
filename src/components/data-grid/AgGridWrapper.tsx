@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { ColDef, CellValueChangedEvent, CellFocusedEvent, CellClickedEvent, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
+import { ColDef, CellValueChangedEvent, CellFocusedEvent, CellClickedEvent, CellDoubleClickedEvent, CellEditRequestEvent, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import { useGridStore } from '../../store/useGridStore';
 import { usePdfStore } from '../../store/usePdfStore';
 import { GridRow } from '../../types/grid';
@@ -115,6 +115,8 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   const [newColName, setNewColName] = useState('');
   const [showAddColInput, setShowAddColInput] = useState(false);
   const [focusedRowIndex, setFocusedRowIndex] = useState<number | null>(null);
+  const focusedRowIndexRef = useRef<number | null>(null);
+  focusedRowIndexRef.current = focusedRowIndex;
   const gridApiRef = useRef<any>(null);
 
   // Filter rows if in scoped view (show rows strictly matching active PDF)
@@ -158,7 +160,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         autoHeight: true,
         headerClass: isColSelected ? 'ag-header-cell-selected' : '',
         cellStyle: (params): any => {
-          const isFocusedRow = params.node.rowIndex === focusedRowIndex;
+          const isFocusedRow = params.node.rowIndex === focusedRowIndexRef.current;
           if (isColSelected) {
             return {
               backgroundColor: 'rgba(137, 180, 250, 0.18)',
@@ -329,7 +331,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     };
 
     return [rowNumCol, ...dynamicCols, addColCol];
-  }, [columns, addColumn, renameColumn, showAddColInput, newColName, focusedRowIndex, isPreviewMode, selectedColumnField]);
+  }, [columns, addColumn, renameColumn, showAddColInput, newColName, isPreviewMode, selectedColumnField]);
 
   const handleCellValueChanged = (event: CellValueChangedEvent<GridRow>) => {
     if (event.data && event.colDef.field) {
@@ -340,6 +342,15 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   const handleCellSelectOrFocus = useCallback(
     (rowIndex: number | null, column: any, directRowData?: GridRow, isMultiToggle = false) => {
       if ((rowIndex === null && !directRowData) || !column) return;
+
+      // Commit in-progress edit before switching focus/selection
+      if (gridApiRef.current?.api) {
+        const editingCells = gridApiRef.current.api.getEditingCells();
+        if (editingCells && editingCells.length > 0) {
+          gridApiRef.current.api.stopEditing(false);
+        }
+      }
+
       if (rowIndex !== null) setFocusedRowIndex(rowIndex);
       const colId = typeof column === 'string' ? column : column.getColId();
       const row = directRowData || (rowIndex !== null ? rowData[rowIndex] : null);
@@ -455,12 +466,48 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
       }
     }
   };
-  // Cleanly refresh cells when columns or rows update without interrupting active cell editors
+
+  const handleCellDoubleClicked = useCallback(
+    (event: CellDoubleClickedEvent<GridRow>) => {
+      const field = event.column?.getColId();
+      if (
+        gridApiRef.current?.api &&
+        event.rowIndex !== null &&
+        field &&
+        field !== 'rowNum' &&
+        field !== '0' &&
+        field !== '#' &&
+        field !== '+ Column' &&
+        field !== 'addCol'
+      ) {
+        gridApiRef.current.api.startEditingCell({
+          rowIndex: event.rowIndex,
+          colKey: field,
+        });
+      }
+    },
+    []
+  );
+
+  // Cleanly refresh cells when selection updates without interrupting active cell editors
   useEffect(() => {
     if (gridApiRef.current?.api) {
-      gridApiRef.current.api.refreshCells({ force: true });
+      const editingCells = gridApiRef.current.api.getEditingCells();
+      if (!editingCells || editingCells.length === 0) {
+        gridApiRef.current.api.refreshCells({ suppressFlash: true });
+      }
     }
   }, [focusedCell, selectedCells]);
+
+  const handleCellEditRequest = useCallback(
+    (event: CellEditRequestEvent<GridRow>) => {
+      const field = event.colDef.field;
+      if (event.data && field) {
+        updateCell(event.data.id, field, event.newValue);
+      }
+    },
+    [updateCell]
+  );
 
   return (
     <div className="ag-theme-quartz-dark" style={{ height: '100%', width: '100%' }}>
@@ -468,6 +515,8 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         rowData={rowData}
         getRowId={(params) => params.data.id}
         columnDefs={colDefs}
+        readOnlyEdit={true}
+        onCellEditRequest={handleCellEditRequest}
         defaultColDef={{
           width: 180,
           resizable: true,
@@ -488,11 +537,14 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         rowDragManaged={true}
         suppressMoveWhenRowDragging={true}
         stopEditingWhenCellsLoseFocus={true}
+        enterNavigatesVerticallyAfterEdit={true}
+        enterNavigatesVertically={true}
         undoRedoCellEditing={true}
         undoRedoCellEditingLimit={20}
         onCellValueChanged={handleCellValueChanged}
         onCellFocused={handleCellFocused}
         onCellClicked={handleCellClicked}
+        onCellDoubleClicked={handleCellDoubleClicked}
         onColumnHeaderClicked={onColumnHeaderClicked}
         getRowHeight={getRowHeight}
         animateRows={true}

@@ -166,7 +166,7 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
-  updateRow: (rowId, fields, citations) =>
+  updateRow: (rowId, fields, citations, aiStatus) =>
     set(
       produce((state: GridState) => {
         saveSnapshot(state);
@@ -182,7 +182,10 @@ export const useGridStore = create<GridState>((set) => ({
               row[k] = v;
             }
           });
-          row.aiStatus = 'Confirmed';
+          row.aiStatus = aiStatus || 'Confirmed';
+          if (row.aiStatus === 'Confirmed') {
+            row.pendingReviewFields = [];
+          }
           if (citations) {
             if (!row.citationMap) row.citationMap = {};
             Object.entries(citations).forEach(([k, cit]) => {

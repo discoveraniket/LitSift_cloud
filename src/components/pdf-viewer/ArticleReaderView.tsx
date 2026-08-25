@@ -256,7 +256,7 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
         id: `row-${Date.now()}-${rIdx}`,
         pdfId: paper.id,
         pdfTitle: paper.name,
-        aiStatus: 'Confirmed',
+        aiStatus: 'Pending Review',
       };
 
       table.headers.forEach((h, cIdx) => {

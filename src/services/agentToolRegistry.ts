@@ -346,7 +346,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
       },
       required: ['rows'],
     },
-    execute: async (args: any): Promise<ToolExecutionResult> => {
+    execute: async (args: any, mode: AgentExecutionMode): Promise<ToolExecutionResult> => {
       try {
         const gridStore = useGridStore.getState();
         const logStore = useLogStore.getState();
@@ -365,7 +365,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
             id: rowId,
             pdfId: activePdf?.id || `pdf-${Date.now()}`,
             pdfTitle: r.pdfTitle || args.pdfTitle || activePdf?.name || 'Active Paper',
-            aiStatus: 'Confirmed',
+            aiStatus: mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed',
             citationMap: r.citations || {},
           };
 
@@ -437,7 +437,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
       },
       required: ['fields', 'citations', 'reasoning'],
     },
-    execute: async (args: any): Promise<ToolExecutionResult> => {
+    execute: async (args: any, mode: AgentExecutionMode): Promise<ToolExecutionResult> => {
       try {
         const gridStore = useGridStore.getState();
         const logStore = useLogStore.getState();
@@ -447,7 +447,12 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         if (!args.fields || typeof args.fields !== 'object') throw new Error('Parameter "fields" must be an object.');
 
         logStore.addLog('info', `Updating row ${targetRowId} with ${Object.keys(args.fields).length} field(s)`);
-        gridStore.updateRow(targetRowId, args.fields, args.citations);
+        gridStore.updateRow(
+          targetRowId,
+          args.fields,
+          args.citations,
+          mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed'
+        );
         logStore.addLog('success', `Row ${targetRowId} updated`);
 
         return {

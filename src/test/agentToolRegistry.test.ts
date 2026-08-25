@@ -219,7 +219,11 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     );
     expect(appendBatchRes.success).toBe(true);
     expect(appendBatchRes.resultData.rowsCount).toBe(2);
-    expect(useGridStore.getState().rows).toHaveLength(5); // 2 initial + 1 single + 2 batch
+    const allRows = useGridStore.getState().rows;
+    expect(allRows).toHaveLength(5); // 2 initial + 1 single + 2 batch
+    expect(allRows[2].aiStatus).toBe('Pending Review');
+    expect(allRows[3].aiStatus).toBe('Pending Review');
+    expect(allRows[4].aiStatus).toBe('Pending Review');
   });
 
   it('handles errors gracefully in updateCell when invalid inputs are passed', async () => {
