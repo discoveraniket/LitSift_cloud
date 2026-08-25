@@ -267,13 +267,14 @@ ${userPrompt}
         logStore.addLog('info', `Injecting active row context for "${selectedRow.pdfTitle || activePdfTitle}" [${selectedRow.id}]`);
         const rowFields = gridStore.columns
           .map((c) => {
-            const val = selectedRow[c.field] || '-';
+            const rawVal = selectedRow[c.field];
+            const val = rawVal !== undefined && rawVal !== '' ? `"${rawVal}"` : '(Empty / Not extracted yet)';
             const cit = selectedRow.citationMap?.[c.field];
             const citInfo =
               cit?.snippetQuote && cit.snippetQuote !== 'Not reported in document'
                 ? ` (Evidence: "${cit.snippetQuote}" [${cit.sectionName || 'Section N/A'}, P.${cit.pageNumber || '1'}])`
                 : '';
-            return `  • ${c.headerName} (${c.field}): "${val}"${citInfo}`;
+            return `  • ${c.headerName} (${c.field}): ${val}${citInfo}`;
           })
           .join('\n');
 
@@ -293,7 +294,10 @@ ${userPrompt}
         logStore.addLog('info', `Injecting active column context for "${targetCol.headerName}" (${targetCol.field})`);
         const populatedRows = gridStore.rows.filter((r) => !r.isDraftRow);
         const colValues = populatedRows
-          .map((r, i) => `  • Row ${i + 1} ("${r.pdfTitle || activePdfTitle}"): "${r[targetCol.field] || '-'}"`)
+          .map(
+            (r, i) =>
+              `  • Row ${i + 1} ("${r.pdfTitle || activePdfTitle}"): ${r[targetCol.field] !== undefined && r[targetCol.field] !== '' ? `"${r[targetCol.field]}"` : '(Empty / Not extracted yet)'}`
+          )
           .join('\n');
 
         finalPromptText = `[ACTIVE COLUMN CONTEXT]
@@ -315,7 +319,10 @@ ${userPrompt}
         .map((r, i) => {
           const rowFields = gridStore.columns
             .slice(0, 6)
-            .map((c) => `${c.headerName}: "${r[c.field] || '-'}"`)
+            .map(
+              (c) =>
+                `${c.headerName}: ${r[c.field] !== undefined && r[c.field] !== '' ? `"${r[c.field]}"` : '(Empty / Not extracted)'}`
+            )
             .join(', ');
           return `  • Row ${i + 1} (ID: ${r.id}, Paper: "${r.pdfTitle || activePdfTitle}"): ${rowFields}`;
         })
@@ -427,6 +434,11 @@ CUMULATIVE MULTI-DOCUMENT DATASET INTEGRITY:
 DOCUMENT CONTEXT & STRIPPED ADMINISTRATIVE SECTIONS POLICY:
 - Non-scientific administrative boilerplate sections (specifically: References / Bibliography, Author Contributions, Funding Statements / Financial Disclosures, and Competing Interests / Conflict of Interest declarations) are intentionally stripped off before the paper text is sent to you.
 - If the user asks questions regarding citations from the References list, specific grant/funding bodies, author CRediT contribution roles, or COI statements that are absent from the provided text, explicitly and politely inform the user that these administrative boilerplate sections were intentionally stripped off prior to ingestion to save context tokens, and that they can check the original PDF or publisher portal for those specific details.
+
+EMPTY VS. NOT REPORTED PARAMETERS & PROACTIVE EXTRACTION:
+- An empty cell "" or (Empty / Not extracted yet) indicates that the parameter has not been extracted from the research paper yet (e.g. a newly added column or a partially populated dataset).
+- When answering questions, querying the grid, or evaluating observations with empty cells, if the source research paper is available in the workspace, proactively inspect the document to extract the missing parameter and populate the table using updateCell or updateRow.
+- Use "Not reported" ONLY when you have checked the source paper and verified that the authors genuinely did not measure, test, or report that specific parameter in the text, figures, or tables. Always provide an evidence citation explaining that the parameter is unmentioned in the document.
 
 You have access to a rich declarative tool suite:
 - Document extraction & verification: extractPDFData, verifyEvidenceCitation, queryGridData

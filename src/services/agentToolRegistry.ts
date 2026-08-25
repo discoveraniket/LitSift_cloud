@@ -313,7 +313,8 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
 
   appendRows: {
     name: 'appendRows',
-    description: 'Append multiple new observation rows to the table grid simultaneously in a single atomic operation.',
+    description:
+      'Append multiple new observation rows to the table grid simultaneously in a single atomic operation. For any parameters not measured or reported in the document, use "Not reported".',
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -325,7 +326,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
             properties: {
               fields: {
                 type: Type.OBJECT,
-                description: 'Key-value map of column fields/headers and their extracted values.',
+                description: 'Key-value map of column fields/headers and their extracted values. Use "Not reported" for missing/unmeasured parameters.',
               },
               citations: {
                 type: Type.OBJECT,
@@ -366,7 +367,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
             pdfId: activePdf?.id || `pdf-${Date.now()}`,
             pdfTitle: r.pdfTitle || args.pdfTitle || activePdf?.name || 'Active Paper',
             aiStatus: mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed',
-            citationMap: r.citations || {},
+            citationMap: {},
           };
 
           gridStore.columns.forEach((col) => {
@@ -380,9 +381,56 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
                   k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
                   col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
               )?.[1];
-            rowObj[col.field] = val !== undefined && val !== null ? String(val) : '-';
+            let cellStr = val !== undefined && val !== null ? String(val).trim() : 'Not reported';
+            if (cellStr === '-' || cellStr === '' || cellStr.toLowerCase() === 'none' || cellStr.toLowerCase() === 'n/a') {
+              cellStr = 'Not reported';
+            }
+            rowObj[col.field] = cellStr;
           });
 
+          const rawCitations = r.citations || {};
+          const normalizedCitationMap: Record<string, any> = {};
+
+          gridStore.columns.forEach((col) => {
+            const citation =
+              rawCitations[col.field] ??
+              rawCitations[col.headerName] ??
+              Object.entries(rawCitations).find(
+                ([k]) =>
+                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                  col.field.toLowerCase().replace(/[^a-z0-9]/g, '') ||
+                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                  col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
+              )?.[1];
+
+            const isUnreported = rowObj[col.field] === 'Not reported';
+
+            if (citation && typeof citation === 'object') {
+              const citObj = {
+                pageNumber: Number(citation.pageNumber) || 1,
+                sectionName: citation.sectionName || (isUnreported ? 'N/A' : 'Extracted Section'),
+                paragraphNumber: citation.paragraphNumber || undefined,
+                lineNumber: citation.lineNumber || undefined,
+                snippetQuote: citation.snippetQuote || (isUnreported ? 'Not reported in document' : rowObj[col.field]),
+                reasoning: citation.reasoning || (isUnreported ? `The parameter "${col.headerName}" was not reported in the document.` : `Extracted value "${rowObj[col.field]}" from document`),
+                confidence: citation.confidence || (isUnreported ? 0.99 : 0.95),
+              };
+              normalizedCitationMap[col.field] = citObj;
+              normalizedCitationMap[col.headerName] = citObj;
+            } else if (isUnreported) {
+              const fallbackCit = {
+                pageNumber: 1,
+                sectionName: 'N/A',
+                snippetQuote: 'Not reported in document',
+                reasoning: `The parameter "${col.headerName}" was not investigated or reported in this paper.`,
+                confidence: 0.99,
+              };
+              normalizedCitationMap[col.field] = fallbackCit;
+              normalizedCitationMap[col.headerName] = fallbackCit;
+            }
+          });
+
+          rowObj.citationMap = normalizedCitationMap;
           return rowObj;
         });
 
@@ -424,7 +472,8 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         },
         fields: {
           type: Type.OBJECT,
-          description: 'Key-value map of column fields or header names to their new updated values (e.g. {"latent_period_min": "~7 min", "burst_size": "105 PFU/cell"}).',
+          description:
+            'Key-value map of column fields or header names to their new updated values. For parameters verified to not be measured or reported in the document, use "Not reported".',
         },
         citations: {
           type: Type.OBJECT,
@@ -643,7 +692,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         },
         replacementRows: {
           type: Type.ARRAY,
-          description: 'List of atomic replacement rows. Each item is an object mapping column field names to their specific values for that experimental observation.',
+          description: 'List of atomic replacement rows. Each item is an object mapping column field names to their specific values for that experimental observation. For parameters verified to not be reported in the document, use "Not reported".',
           items: {
             type: Type.OBJECT,
             description: 'Atomic row object mapping column fields to values.',
@@ -710,7 +759,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         },
         consolidatedRow: {
           type: Type.OBJECT,
-          description: 'Optional synthesized values for the merged row columns.',
+          description: 'Optional synthesized values for the merged row columns. For parameters verified to not be reported in the document, use "Not reported".',
         },
         reasoning: {
           type: Type.STRING,
@@ -1354,7 +1403,7 @@ Return your response in JSON format:
 
         return {
           success: true,
-          replyText: `📊 **Table Query Results (${matchingRows.length} rows found):**\n\n${matchingRows.map((r, i) => `${i + 1}. **${r.pdfTitle}** | ${gridStore.columns.map((c) => `${c.headerName}: "${r[c.field] || '-'}"`).join(', ')}`).join('\n')}`,
+          replyText: `📊 **Table Query Results (${matchingRows.length} rows found):**\n\n${matchingRows.map((r, i) => `${i + 1}. **${r.pdfTitle}** | ${gridStore.columns.map((c) => `${c.headerName}: ${r[c.field] !== undefined && r[c.field] !== '' ? `"${r[c.field]}"` : '(Empty / Unextracted)'}`).join(', ')}`).join('\n')}`,
           summary: `queryGridData(${matchingRows.length} matching rows)`,
           resultData: { totalRows: gridStore.rows.length, matches: matchingRows },
         };

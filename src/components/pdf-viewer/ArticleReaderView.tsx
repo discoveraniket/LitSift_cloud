@@ -261,7 +261,11 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
 
       table.headers.forEach((h, cIdx) => {
         const fieldKey = h.toLowerCase().replace(/[^a-z0-9]/g, '_');
-        rowData[fieldKey] = row[cIdx] || '';
+        let cellVal = row[cIdx] !== undefined && row[cIdx] !== null ? String(row[cIdx]).trim() : 'Not reported';
+        if (cellVal === '-' || cellVal === '' || cellVal.toLowerCase() === 'none' || cellVal.toLowerCase() === 'n/a') {
+          cellVal = 'Not reported';
+        }
+        rowData[fieldKey] = cellVal;
       });
 
       return rowData as any;

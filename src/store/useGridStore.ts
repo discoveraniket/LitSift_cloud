@@ -210,12 +210,11 @@ export const useGridStore = create<GridState>((set) => ({
           id: newRowId,
           pdfId,
           pdfTitle,
-          methodology: 'New Extraction Entry',
-          sampleSize: 'N/A',
-          keyResults: 'Enter results...',
-          limitations: 'None specified',
           aiStatus: 'Pending Review',
         };
+        state.columns.forEach((col) => {
+          newRow[col.field] = '';
+        });
         state.rows.push(newRow);
       })
     ),
@@ -234,7 +233,7 @@ export const useGridStore = create<GridState>((set) => ({
         saveSnapshot(state);
         state.columns.forEach((col) => {
           if (createdRow[col.field] === undefined || createdRow[col.field] === null) {
-            createdRow[col.field] = 'Not reported';
+            createdRow[col.field] = '';
           }
         });
         state.rows.push(createdRow);
@@ -271,7 +270,7 @@ export const useGridStore = create<GridState>((set) => ({
         if (!state.columns.some((c) => c.field === field)) {
           state.columns.push({ field, headerName: cleanName, editable: true });
           state.rows.forEach((row) => {
-            const val = initialValues?.[row.id] ?? initialValues?.[row.pdfId] ?? initialValues?.[field] ?? 'Not reported';
+            const val = initialValues?.[row.id] ?? initialValues?.[row.pdfId] ?? initialValues?.[field] ?? '';
             row[field] = val;
             if (citations && citations[row.id]) {
               if (!row.citationMap) row.citationMap = {};
@@ -333,18 +332,30 @@ export const useGridStore = create<GridState>((set) => ({
               consolidatedRow[col.field] ??
               consolidatedRow[col.headerName] ??
               targetRows[0][col.field] ??
-              '-';
-            mergedRow[col.field] = val;
+              '';
+            mergedRow[col.field] = val !== undefined && val !== null ? String(val).trim() : '';
           });
         } else {
           // Fallback: merge column values with deduplication
           state.columns.forEach((col) => {
             const rawVals = targetRows
               .map((r) => r[col.field])
-              .filter((v) => v && v !== '-' && v !== '');
+              .filter((v) => v !== undefined && v !== null && v !== '' && v !== '-');
+
+            // If all target rows were explicitly 'Not reported', maintain 'Not reported'
+            const allUnreported =
+              rawVals.length > 0 &&
+              rawVals.every((v) => String(v).trim().toLowerCase() === 'not reported');
+            if (allUnreported) {
+              mergedRow[col.field] = 'Not reported';
+              return;
+            }
+
+            // Filter out 'Not reported' and empty entries so actual findings take precedence
+            const actualVals = rawVals.filter((v) => String(v).trim().toLowerCase() !== 'not reported');
 
             const expandedItems: string[] = [];
-            rawVals.forEach((val) => {
+            actualVals.forEach((val) => {
               if (typeof val === 'string') {
                 const parts = val
                   .split(/\n|•/)
@@ -359,7 +370,7 @@ export const useGridStore = create<GridState>((set) => ({
             const uniqueItems = Array.from(new Set(expandedItems));
 
             if (uniqueItems.length === 0) {
-              mergedRow[col.field] = '-';
+              mergedRow[col.field] = '';
             } else if (uniqueItems.length === 1) {
               mergedRow[col.field] = uniqueItems[0];
             } else {
@@ -472,6 +483,8 @@ export const useGridStore = create<GridState>((set) => ({
 
             if (val !== undefined && val !== null) {
               newRow[col.field] = String(val);
+            } else if (newRow[col.field] === undefined) {
+              newRow[col.field] = '';
             }
           });
 
@@ -722,11 +735,8 @@ export const useGridStore = create<GridState>((set) => ({
           };
 
           newCols.forEach((col) => {
-            if (r[col.headerName] !== undefined) {
-              rowObj[col.field] = r[col.headerName];
-            } else if (r[col.field] !== undefined) {
-              rowObj[col.field] = r[col.field];
-            }
+            const rawVal = r[col.headerName] ?? r[col.field];
+            rowObj[col.field] = rawVal !== undefined && rawVal !== null ? String(rawVal) : '';
           });
 
           return rowObj;
@@ -772,11 +782,8 @@ export const useGridStore = create<GridState>((set) => ({
           }
 
           state.columns.forEach((col) => {
-            if (r[col.headerName] !== undefined) {
-              rowObj[col.field] = r[col.headerName];
-            } else if (r[col.field] !== undefined) {
-              rowObj[col.field] = r[col.field];
-            }
+            const rawVal = r[col.headerName] ?? r[col.field];
+            rowObj[col.field] = rawVal !== undefined && rawVal !== null ? String(rawVal) : '';
           });
 
           return rowObj;
