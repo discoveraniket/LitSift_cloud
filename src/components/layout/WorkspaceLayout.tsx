@@ -44,19 +44,31 @@ export const WorkspaceLayout: React.FC = () => {
   const [initialHubSection, setInitialHubSection] = useState<'export' | 'import'>('import');
   const [pendingWorkspaceFile, setPendingWorkspaceFile] = useState<File | null>(null);
 
-  // Side Panel Toggle States
+  // Side Panel Toggle States (Right Agent minimized by default on landing)
   const [showLeftPanel, setShowLeftPanel] = useState(false);
   const [showBottomPanel, setShowBottomPanel] = useState(true);
-  const [showRightPanel, setShowRightPanel] = useState(true);
+  const [showRightPanel, setShowRightPanel] = useState(false);
   const [isGridMaximized, setIsGridMaximized] = useState(false);
 
-  // Pixel Width/Height State for dragging
-  const [leftWidth, setLeftWidth] = useState(260);
-  const [rightWidth, setRightWidth] = useState(420);
-  const [bottomHeight, setBottomHeight] = useState(280);
+  // Pixel Width/Height State for dragging (responsive defaults)
+  const [leftWidth, setLeftWidth] = useState(() => (window.innerWidth < 768 ? window.innerWidth : 260));
+  const [rightWidth, setRightWidth] = useState(() => (window.innerWidth < 768 ? window.innerWidth : 420));
+  const [bottomHeight, setBottomHeight] = useState(() => (window.innerHeight < 700 ? 220 : 280));
 
   const [isDragging, setIsDragging] = useState<string | null>(null);
   const initialPdfSyncedRef = useRef(false);
+
+  // Handle window resize for mobile adaptability
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setLeftWidth(window.innerWidth);
+        setRightWidth(window.innerWidth);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Sync initial PDF tab once hydrated on initial load only
   useEffect(() => {
@@ -436,8 +448,8 @@ export const WorkspaceLayout: React.FC = () => {
             </div>
           )}
 
-          {/* 100% Full-Width Bottom Data Grid Panel */}
-          {showBottomPanel && currentActiveTab?.type !== 'master_grid' && (
+          {/* 100% Full-Width Bottom Data Grid Panel (Hidden on Workspace Hub for clean distraction-free onboarding) */}
+          {showBottomPanel && currentActiveTab?.type !== 'master_grid' && currentActiveTab?.type !== 'workspace_hub' && (
             <>
               {!isGridMaximized && (
                 <div

@@ -617,6 +617,99 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
           </div>
         )}
 
+        {/* Starter Suggestion Chips for Collaborative Prompting */}
+        {messages.length <= 1 && !isThinking && (
+          <div
+            style={{
+              marginTop: 'auto',
+              padding: '8px 4px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Sparkles size={11} color="var(--accent-primary)" /> Suggested Collaborative Prompts:
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <button
+                onClick={() => {
+                  setInputPrompt('Extract all defined schema columns from the active paper and provide evidence citations.');
+                }}
+                style={{
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '6px',
+                  padding: '6px 10px',
+                  textAlign: 'left',
+                  fontSize: '11px',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent-primary)')}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
+              >
+                <span>🧪</span>
+                <span>Extract defined schema columns with citations</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setInputPrompt('Locate the methodology, sample cohort size, and patient criteria in this paper.');
+                }}
+                style={{
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '6px',
+                  padding: '6px 10px',
+                  textAlign: 'left',
+                  fontSize: '11px',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent-primary)')}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
+              >
+                <span>🔍</span>
+                <span>Locate study design & cohort size</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setInputPrompt('What are the main clinical findings, primary outcomes, and limitations?');
+                }}
+                style={{
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '6px',
+                  padding: '6px 10px',
+                  textAlign: 'left',
+                  fontSize: '11px',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent-primary)')}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
+              >
+                <span>📊</span>
+                <span>Synthesize key findings & limitations</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         <div ref={chatBottomRef} />
       </div>
 

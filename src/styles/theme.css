@@ -1590,4 +1590,101 @@ mark.reader-search-mark.reader-search-match-current {
   background: var(--bg-active);
 }
 
+/* =========================================================================
+   Mobile & Tablet Responsive Optimizations (< 768px and < 480px)
+   ========================================================================= */
 
+@media (max-width: 768px) {
+  /* Slim down Activity Bar */
+  .activity-bar {
+    width: 38px;
+  }
+
+  .activity-item {
+    width: 38px;
+    height: 42px;
+  }
+
+  /* Full-width overlay drawers for Left & Right Panels on Mobile */
+  .layout-col-left,
+  .layout-col-right {
+    position: fixed !important;
+    top: 32px;
+    bottom: 24px;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    z-index: 120;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.7);
+  }
+
+  .layout-col-left {
+    left: 38px;
+    right: 0;
+    width: calc(100vw - 38px) !important;
+  }
+
+  .layout-col-right {
+    left: 0;
+    right: 0;
+    width: 100vw !important;
+  }
+
+  /* Hide drag handles on mobile */
+  .custom-drag-handle {
+    display: none !important;
+  }
+
+  /* Make Header Bar tab strip touch scrollable */
+  .header-bar {
+    padding-right: 4px;
+  }
+
+  /* Workspace Hub View on Mobile */
+  .workspace-hub-view {
+    padding: 16px 12px !important;
+  }
+
+  /* Stack Onboarding Gateway Cards */
+  .workspace-hub-view [style*="gridTemplateColumns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Status Bar: Compact for mobile */
+  .status-bar {
+    padding: 0 6px;
+    font-size: 10px;
+  }
+
+  .status-bar-left .status-item:not(.mode-item):not(:first-child) {
+    display: none;
+  }
+
+  /* Central Floating Reader Toolbar on Mobile */
+  .floating-pill-toolbar {
+    left: 8px !important;
+    right: 8px !important;
+    transform: none !important;
+    width: auto !important;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .activity-bar {
+    width: 34px;
+  }
+
+  .activity-item {
+    width: 34px;
+    height: 38px;
+  }
+
+  .header-bar {
+    height: 30px;
+  }
+
+  .header-bar [style*="minWidth: '110px'"] {
+    min-width: 80px !important;
+    font-size: 10px !important;
+  }
+}

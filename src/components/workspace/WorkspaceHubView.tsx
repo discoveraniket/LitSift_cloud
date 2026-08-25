@@ -11,6 +11,11 @@ import {
   Layers,
   FileArchive,
   Database,
+  Sparkles,
+  Search,
+  ArrowRight,
+  ShieldCheck,
+  FolderOpen,
 } from 'lucide-react';
 import { usePdfStore } from '../../store/usePdfStore';
 import { useGridStore } from '../../store/useGridStore';
@@ -21,18 +26,23 @@ import {
   restoreWorkspaceBundle,
   WorkspaceBundleSummary,
 } from '../../services/workspaceService';
+import { GuidedDemoView } from './GuidedDemoView';
 
 interface WorkspaceHubViewProps {
   initialSection?: 'export' | 'import';
   pendingFile?: File | null;
   onNavigateToGrid?: () => void;
   onNavigateToPdf?: (pdfId: string) => void;
+  onOpenPaperDiscovery?: () => void;
 }
 
 export const WorkspaceHubView: React.FC<WorkspaceHubViewProps> = ({
   pendingFile = null,
   onNavigateToGrid,
+  onNavigateToPdf,
+  onOpenPaperDiscovery,
 }) => {
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [workspaceName, setWorkspaceName] = useState(() => {
     const today = new Date().toISOString().slice(0, 10);
     return `LitSift_Research_${today}`;
@@ -154,6 +164,37 @@ export const WorkspaceHubView: React.FC<WorkspaceHubViewProps> = ({
     }
   };
 
+  if (isDemoMode) {
+    return (
+      <div style={{ height: '100%', width: '100%', position: 'relative' }}>
+        <button
+          onClick={() => setIsDemoMode(false)}
+          style={{
+            position: 'absolute',
+            top: '16px',
+            left: '20px',
+            zIndex: 10,
+            background: 'var(--bg-secondary, #181825)',
+            border: '1px solid var(--border-subtle, #313244)',
+            color: 'var(--text-secondary, #a6adc8)',
+            padding: '4px 10px',
+            borderRadius: '6px',
+            fontSize: '11px',
+            cursor: 'pointer',
+          }}
+        >
+          ← Back to Hub
+        </button>
+        <GuidedDemoView
+          onPaperLoaded={(paperId) => {
+            setIsDemoMode(false);
+            onNavigateToPdf?.(paperId);
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       className="workspace-hub-view"
@@ -248,6 +289,163 @@ export const WorkspaceHubView: React.FC<WorkspaceHubViewProps> = ({
             <span style={{ color: 'var(--accent-primary)' }}>{pdfs.length} Papers Open</span>
           </div>
         </div>
+
+        {/* ================= HERO ONBOARDING PORTALS (When fresh session) ================= */}
+        {pdfs.length === 0 && validRows.length === 0 && (
+          <div
+            style={{
+              background: 'linear-gradient(135deg, rgba(137, 180, 250, 0.08), rgba(203, 166, 247, 0.05))',
+              border: '1px solid rgba(137, 180, 250, 0.25)',
+              borderRadius: '12px',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+            }}
+          >
+            <div>
+              <h2 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 4px 0', color: 'var(--text-primary)' }}>
+                ✨ Welcome to LitSift Cloud
+              </h2>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                A Human-in-the-Loop literature synthesis workbench. How would you like to get started?
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+                gap: '14px',
+              }}
+            >
+              {/* Card 1: Guided Demo */}
+              <div
+                onClick={() => setIsDemoMode(true)}
+                style={{
+                  background: 'var(--bg-secondary, #181825)',
+                  border: '1px solid var(--accent-primary, #89b4fa)',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  boxShadow: '0 4px 16px rgba(137, 180, 250, 0.1)',
+                  transition: 'transform 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-primary)', fontWeight: 700, fontSize: '13px' }}>
+                    <Sparkles size={16} />
+                    Try Guided Demo
+                  </div>
+                  <span style={{ fontSize: '9.5px', background: 'rgba(137, 180, 250, 0.2)', color: 'var(--accent-primary)', padding: '2px 6px', borderRadius: '8px', fontWeight: 600 }}>
+                    Recommended
+                  </span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                  Test drive the 3-step collaborative synthesis with a landmark open-access PMC study & pre-built schema.
+                </div>
+                <button
+                  style={{
+                    marginTop: 'auto',
+                    background: 'var(--accent-primary, #89b4fa)',
+                    color: '#11111b',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  Start Demo <ArrowRight size={12} />
+                </button>
+              </div>
+
+              {/* Card 2: New Paper Discovery */}
+              <div
+                onClick={() => onOpenPaperDiscovery?.()}
+                style={{
+                  background: 'var(--bg-secondary, #181825)',
+                  border: '1px solid var(--border-subtle, #313244)',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-success, #a6e3a1)', fontWeight: 700, fontSize: '13px' }}>
+                  <Search size={16} />
+                  Start New Synthesis
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                  Search literature across PubMed, arXiv & Europe PMC, or load custom DOIs into your workspace.
+                </div>
+                <button
+                  style={{
+                    marginTop: 'auto',
+                    background: 'var(--bg-primary, #1e1e2e)',
+                    border: '1px solid var(--border-subtle, #313244)',
+                    color: 'var(--text-primary, #cdd6f4)',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '11.5px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Discover Papers
+                </button>
+              </div>
+
+              {/* Card 3: Open Bundle */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  background: 'var(--bg-secondary, #181825)',
+                  border: '1px solid var(--border-subtle, #313244)',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-warning, #f9e2af)', fontWeight: 700, fontSize: '13px' }}>
+                  <FolderOpen size={16} />
+                  Open Project Bundle
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                  Restore an existing <code>.litsift</code> project file or JSON workspace state from your computer.
+                </div>
+                <button
+                  style={{
+                    marginTop: 'auto',
+                    background: 'var(--bg-primary, #1e1e2e)',
+                    border: '1px solid var(--border-subtle, #313244)',
+                    color: 'var(--text-primary, #cdd6f4)',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '11.5px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Browse File
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Main Vertical Stack Dashboard */}
         <div

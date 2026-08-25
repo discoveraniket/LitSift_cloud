@@ -356,6 +356,7 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
           pendingFile={pendingWorkspaceFile}
           onNavigateToGrid={onNavigateToGrid}
           onNavigateToPdf={onNavigateToPdf}
+          onOpenPaperDiscovery={onOpenPaperDiscovery}
         />
       </main>
     );

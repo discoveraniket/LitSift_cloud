@@ -562,3 +562,8 @@ export async function resolvePaperByDoi(
 
   return paperDocument;
 }
+
+/**
+ * Convenient alias for resolvePaperByDoi.
+ */
+export const resolveDoi = resolvePaperByDoi;
