@@ -347,10 +347,13 @@ ${userPrompt}`;
     const rootUserParts: any[] = [];
 
     if (validation.pdfBase64) {
+      const cleanBase64 = validation.pdfBase64.includes(',')
+        ? validation.pdfBase64.split(',')[1]
+        : validation.pdfBase64;
       rootUserParts.push({
         inlineData: {
           mimeType: 'application/pdf',
-          data: validation.pdfBase64,
+          data: cleanBase64.trim(),
         },
       });
     } else if (validation.activePdf) {

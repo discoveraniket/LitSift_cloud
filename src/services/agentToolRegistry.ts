@@ -912,12 +912,13 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         let hasPdfBinary = false;
         if (pdfInfo.base64 || pdfInfo.file || pdfInfo.url) {
           try {
-            const base64Data = await getPdfBase64(pdfInfo);
+            const rawBase64 = await getPdfBase64(pdfInfo);
+            const base64Data = rawBase64 && rawBase64.includes(',') ? rawBase64.split(',')[1] : rawBase64;
             if (base64Data) {
               contentsParts.push({
                 inlineData: {
                   mimeType: 'application/pdf',
-                  data: base64Data,
+                  data: base64Data.trim(),
                 },
               });
               hasPdfBinary = true;
@@ -1272,12 +1273,13 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
           let hasPdfBinary = false;
           if (targetPdf.base64 || targetPdf.file || targetPdf.url) {
             try {
-              const base64Data = await getPdfBase64(targetPdf);
+              const rawBase64 = await getPdfBase64(targetPdf);
+              const base64Data = rawBase64 && rawBase64.includes(',') ? rawBase64.split(',')[1] : rawBase64;
               if (base64Data) {
                 contentsParts.push({
                   inlineData: {
                     mimeType: 'application/pdf',
-                    data: base64Data,
+                    data: base64Data.trim(),
                   },
                 });
                 hasPdfBinary = true;

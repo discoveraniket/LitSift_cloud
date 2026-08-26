@@ -2,7 +2,8 @@ import { PdfDocumentInfo, usePdfStore } from '../store/usePdfStore';
 
 export async function getPdfBase64(pdfInfo: PdfDocumentInfo): Promise<string> {
   if (pdfInfo.base64) {
-    return pdfInfo.base64;
+    const raw = pdfInfo.base64.includes(',') ? pdfInfo.base64.split(',')[1] : pdfInfo.base64;
+    return raw.trim();
   }
 
   try {
@@ -25,7 +26,7 @@ export async function getPdfBase64(pdfInfo: PdfDocumentInfo): Promise<string> {
       reader.onloadend = () => {
         const result = reader.result as string;
         const base64String = result.includes(',') ? result.split(',')[1] : result;
-        resolve(base64String);
+        resolve(base64String.trim());
       };
       reader.onerror = reject;
       reader.readAsDataURL(blob);

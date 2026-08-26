@@ -423,9 +423,10 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
 
     const reader = new FileReader();
     reader.onload = async (event) => {
-      const base64 = event.target?.result as string;
-      if (base64) {
-        await updatePaperDocument(paper.id, { base64 });
+      const result = event.target?.result as string;
+      if (result) {
+        const cleanBase64 = result.includes(',') ? result.split(',')[1] : result;
+        await updatePaperDocument(paper.id, { base64: cleanBase64.trim() });
       }
     };
     reader.readAsDataURL(file);
