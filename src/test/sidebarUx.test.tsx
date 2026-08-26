@@ -206,18 +206,32 @@ describe('VS Code-style Left Panel & Activity Bar UX', () => {
     expect(screen.getByText('OPEN')).toBeInTheDocument();
   });
 
-  it('renders AboutModal correctly with shortcuts and information', () => {
+  it('renders AboutModal correctly with shortcuts, tabs, and authentic project information', () => {
     const handleClose = vi.fn();
     const { rerender } = render(<AboutModal isOpen={false} onClose={handleClose} />);
     expect(screen.queryByText('LitSift Cloud')).not.toBeInTheDocument();
 
     rerender(<AboutModal isOpen={true} onClose={handleClose} />);
     expect(screen.getByText('LitSift Cloud')).toBeInTheDocument();
-    expect(screen.getByText(/Agentic Literature Synthesis Workspace • v1.0.0/i)).toBeInTheDocument();
-    expect(screen.getByText(/Gemini 2.5 Agent/i)).toBeInTheDocument();
-    expect(screen.getByText(/AG Grid Master/i)).toBeInTheDocument();
+    expect(screen.getByText(/v1\.0\.0/i)).toBeInTheDocument();
+
+    // Landing Tab (Tab 1: Authors & Credits)
+    expect(screen.getByText('Aniket Sarkar')).toBeInTheDocument();
+    expect(screen.getByText('Dr. Adhip Mukhopadhyay')).toBeInTheDocument();
+    expect(screen.getByText(/Systemic Research Ecosystem/i)).toBeInTheDocument();
+
+    // Tab 2: Overview & Philosophy
+    const overviewTab = screen.getByRole('button', { name: /Overview & Philosophy/i });
+    fireEvent.click(overviewTab);
+    expect(screen.getByText(/100% Local-First & Private/i)).toBeInTheDocument();
     expect(screen.getByText('Ctrl + B')).toBeInTheDocument();
     expect(screen.getByText('Ctrl + F')).toBeInTheDocument();
+
+    // Tab 3: Tech Stack & Sources
+    const techTab = screen.getByRole('button', { name: /Tech Stack & Sources/i });
+    fireEvent.click(techTab);
+    expect(screen.getByText('React')).toBeInTheDocument();
+    expect(screen.getByText('PubMed Central (PMC)')).toBeInTheDocument();
 
     const closeBtn = screen.getByRole('button', { name: 'Close' });
     fireEvent.click(closeBtn);
