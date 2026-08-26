@@ -227,6 +227,21 @@ export const useGridStore = create<GridState>((set) => ({
           row.aiStatus = aiStatus || 'Confirmed';
           if (row.aiStatus === 'Confirmed') {
             row.pendingReviewFields = [];
+          } else {
+            const updatedFields: string[] = [];
+            Object.keys(fields).forEach((k) => {
+              const matchingCol = state.columns.find(
+                (c) =>
+                  c.field === k ||
+                  c.headerName.toLowerCase() === k.toLowerCase() ||
+                  c.field.toLowerCase() === k.toLowerCase()
+              );
+              const targetKey = matchingCol ? matchingCol.field : k;
+              if (!updatedFields.includes(targetKey)) {
+                updatedFields.push(targetKey);
+              }
+            });
+            row.pendingReviewFields = updatedFields.length > 0 ? updatedFields : state.columns.map((c) => c.field);
           }
           if (citations) {
             if (!row.citationMap) row.citationMap = {};

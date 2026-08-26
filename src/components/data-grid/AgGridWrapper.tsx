@@ -849,7 +849,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     []
   );
 
-  // Cleanly refresh cells when selection updates without interrupting active cell editors
+  // Cleanly refresh cells when selection or row data updates without interrupting active cell editors
   useEffect(() => {
     if (gridApiRef.current?.api) {
       const editingCells = gridApiRef.current.api.getEditingCells();
@@ -857,7 +857,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         gridApiRef.current.api.refreshCells({ suppressFlash: true });
       }
     }
-  }, [focusedCell, selectedCells]);
+  }, [focusedCell, selectedCells, rowData]);
 
   const handleCellEditRequest = useCallback(
     (event: CellEditRequestEvent<GridRow>) => {

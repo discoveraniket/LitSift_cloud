@@ -392,6 +392,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
             pdfId: activePdf?.id || `pdf-${Date.now()}`,
             pdfTitle: r.pdfTitle || args.pdfTitle || activePdf?.name || 'Active Paper',
             aiStatus: mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed',
+            pendingReviewFields: mode === 'human_in_loop' ? gridStore.columns.map((c) => c.field) : [],
             citationMap: {},
           };
 
@@ -1104,6 +1105,7 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
             pdfId: pdfInfo?.id || activePdfId || `pdf-${Date.now()}`,
             pdfTitle: pdfInfo?.name || targetPdfTitle,
             aiStatus: mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed',
+            pendingReviewFields: mode === 'human_in_loop' ? gridStore.columns.map((c) => c.field) : [],
             citationMap: {},
           };
 
@@ -1467,6 +1469,39 @@ export function getToolsForMode(_mode: AgentExecutionMode = 'human_in_loop') {
     if (tool.name === 'batchUpdateCells' && activeFields.length > 0 && parameters.properties?.updates?.items?.properties?.field) {
       parameters.properties.updates.items.properties.field.enum = activeFields;
       parameters.properties.updates.items.properties.field.description = `Target column field key. Must be one of: ${activeFields.join(', ')}. Columns: ${activeCols.map((c) => `${c.field} ("${c.headerName}")`).join(', ')}`;
+    }
+
+    // Dynamically inject strict schema properties for updateRow
+    if (tool.name === 'updateRow' && activeCols.length > 0 && parameters.properties?.fields) {
+      const fieldProperties: Record<string, any> = {};
+      activeCols.forEach((col) => {
+        fieldProperties[col.field] = {
+          type: Type.STRING,
+          description: `Extracted value for "${col.headerName}". If not reported or unmeasured, use "Not reported".`,
+        };
+      });
+      parameters.properties.fields = {
+        type: Type.OBJECT,
+        description: `Key-value map of schema columns to extracted values. Columns: ${activeCols.map((c) => `${c.field} ("${c.headerName}")`).join(', ')}`,
+        properties: fieldProperties,
+      };
+    }
+
+    // Dynamically inject strict schema properties and required fields for appendRows
+    if (tool.name === 'appendRows' && activeCols.length > 0 && parameters.properties?.rows?.items?.properties?.fields) {
+      const fieldProperties: Record<string, any> = {};
+      activeCols.forEach((col) => {
+        fieldProperties[col.field] = {
+          type: Type.STRING,
+          description: `Extracted value for "${col.headerName}". If not reported or unmeasured, use "Not reported".`,
+        };
+      });
+      parameters.properties.rows.items.properties.fields = {
+        type: Type.OBJECT,
+        description: `Key-value map containing an entry for EVERY schema column. Columns: ${activeCols.map((c) => `${c.field} ("${c.headerName}")`).join(', ')}`,
+        properties: fieldProperties,
+        required: activeFields,
+      };
     }
 
     return {

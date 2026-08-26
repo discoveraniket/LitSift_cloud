@@ -599,7 +599,6 @@ body {
   background-color: rgba(249, 226, 175, 0.18) !important;
   color: #f9e2af !important;
   box-shadow: inset 0 0 0 1px rgba(249, 226, 175, 0.4) !important;
-  position: relative;
 }
 
 .ag-root-wrapper .ag-cell.cell-pending-review::after {
