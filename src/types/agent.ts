@@ -56,6 +56,7 @@ export interface AgentState {
   hydrateFromDb: () => Promise<void>;
   setActivePdfId: (pdfId: string, pdfTitle?: string) => Promise<void>;
   sendMessage: (text: string, activePdfTitle?: string) => void;
+  addAgentResponse: (text: string, options?: string[]) => Promise<void>;
   cancelInteraction: () => void;
   selectOption: (optionText: string) => void;
   clearMessages: () => void;

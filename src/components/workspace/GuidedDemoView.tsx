@@ -5,10 +5,7 @@ import {
   Search,
   CheckCircle2,
   AlertCircle,
-  FileText,
-  ArrowRight,
   Loader2,
-  BookOpen,
 } from 'lucide-react';
 import { resolvePaperByDoi } from '../../services/doiService';
 import { usePdfStore } from '../../store/usePdfStore';

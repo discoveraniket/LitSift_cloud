@@ -14,7 +14,6 @@ import {
   Sparkles,
   Search,
   ArrowRight,
-  ShieldCheck,
   FolderOpen,
 } from 'lucide-react';
 import { usePdfStore } from '../../store/usePdfStore';

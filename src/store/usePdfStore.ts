@@ -13,6 +13,7 @@ interface PdfState {
   hydrateFromDb: () => Promise<void>;
   addPdfFile: (file: File) => Promise<PaperDocumentInfo>;
   addPaperDocument: (paper: PaperDocumentInfo) => Promise<PaperDocumentInfo>;
+  addPdf: (paper: PaperDocumentInfo) => Promise<PaperDocumentInfo>;
   updatePaperDocument: (id: string, updates: Partial<PaperDocumentInfo>) => Promise<void>;
   addPdfUrl: (id: string, name: string, url: string) => Promise<void>;
   removePdf: (id: string) => Promise<void>;
@@ -167,6 +168,10 @@ export const usePdfStore = create<PdfState>((set, get) => ({
     }));
 
     return paper;
+  },
+
+  addPdf: async (paper: PaperDocumentInfo) => {
+    return get().addPaperDocument(paper);
   },
 
   updatePaperDocument: async (id: string, updates: Partial<PaperDocumentInfo>) => {

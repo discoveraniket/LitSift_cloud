@@ -59,6 +59,30 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   setExecutionMode: (mode) => set({ mode }),
 
+  addAgentResponse: async (text: string, options?: string[]) => {
+    const currentPdfId = get().activePdfId || 'master-grid';
+    const agentMsg: AgentMessage = {
+      id: `msg-${Date.now()}`,
+      pdfId: currentPdfId,
+      sender: 'agent',
+      text,
+      options,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    set(
+      produce((state: AgentState) => {
+        state.messages.push(agentMsg);
+      })
+    );
+
+    try {
+      await db.chatMessages.put(agentMsg);
+    } catch (err) {
+      console.warn('Failed to save agent message to IndexedDB:', err);
+    }
+  },
+
   sendMessage: (text: string, activePdfTitle?: string) => {
     if (!text || !text.trim()) return;
     const currentPdfId = get().activePdfId || 'master-grid';

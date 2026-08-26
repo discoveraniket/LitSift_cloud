@@ -3,12 +3,8 @@ import {
   Sparkles,
   Plus,
   Key,
-  Layers,
-  CheckCircle2,
   Table,
   Zap,
-  ArrowRight,
-  ShieldCheck,
   Loader2,
 } from 'lucide-react';
 import { useGridStore } from '../../store/useGridStore';
