@@ -334,14 +334,103 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     return [rowNumCol, ...dynamicCols, addColCol];
   }, [columns, addColumn, renameColumn, showAddColInput, newColName, isPreviewMode, selectedColumnField]);
 
+  const isShiftKeyPressedRef = useRef(false);
+  const isCtrlKeyPressedRef = useRef(false);
+  const isMouseDownWithModifierRef = useRef(false);
+  const anchorCellRef = useRef<{ rowIndex: number; colIndex: number; rowId: string; field: string } | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.shiftKey) isShiftKeyPressedRef.current = true;
+      if (e.ctrlKey || e.metaKey) isCtrlKeyPressedRef.current = true;
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (!e.shiftKey) isShiftKeyPressedRef.current = false;
+      if (!e.ctrlKey && !e.metaKey) isCtrlKeyPressedRef.current = false;
+    };
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) {
+        isMouseDownWithModifierRef.current = true;
+      } else {
+        isMouseDownWithModifierRef.current = false;
+      }
+    };
+    const handleMouseUp = () => {
+      isMouseDownWithModifierRef.current = false;
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('keyup', handleKeyUp, true);
+    window.addEventListener('mousedown', handleMouseDown, true);
+    window.addEventListener('mouseup', handleMouseUp, true);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('keyup', handleKeyUp, true);
+      window.removeEventListener('mousedown', handleMouseDown, true);
+      window.removeEventListener('mouseup', handleMouseUp, true);
+    };
+  }, []);
+
   const handleCellValueChanged = (event: CellValueChangedEvent<GridRow>) => {
     if (event.data && event.colDef.field) {
       updateCell(event.data.id, event.colDef.field, event.newValue);
     }
   };
 
+  const getColIndex = useCallback(
+    (colId: string) => {
+      return columns.findIndex((c) => c.field === colId);
+    },
+    [columns]
+  );
+
+  const getRangeCells = useCallback(
+    (
+      startRowIndex: number,
+      startColIndex: number,
+      endRowIndex: number,
+      endColIndex: number
+    ): Array<{ rowId: string; field: string }> => {
+      const minRow = Math.max(0, Math.min(startRowIndex, endRowIndex));
+      const maxRow = Math.min(rowData.length - 1, Math.max(startRowIndex, endRowIndex));
+      const minCol = Math.max(0, Math.min(startColIndex, endColIndex));
+      const maxCol = Math.min(columns.length - 1, Math.max(startColIndex, endColIndex));
+
+      const cells: Array<{ rowId: string; field: string }> = [];
+      for (let r = minRow; r <= maxRow; r++) {
+        const row =
+          (gridApiRef.current?.api && typeof gridApiRef.current.api.getDisplayedRowAtIndex === 'function'
+            ? gridApiRef.current.api.getDisplayedRowAtIndex(r)?.data
+            : null) || rowData[r];
+        if (!row) continue;
+
+        for (let c = minCol; c <= maxCol; c++) {
+          const col = columns[c];
+          if (
+            col &&
+            col.field &&
+            col.field !== 'rowNum' &&
+            col.field !== '0' &&
+            col.field !== '#' &&
+            col.field !== '+ Column' &&
+            col.field !== 'addCol'
+          ) {
+            cells.push({ rowId: row.id, field: col.field });
+          }
+        }
+      }
+      return cells;
+    },
+    [rowData, columns]
+  );
+
   const handleCellSelectOrFocus = useCallback(
-    (rowIndex: number | null, column: any, directRowData?: GridRow, isMultiToggle = false) => {
+    (
+      rowIndex: number | null,
+      column: any,
+      directRowData?: GridRow,
+      isCtrl = false,
+      isShift = false
+    ) => {
       if ((rowIndex === null && !directRowData) || !column) return;
 
       // Commit in-progress edit before switching focus/selection
@@ -353,12 +442,19 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
       }
 
       if (rowIndex !== null) setFocusedRowIndex(rowIndex);
-      const colId = typeof column === 'string' ? column : column.getColId();
-      const row = directRowData || (rowIndex !== null ? rowData[rowIndex] : null);
+      const colId = typeof column === 'string' ? column : (column.getColId ? column.getColId() : column.colId);
+      const row =
+        directRowData ||
+        (rowIndex !== null
+          ? (gridApiRef.current?.api && typeof gridApiRef.current.api.getDisplayedRowAtIndex === 'function'
+              ? gridApiRef.current.api.getDisplayedRowAtIndex(rowIndex)?.data
+              : null) || rowData[rowIndex]
+          : null);
+
       if (row && colId) {
         // If clicking the row index helper column (#), select the entire row instead of a fake "0" field
         if (colId === 'rowNum' || colId === '0' || colId === '#') {
-          if (isMultiToggle) {
+          if (isCtrl) {
             const current = useGridStore.getState().selectedRowIds;
             const updated = current.includes(row.id)
               ? current.filter((id) => id !== row.id)
@@ -375,10 +471,45 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
           return;
         }
 
-        if (isMultiToggle) {
+        const targetColIndex = getColIndex(colId);
+        const targetRowIndex = rowIndex !== null ? rowIndex : rowData.findIndex((r) => r.id === row.id);
+
+        if (isShift && targetColIndex >= 0 && targetRowIndex >= 0) {
+          // Range selection from anchor to target
+          let anchor = anchorCellRef.current;
+          if (!anchor) {
+            const fc = useGridStore.getState().focusedCell;
+            if (fc) {
+              const rIdx = rowData.findIndex((r) => r.id === fc.rowId);
+              const cIdx = getColIndex(fc.field);
+              if (rIdx >= 0 && cIdx >= 0) {
+                anchor = { rowIndex: rIdx, colIndex: cIdx, rowId: fc.rowId, field: fc.field };
+                anchorCellRef.current = anchor;
+              }
+            }
+          }
+          if (!anchor) {
+            anchor = { rowIndex: targetRowIndex, colIndex: targetColIndex, rowId: row.id, field: colId };
+            anchorCellRef.current = anchor;
+          }
+
+          const rangeCells = getRangeCells(anchor.rowIndex, anchor.colIndex, targetRowIndex, targetColIndex);
+          setSelectedCells(rangeCells.length > 0 ? rangeCells : [{ rowId: row.id, field: colId }], {
+            rowId: row.id,
+            field: colId,
+          });
+        } else if (isCtrl) {
+          // Toggle individual cell
           toggleCellSelection({ rowId: row.id, field: colId });
+          if (targetColIndex >= 0 && targetRowIndex >= 0) {
+            anchorCellRef.current = { rowIndex: targetRowIndex, colIndex: targetColIndex, rowId: row.id, field: colId };
+          }
         } else {
-          setSelectedCells([{ rowId: row.id, field: colId }]);
+          // Single cell selection (resets anchor)
+          setSelectedCells([{ rowId: row.id, field: colId }], { rowId: row.id, field: colId });
+          if (targetColIndex >= 0 && targetRowIndex >= 0) {
+            anchorCellRef.current = { rowIndex: targetRowIndex, colIndex: targetColIndex, rowId: row.id, field: colId };
+          }
         }
 
         // If row has an associated PDF that is not currently active, switch active PDF in usePdfStore
@@ -399,7 +530,11 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         const cellValue = row[colId];
         const keyword = cellValue !== undefined && cellValue !== null && typeof cellValue === 'string' ? cellValue.trim() : '';
 
-        const citation = row.citationMap ? row.citationMap[colId] : null;
+        const colHeader = columns.find((c) => c.field === colId)?.headerName;
+        const citation = row.citationMap
+          ? row.citationMap[colId] || (colHeader ? row.citationMap[colHeader] : null)
+          : null;
+
         if (citation) {
           setActiveCitation(citation);
           setActiveEvidence({
@@ -409,9 +544,10 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
             sectionName: citation.sectionName,
             paragraphNumber: citation.paragraphNumber,
           });
-        } else if (row.evidenceMap && row.evidenceMap[colId]) {
+        } else if (row.evidenceMap && (row.evidenceMap[colId] || (colHeader && row.evidenceMap[colHeader]))) {
+          const ev = row.evidenceMap[colId] || (colHeader ? row.evidenceMap[colHeader] : null);
           setActiveEvidence({
-            ...row.evidenceMap[colId],
+            ...ev,
             keywordText: keyword,
           });
           setActiveCitation(null);
@@ -421,23 +557,57 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         }
       }
     },
-    [rowData, setSelectedCells, toggleCellSelection, setSelectedRows, setActiveEvidence, setActiveCitation]
+    [
+      rowData,
+      columns,
+      getColIndex,
+      getRangeCells,
+      setSelectedCells,
+      toggleCellSelection,
+      setSelectedRows,
+      setActiveEvidence,
+      setActiveCitation,
+    ]
   );
 
   const handleCellFocused = useCallback(
     (event: CellFocusedEvent<GridRow>) => {
-      if (event.rowIndex !== null) {
-        setFocusedRowIndex(event.rowIndex);
+      if (event.rowIndex === null || event.rowIndex === undefined || !event.column) {
+        return;
+      }
+
+      setFocusedRowIndex(event.rowIndex);
+
+      // If mouse is being clicked with modifier (Ctrl/Meta/Shift), let handleCellClicked handle multi-selection
+      if (isMouseDownWithModifierRef.current) {
+        return;
+      }
+
+      const colId = typeof event.column === 'string' ? event.column : (event.column.getColId ? event.column.getColId() : (event.column as any).colId);
+      if (!colId || colId === '+ Column' || colId === 'addCol') {
+        return;
+      }
+
+      const row =
+        (event.api && typeof event.api.getDisplayedRowAtIndex === 'function'
+          ? event.api.getDisplayedRowAtIndex(event.rowIndex)?.data
+          : null) || rowData[event.rowIndex];
+
+      if (row) {
+        const isShift = isShiftKeyPressedRef.current;
+        const isCtrl = isCtrlKeyPressedRef.current;
+        handleCellSelectOrFocus(event.rowIndex, event.column, row, isCtrl, isShift);
       }
     },
-    []
+    [rowData, handleCellSelectOrFocus]
   );
 
   const handleCellClicked = useCallback(
     (event: CellClickedEvent<GridRow>) => {
       const mouseEvent = event.event as MouseEvent;
-      const isMultiKey = Boolean(mouseEvent?.ctrlKey || mouseEvent?.metaKey || mouseEvent?.shiftKey);
-      handleCellSelectOrFocus(event.rowIndex, event.column, event.data, isMultiKey);
+      const isShift = Boolean(mouseEvent?.shiftKey);
+      const isCtrl = Boolean(mouseEvent?.ctrlKey || mouseEvent?.metaKey);
+      handleCellSelectOrFocus(event.rowIndex, event.column, event.data, isCtrl, isShift);
     },
     [handleCellSelectOrFocus]
   );

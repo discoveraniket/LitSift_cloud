@@ -594,10 +594,10 @@ export const useGridStore = create<GridState>((set) => ({
       selectedColumnField: undefined,
       isTableSelected: false,
     }),
-  setSelectedCells: (cells) =>
+  setSelectedCells: (cells, focusedCell) =>
     set({
       selectedCells: cells,
-      focusedCell: cells.length > 0 ? cells[cells.length - 1] : null,
+      focusedCell: focusedCell !== undefined ? focusedCell : (cells.length > 0 ? cells[cells.length - 1] : null),
       selectedRowIds: [],
       selectedColumnField: undefined,
       isTableSelected: false,

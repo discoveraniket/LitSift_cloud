@@ -79,7 +79,10 @@ export interface GridState {
   setSelectedRows: (rowIds: string[]) => void;
   setSelectedColumnField: (field?: string) => void;
   setFocusedCell: (cell: { rowId: string; field: string } | null) => void;
-  setSelectedCells: (cells: Array<{ rowId: string; field: string }>) => void;
+  setSelectedCells: (
+    cells: Array<{ rowId: string; field: string }>,
+    focusedCell?: { rowId: string; field: string } | null
+  ) => void;
   toggleCellSelection: (cell: { rowId: string; field: string }) => void;
   removeSelectedCell: (cell: { rowId: string; field: string }) => void;
   setSelectedTable: (selected: boolean) => void;
