@@ -23,7 +23,10 @@ export const WorkspaceLayout: React.FC = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
-  const [activeSidebarView, setActiveSidebarView] = useState<SidebarViewMode>('explorer');
+  const [activeSidebarView, setActiveSidebarView] = useState<SidebarViewMode>(() => {
+    const saved = localStorage.getItem('litsift_layout_active_sidebar_view');
+    return (saved as SidebarViewMode) || 'explorer';
+  });
 
   // Dynamic VS Code Editor Tabs State
   const [tabs, setTabs] = useState<EditorTab[]>([
@@ -44,19 +47,78 @@ export const WorkspaceLayout: React.FC = () => {
   const [initialHubSection, setInitialHubSection] = useState<'export' | 'import'>('import');
   const [pendingWorkspaceFile, setPendingWorkspaceFile] = useState<File | null>(null);
 
-  // Side Panel Toggle States (Right Agent minimized by default on landing)
-  const [showLeftPanel, setShowLeftPanel] = useState(false);
-  const [showBottomPanel, setShowBottomPanel] = useState(true);
-  const [showRightPanel, setShowRightPanel] = useState(false);
+  // Side Panel Toggle States (Collapsed by default on first-time landing, restored from localStorage on refresh)
+  const [showLeftPanel, setShowLeftPanel] = useState<boolean>(() => {
+    const saved = localStorage.getItem('litsift_layout_show_left');
+    return saved !== null ? saved === 'true' : false; // false for first time landing
+  });
+  const [showBottomPanel, setShowBottomPanel] = useState<boolean>(() => {
+    const saved = localStorage.getItem('litsift_layout_show_bottom');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [showRightPanel, setShowRightPanel] = useState<boolean>(() => {
+    const saved = localStorage.getItem('litsift_layout_show_right');
+    return saved !== null ? saved === 'true' : false; // false for first time landing
+  });
   const [isGridMaximized, setIsGridMaximized] = useState(false);
 
-  // Pixel Width/Height State for dragging (responsive defaults)
-  const [leftWidth, setLeftWidth] = useState(() => (window.innerWidth < 768 ? window.innerWidth : 260));
-  const [rightWidth, setRightWidth] = useState(() => (window.innerWidth < 768 ? window.innerWidth : 420));
-  const [bottomHeight, setBottomHeight] = useState(() => (window.innerHeight < 700 ? 220 : 280));
+  // Pixel Width/Height State for dragging (restored from localStorage with responsive defaults)
+  const [leftWidth, setLeftWidth] = useState<number>(() => {
+    const saved = localStorage.getItem('litsift_layout_left_width');
+    if (saved) {
+      const parsed = Number(saved);
+      if (!isNaN(parsed) && parsed >= 180 && parsed <= 600) return parsed;
+    }
+    return window.innerWidth < 768 ? window.innerWidth : 260;
+  });
+  const [rightWidth, setRightWidth] = useState<number>(() => {
+    const saved = localStorage.getItem('litsift_layout_right_width');
+    if (saved) {
+      const parsed = Number(saved);
+      if (!isNaN(parsed) && parsed >= 280 && parsed <= 850) return parsed;
+    }
+    return window.innerWidth < 768 ? window.innerWidth : 420;
+  });
+  const [bottomHeight, setBottomHeight] = useState<number>(() => {
+    const saved = localStorage.getItem('litsift_layout_bottom_height');
+    if (saved) {
+      const parsed = Number(saved);
+      if (!isNaN(parsed) && parsed >= 140 && parsed <= 700) return parsed;
+    }
+    return window.innerHeight < 700 ? 220 : 280;
+  });
 
   const [isDragging, setIsDragging] = useState<string | null>(null);
   const initialPdfSyncedRef = useRef(false);
+
+  // Persist panel toggle states and dimensions to localStorage on change
+  useEffect(() => {
+    localStorage.setItem('litsift_layout_show_left', String(showLeftPanel));
+  }, [showLeftPanel]);
+
+  useEffect(() => {
+    localStorage.setItem('litsift_layout_show_right', String(showRightPanel));
+  }, [showRightPanel]);
+
+  useEffect(() => {
+    localStorage.setItem('litsift_layout_show_bottom', String(showBottomPanel));
+  }, [showBottomPanel]);
+
+  useEffect(() => {
+    localStorage.setItem('litsift_layout_active_sidebar_view', activeSidebarView);
+  }, [activeSidebarView]);
+
+  useEffect(() => {
+    localStorage.setItem('litsift_layout_left_width', String(leftWidth));
+  }, [leftWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('litsift_layout_right_width', String(rightWidth));
+  }, [rightWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('litsift_layout_bottom_height', String(bottomHeight));
+  }, [bottomHeight]);
 
   // Handle window resize for mobile adaptability
   useEffect(() => {
