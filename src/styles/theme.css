@@ -949,20 +949,62 @@ mark.evidence-keyword-glow {
   }
 }
 
+/* ==========================================================================
+   PDF.js In-Document Search Highlighting (Browser-Native Look & Crisp Text)
+   ========================================================================== */
+.pdf-search-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.pdf-search-overlay .pdf-search-match,
+.pdf-text-layer mark.pdf-search-match,
+.pdf-text-layer .pdf-search-match,
+.pdf-text-item.pdf-search-match {
+  background-color: rgba(255, 225, 53, 0.45) !important;
+  color: transparent !important;
+  text-shadow: none !important;
+  -webkit-text-fill-color: transparent !important;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.pdf-search-overlay .pdf-search-match.pdf-search-match-current,
+.pdf-text-layer mark.pdf-search-match.pdf-search-match-current,
+.pdf-text-layer .pdf-search-match.pdf-search-match-current,
+.pdf-text-item.pdf-search-match.pdf-search-match-current {
+  background-color: rgba(255, 150, 50, 0.65) !important;
+  outline: 1.5px solid rgba(255, 120, 0, 0.85) !important;
+  color: transparent !important;
+  text-shadow: none !important;
+  -webkit-text-fill-color: transparent !important;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
 /* Reader View In-Article Search Highlighting */
 mark.reader-search-mark {
-  background-color: rgba(249, 226, 175, 0.4) !important;
-  color: #11111b !important;
+  background-color: rgba(255, 225, 53, 0.45) !important;
+  color: inherit !important;
   padding: 1px 2px !important;
   border-radius: 2px !important;
-  box-shadow: 0 0 4px rgba(249, 226, 175, 0.25) !important;
+  box-shadow: none !important;
 }
 
 mark.reader-search-mark.reader-search-match-current {
-  background-color: rgba(250, 179, 135, 0.85) !important;
-  border-bottom: 2px solid #fab387 !important;
-  box-shadow: 0 0 10px rgba(250, 179, 135, 0.9) !important;
-  font-weight: 600 !important;
+  background-color: rgba(255, 150, 50, 0.65) !important;
+  outline: 1.5px solid rgba(255, 120, 0, 0.85) !important;
+  color: inherit !important;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+  font-weight: inherit !important;
 }
 
 .ag-header-cell-selected {

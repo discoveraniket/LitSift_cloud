@@ -83,13 +83,30 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
     }
   }, [activeEvidence]);
 
-  // Render text layers with selectable and searchable spans
+  // Render text layers with selectable spans and dedicated search highlight overlay
   const renderTextLayerForPage = async (page: any, viewport: any, pageWrapper: HTMLElement) => {
     try {
       const textContent = await page.getTextContent();
-      
+
+      // Store textContent and viewport metadata on pageWrapper for fast search overlay computation
+      (pageWrapper as any).__textContent = textContent;
+      (pageWrapper as any).__viewport = viewport;
+
+      // 1. Search & Annotation Overlay Layer (z-index 4)
+      const searchOverlay = document.createElement('div');
+      searchOverlay.className = 'pdf-search-overlay';
+      searchOverlay.style.position = 'absolute';
+      searchOverlay.style.top = '0';
+      searchOverlay.style.left = '0';
+      searchOverlay.style.height = `${viewport.height}px`;
+      searchOverlay.style.width = `${viewport.width}px`;
+      searchOverlay.style.pointerEvents = 'none';
+      searchOverlay.style.zIndex = '4';
+      pageWrapper.appendChild(searchOverlay);
+
+      // 2. Selectable HTML Text Layer (z-index 5)
       const textLayerDiv = document.createElement('div');
-      textLayerDiv.className = 'pdf-text-layer';
+      textLayerDiv.className = 'pdf-text-layer textLayer';
       textLayerDiv.style.position = 'absolute';
       textLayerDiv.style.top = '0';
       textLayerDiv.style.left = '0';
@@ -99,27 +116,35 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
       textLayerDiv.style.lineHeight = '1.0';
       textLayerDiv.style.pointerEvents = 'auto';
       textLayerDiv.style.userSelect = 'text';
+      textLayerDiv.style.zIndex = '5';
 
       for (const item of textContent.items) {
         if (!item.str || item.str.trim().length === 0) continue;
 
         const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
-        const fontHeight = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]);
+        const fontHeight = Math.hypot(tx[2], tx[3]) || Math.hypot(tx[0], tx[1]) || 12;
+        const targetWidth = (item.width || 0) * (viewport.scale || 1);
 
         const textSpan = document.createElement('span');
         textSpan.textContent = item.str;
         textSpan.className = 'pdf-text-item';
         textSpan.style.position = 'absolute';
         textSpan.style.left = `${tx[4]}px`;
-        textSpan.style.top = `${tx[5] - fontHeight}px`;
+        textSpan.style.top = `${tx[5] - fontHeight * 0.84}px`;
         textSpan.style.fontSize = `${fontHeight}px`;
         textSpan.style.fontFamily = item.fontName || 'sans-serif';
+        textSpan.style.lineHeight = '1.0';
         textSpan.style.color = 'transparent';
         textSpan.style.transformOrigin = '0% 0%';
         textSpan.style.whiteSpace = 'pre';
         textSpan.style.cursor = 'text';
 
         textLayerDiv.appendChild(textSpan);
+
+        if (targetWidth > 0 && textSpan.offsetWidth > 0) {
+          const scaleRatio = targetWidth / textSpan.offsetWidth;
+          textSpan.style.transform = `scaleX(${scaleRatio})`;
+        }
       }
 
       pageWrapper.appendChild(textLayerDiv);
@@ -128,7 +153,7 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
     }
   };
 
-  // Perform search highlighting across text spans
+  // Perform search highlighting using clean geometry overlay rectangles (Browser-Native Feel)
   const performSearch = (query: string) => {
     clearSearch();
     if (!query || !query.trim() || !containerRef.current) {
@@ -137,25 +162,58 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
     }
 
     const lowerQuery = query.toLowerCase().trim();
-    const textItems = containerRef.current.querySelectorAll('.pdf-text-item');
-    const matchedSpans: HTMLElement[] = [];
+    const pageWrappers = Array.from(containerRef.current.querySelectorAll<HTMLElement>('.pdf-page-wrapper'));
+    const matchedOverlayDivs: HTMLElement[] = [];
 
-    textItems.forEach((el) => {
-      const text = el.textContent || '';
-      if (text.toLowerCase().includes(lowerQuery)) {
-        (el as HTMLElement).style.background = 'rgba(249, 226, 175, 0.65)';
-        (el as HTMLElement).style.color = '#11111b';
-        (el as HTMLElement).style.borderRadius = '2px';
-        (el as HTMLElement).style.boxShadow = '0 0 4px rgba(249, 226, 175, 0.9)';
-        matchedSpans.push(el as HTMLElement);
+    pageWrappers.forEach((pageWrapper) => {
+      const textContent = (pageWrapper as any).__textContent;
+      const viewport = (pageWrapper as any).__viewport;
+      const searchOverlay = pageWrapper.querySelector<HTMLElement>('.pdf-search-overlay');
+      if (!textContent || !viewport || !searchOverlay) return;
+
+      searchOverlay.innerHTML = ''; // Clear page highlights
+
+      for (const item of textContent.items) {
+        if (!item.str || item.str.trim().length === 0) continue;
+
+        const str = item.str;
+        const lowerStr = str.toLowerCase();
+        let matchIdx = lowerStr.indexOf(lowerQuery);
+
+        if (matchIdx !== -1) {
+          const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+          const fontHeight = Math.hypot(tx[2], tx[3]) || Math.hypot(tx[0], tx[1]) || 12;
+          const totalWidth = (item.width || 0) * (viewport.scale || 1);
+          const charWidth = str.length > 0 ? totalWidth / str.length : fontHeight * 0.6;
+
+          while (matchIdx !== -1) {
+            const matchLeft = tx[4] + matchIdx * charWidth;
+            const matchWidth = Math.max(lowerQuery.length * charWidth, 4);
+            const matchTop = tx[5] - fontHeight * 0.86;
+            const matchHeight = fontHeight * 1.08;
+
+            const highlightBox = document.createElement('div');
+            highlightBox.className = 'pdf-search-match';
+            highlightBox.style.position = 'absolute';
+            highlightBox.style.left = `${matchLeft}px`;
+            highlightBox.style.top = `${matchTop}px`;
+            highlightBox.style.width = `${matchWidth}px`;
+            highlightBox.style.height = `${matchHeight}px`;
+
+            searchOverlay.appendChild(highlightBox);
+            matchedOverlayDivs.push(highlightBox);
+
+            matchIdx = lowerStr.indexOf(lowerQuery, matchIdx + lowerQuery.length);
+          }
+        }
       }
     });
 
-    searchMatchesRef.current = matchedSpans;
-    if (matchedSpans.length > 0) {
+    searchMatchesRef.current = matchedOverlayDivs;
+    if (matchedOverlayDivs.length > 0) {
       currentMatchIndexRef.current = 0;
       focusMatch(0);
-      onMatchCountChange?.(1, matchedSpans.length);
+      onMatchCountChange?.(1, matchedOverlayDivs.length);
     } else {
       currentMatchIndexRef.current = -1;
       onMatchCountChange?.(0, 0);
@@ -166,17 +224,12 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
     const matches = searchMatchesRef.current;
     if (index < 0 || index >= matches.length) return;
 
-    // Reset previous active match styling
     matches.forEach((m, idx) => {
       if (idx === index) {
-        m.style.background = 'rgba(137, 180, 250, 0.9)';
-        m.style.color = '#11111b';
-        m.style.boxShadow = '0 0 8px rgba(137, 180, 250, 1)';
+        m.classList.add('pdf-search-match-current');
         m.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else {
-        m.style.background = 'rgba(249, 226, 175, 0.65)';
-        m.style.color = '#11111b';
-        m.style.boxShadow = '0 0 4px rgba(249, 226, 175, 0.9)';
+        m.classList.remove('pdf-search-match-current');
       }
     });
   };
@@ -200,10 +253,10 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
   };
 
   const clearSearch = () => {
-    searchMatchesRef.current.forEach((el) => {
-      el.style.background = 'transparent';
-      el.style.color = 'transparent';
-      el.style.boxShadow = 'none';
+    if (!containerRef.current) return;
+    const overlays = containerRef.current.querySelectorAll<HTMLElement>('.pdf-search-overlay');
+    overlays.forEach((overlay) => {
+      overlay.innerHTML = '';
     });
     searchMatchesRef.current = [];
     currentMatchIndexRef.current = -1;
