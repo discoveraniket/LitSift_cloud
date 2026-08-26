@@ -5,18 +5,8 @@ import { processAgentInteraction } from '../services/geminiService';
 import { useGridStore } from './useGridStore';
 import { db } from '../db/litsiftDb';
 
-const createDefaultGreeting = (pdfTitle?: string): AgentMessage => ({
-  id: `msg-${Date.now()}`,
-  pdfId: pdfTitle ? undefined : 'master-grid',
-  sender: 'agent',
-  text: pdfTitle
-    ? `⚡ Viewing "${pdfTitle}"`
-    : '⚡ LitSift Agent ready',
-  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-});
-
 export const useAgentStore = create<AgentState>((set, get) => ({
-  messages: [createDefaultGreeting()],
+  messages: [],
   activePdfId: '',
   isThinking: false,
   streamingThought: '',
@@ -31,26 +21,32 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const stored = await db.chatMessages.where('pdfId').equals(activeId).sortBy('timestamp');
 
       if (stored.length > 0) {
-        set({ messages: stored });
+        // Clean out legacy greeting messages if any
+        const cleaned = stored.filter(
+          (m) => m.text !== '⚡ LitSift Agent ready' && !m.text.startsWith('⚡ Viewing')
+        );
+        set({ messages: cleaned });
+      } else {
+        set({ messages: [] });
       }
     } catch (err) {
       console.warn('Failed to hydrate chat messages from IndexedDB:', err);
     }
   },
 
-  setActivePdfId: async (pdfId: string, pdfTitle?: string) => {
+  setActivePdfId: async (pdfId: string) => {
     set({ activePdfId: pdfId });
     try {
       const targetId = pdfId || 'master-grid';
       const paperMessages = await db.chatMessages.where('pdfId').equals(targetId).sortBy('timestamp');
 
       if (paperMessages.length > 0) {
-        set({ messages: paperMessages });
+        const cleaned = paperMessages.filter(
+          (m) => m.text !== '⚡ LitSift Agent ready' && !m.text.startsWith('⚡ Viewing')
+        );
+        set({ messages: cleaned });
       } else {
-        const greeting = createDefaultGreeting(pdfTitle);
-        greeting.pdfId = targetId;
-        set({ messages: [greeting] });
-        await db.chatMessages.put(greeting);
+        set({ messages: [] });
       }
     } catch (err) {
       console.warn('Failed to switch active chat messages:', err);
@@ -250,16 +246,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   clearMessages: async () => {
     const currentPdfId = get().activePdfId || 'master-grid';
-    const freshMsg: AgentMessage = {
-      id: `msg-${Date.now()}`,
-      pdfId: currentPdfId,
-      sender: 'agent',
-      text: '⚡ LitSift Agent ready',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
 
     set({
-      messages: [freshMsg],
+      messages: [],
     });
 
     try {
@@ -268,7 +257,6 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       } else {
         await db.chatMessages.where('pdfId').equals(currentPdfId).delete();
       }
-      await db.chatMessages.put(freshMsg);
     } catch (err) {
       console.warn('Failed to clear chat messages in IndexedDB:', err);
     }

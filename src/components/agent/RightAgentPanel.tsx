@@ -205,7 +205,7 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
         overflow: 'hidden',
       }}
     >
-      {/* Top VS Code Copilot Header Bar */}
+      {/* Top Header Bar */}
       <div
         className="vscode-chat-header"
         style={{
@@ -222,7 +222,7 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: 'var(--text-primary)' }}>
           <Bot size={14} color="var(--accent-primary)" />
-          <span>LitSift Copilot</span>
+          <span>Agent</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -323,38 +323,39 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
           gap: '16px',
         }}
       >
-        {messages.map((msg) => {
-          const isUser = msg.sender === 'user';
-          const isCopied = copiedMsgId === msg.id;
+        {messages
+          .filter((msg) => msg.text !== '⚡ LitSift Agent ready' && !msg.text.startsWith('⚡ Viewing'))
+          .map((msg) => {
+            const isUser = msg.sender === 'user';
+            const isCopied = copiedMsgId === msg.id;
 
-          return (
-            <div
-              key={msg.id}
-              className={`vscode-chat-turn ${msg.sender}`}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                position: 'relative',
-                borderRadius: '6px',
-                padding: '6px 8px',
-                background: isUser ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
-                border: isUser ? '1px solid var(--border-subtle)' : 'none',
-              }}
-            >
-              {/* Turn Header: Avatar, Name, Timestamp */}
+            return (
               <div
+                key={msg.id}
+                className={`vscode-chat-turn ${msg.sender}`}
                 style={{
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: '6px',
-                  fontSize: '10.5px',
-                  color: 'var(--text-muted)',
+                  flexDirection: 'column',
+                  position: 'relative',
+                  borderRadius: '6px',
+                  padding: '6px 8px',
+                  background: isUser ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
+                  border: isUser ? '1px solid var(--border-subtle)' : 'none',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {isUser ? (
-                    <>
+                {/* Turn Header: Icon only & Action Buttons */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '6px',
+                    fontSize: '10.5px',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    {isUser ? (
                       <div
                         style={{
                           width: '18px',
@@ -368,10 +369,7 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
                       >
                         <User size={11} color="var(--text-secondary)" />
                       </div>
-                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>You</span>
-                    </>
-                  ) : (
-                    <>
+                    ) : (
                       <div
                         style={{
                           width: '18px',
@@ -385,182 +383,179 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
                       >
                         <Bot size={11} color="var(--accent-primary)" />
                       </div>
-                      <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>LitSift Agent</span>
-                    </>
+                    )}
+                  </div>
+
+                  {/* Quick Action Toolbar */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <button
+                      onClick={() => handleCopyText(msg.id, msg.text)}
+                      title="Copy message content"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: isCopied ? 'var(--accent-success)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '2px',
+                        borderRadius: '3px',
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = isCopied ? 'var(--accent-success)' : 'var(--text-muted)')}
+                    >
+                      {isCopied ? <Check size={11} /> : <Copy size={11} />}
+                    </button>
+
+                    <button
+                      onClick={() => deleteMessage(msg.id)}
+                      title="Delete turn"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '2px',
+                        borderRadius: '3px',
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-danger)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Turn Body */}
+                <div style={{ fontSize: '12px', lineHeight: '1.5', color: 'var(--text-primary)' }}>
+                  {/* 1. Chain-of-Thought Reasoning Accordion (Formatted Markdown) */}
+                  {!isUser && msg.thought && (
+                    <ThoughtAccordion
+                      thought={msg.thought}
+                      thinkingTokens={msg.thinkingTokens}
+                      elapsedSeconds={msg.executionTime}
+                    />
                   )}
-                  <span>• {msg.timestamp}</span>
-                </div>
 
-                {/* Quick Action Toolbar */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <button
-                    onClick={() => handleCopyText(msg.id, msg.text)}
-                    title="Copy message content"
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: isCopied ? 'var(--accent-success)' : 'var(--text-muted)',
-                      cursor: 'pointer',
-                      padding: '2px',
-                      borderRadius: '3px',
-                      display: 'flex',
-                      alignItems: 'center',
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = isCopied ? 'var(--accent-success)' : 'var(--text-muted)')}
-                  >
-                    {isCopied ? <Check size={11} /> : <Copy size={11} />}
-                  </button>
+                  {/* 2. Stepper for Tool Actions */}
+                  {!isUser && msg.toolsExecuted && msg.toolsExecuted.length > 0 && (
+                    <AgentToolStepper
+                      tools={msg.toolsExecuted}
+                      executionTime={msg.executionTime}
+                    />
+                  )}
 
-                  <button
-                    onClick={() => deleteMessage(msg.id)}
-                    title="Delete turn"
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      padding: '2px',
-                      borderRadius: '3px',
-                      display: 'flex',
-                      alignItems: 'center',
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-danger)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-                  >
-                    <Trash2 size={11} />
-                  </button>
-                </div>
-              </div>
+                  {/* 3. Natural Language / Markdown Response */}
+                  {!isUser ? (
+                    <div
+                      className="chat-markdown vscode-markdown"
+                      dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(msg.text) }}
+                    />
+                  ) : (
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
+                  )}
 
-              {/* Turn Body */}
-              <div style={{ fontSize: '12px', lineHeight: '1.5', color: 'var(--text-primary)' }}>
-                {/* 1. Chain-of-Thought Reasoning Accordion (Formatted Markdown) */}
-                {!isUser && msg.thought && (
-                  <ThoughtAccordion
-                    thought={msg.thought}
-                    thinkingTokens={msg.thinkingTokens}
-                    elapsedSeconds={msg.executionTime}
-                  />
-                )}
-
-                {/* 2. Stepper for Tool Actions */}
-                {!isUser && msg.toolsExecuted && msg.toolsExecuted.length > 0 && (
-                  <AgentToolStepper
-                    tools={msg.toolsExecuted}
-                    executionTime={msg.executionTime}
-                  />
-                )}
-
-                {/* 3. Natural Language / Markdown Response */}
-                {!isUser ? (
-                  <div
-                    className="chat-markdown vscode-markdown"
-                    dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(msg.text) }}
-                  />
-                ) : (
-                  <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
-                )}
-
-                {/* 4. Interactive Suggestion Option Chips */}
-                {msg.options && msg.options.length > 0 && (
-                  <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {msg.options.map((opt, i) => (
-                      <button
-                        key={i}
-                        onClick={() => selectOption(opt)}
-                        style={{
-                          background: 'var(--bg-secondary)',
-                          color: 'var(--accent-primary)',
-                          border: '1px solid var(--border-subtle)',
-                          borderRadius: '6px',
-                          padding: '5px 8px',
-                          fontSize: '11px',
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                          fontWeight: 500,
-                          transition: 'all 0.15s ease',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.borderColor = 'var(--accent-primary)';
-                          e.currentTarget.style.background = 'rgba(137, 180, 250, 0.08)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.borderColor = 'var(--border-subtle)';
-                          e.currentTarget.style.background = 'var(--bg-secondary)';
-                        }}
-                      >
-                        <Sparkles size={11} color="var(--accent-primary)" />
-                        <span>{opt}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* 5. In-Turn Telemetry & Token Metadata Pill (VS Code Style) */}
-                {!isUser && (msg.executionTime !== undefined || msg.promptTokens !== undefined) && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      marginTop: '8px',
-                      paddingTop: '6px',
-                      borderTop: '1px solid rgba(255, 255, 255, 0.04)',
-                      fontSize: '10px',
-                      color: 'var(--text-muted)',
-                      userSelect: 'none',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                      <Zap size={10} color="var(--accent-primary)" />
-                      <span>{msg.executionTime !== undefined ? `${msg.executionTime.toFixed(1)}s` : 'Instant'}</span>
+                  {/* 4. Interactive Suggestion Option Chips */}
+                  {msg.options && msg.options.length > 0 && (
+                    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {msg.options.map((opt, i) => (
+                        <button
+                          key={i}
+                          onClick={() => selectOption(opt)}
+                          style={{
+                            background: 'var(--bg-secondary)',
+                            color: 'var(--accent-primary)',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: '6px',
+                            padding: '5px 8px',
+                            fontSize: '11px',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            fontWeight: 500,
+                            transition: 'all 0.15s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                            e.currentTarget.style.background = 'rgba(137, 180, 250, 0.08)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                            e.currentTarget.style.background = 'var(--bg-secondary)';
+                          }}
+                        >
+                          <Sparkles size={11} color="var(--accent-primary)" />
+                          <span>{opt}</span>
+                        </button>
+                      ))}
                     </div>
+                  )}
 
-                    {(msg.promptTokens !== undefined || msg.candidateTokens !== undefined) && (
-                      <span>•</span>
-                    )}
+                  {/* 5. In-Turn Telemetry & Token Metadata Pill (VS Code Style) */}
+                  {!isUser && (msg.executionTime !== undefined || msg.promptTokens !== undefined) && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        marginTop: '8px',
+                        paddingTop: '6px',
+                        borderTop: '1px solid rgba(255, 255, 255, 0.04)',
+                        fontSize: '10px',
+                        color: 'var(--text-muted)',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <Zap size={10} color="var(--accent-primary)" />
+                        <span>{msg.executionTime !== undefined ? `${msg.executionTime.toFixed(1)}s` : 'Instant'}</span>
+                      </div>
 
-                    {msg.promptTokens !== undefined && (
-                      <span title={`Input Prompt Tokens: ${msg.promptTokens.toLocaleString()} (Cached: ${(msg.cachedTokens || 0).toLocaleString()})`}>
-                        {Math.max(0, msg.promptTokens - (msg.cachedTokens || 0)).toLocaleString()} in
-                      </span>
-                    )}
+                      {(msg.promptTokens !== undefined || msg.candidateTokens !== undefined) && (
+                        <span>•</span>
+                      )}
 
-                    {msg.candidateTokens !== undefined && (
-                      <span title={`Output Candidate Tokens: ${msg.candidateTokens.toLocaleString()}`}>
-                        / {msg.candidateTokens.toLocaleString()} out
-                      </span>
-                    )}
+                      {msg.promptTokens !== undefined && (
+                        <span title={`Input Prompt Tokens: ${msg.promptTokens.toLocaleString()} (Cached: ${(msg.cachedTokens || 0).toLocaleString()})`}>
+                          {Math.max(0, msg.promptTokens - (msg.cachedTokens || 0)).toLocaleString()} in
+                        </span>
+                      )}
 
-                    {msg.thinkingTokens !== undefined && msg.thinkingTokens > 0 && (
-                      <span title={`Reasoning / Thinking Tokens: ${msg.thinkingTokens.toLocaleString()}`}>
-                        • {msg.thinkingTokens.toLocaleString()} thought
-                      </span>
-                    )}
+                      {msg.candidateTokens !== undefined && (
+                        <span title={`Output Candidate Tokens: ${msg.candidateTokens.toLocaleString()}`}>
+                          / {msg.candidateTokens.toLocaleString()} out
+                        </span>
+                      )}
 
-                    {msg.modelUsed && (
-                      <span
-                        style={{
-                          marginLeft: 'auto',
-                          fontSize: '9px',
-                          fontFamily: 'var(--font-mono, monospace)',
-                          color: 'var(--text-muted)',
-                          opacity: 0.8,
-                        }}
-                      >
-                        {msg.modelUsed}
-                      </span>
-                    )}
-                  </div>
-                )}
+                      {msg.thinkingTokens !== undefined && msg.thinkingTokens > 0 && (
+                        <span title={`Reasoning / Thinking Tokens: ${msg.thinkingTokens.toLocaleString()}`}>
+                          • {msg.thinkingTokens.toLocaleString()} thought
+                        </span>
+                      )}
+
+                      {msg.modelUsed && (
+                        <span
+                          style={{
+                            marginLeft: 'auto',
+                            fontSize: '9px',
+                            fontFamily: 'var(--font-mono, monospace)',
+                            color: 'var(--text-muted)',
+                            opacity: 0.8,
+                          }}
+                        >
+                          {msg.modelUsed}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
         {/* Live Active Thinking Turn */}
         {isThinking && (
@@ -596,8 +591,6 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
               >
                 <Bot size={11} color="var(--accent-primary)" />
               </div>
-              <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>LitSift Agent</span>
-              <span>• Live Generating</span>
             </div>
 
             <ThoughtAccordion
@@ -614,99 +607,6 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
                 dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(streamingText) }}
               />
             )}
-          </div>
-        )}
-
-        {/* Starter Suggestion Chips for Collaborative Prompting */}
-        {messages.length <= 1 && !isThinking && (
-          <div
-            style={{
-              marginTop: 'auto',
-              padding: '8px 4px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px',
-            }}
-          >
-            <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Sparkles size={11} color="var(--accent-primary)" /> Suggested Collaborative Prompts:
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <button
-                onClick={() => {
-                  setInputPrompt('Extract all defined schema columns from the active paper and provide evidence citations.');
-                }}
-                style={{
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '6px',
-                  padding: '6px 10px',
-                  textAlign: 'left',
-                  fontSize: '11px',
-                  color: 'var(--text-primary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent-primary)')}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
-              >
-                <span>🧪</span>
-                <span>Extract defined schema columns with citations</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setInputPrompt('Locate the methodology, sample cohort size, and patient criteria in this paper.');
-                }}
-                style={{
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '6px',
-                  padding: '6px 10px',
-                  textAlign: 'left',
-                  fontSize: '11px',
-                  color: 'var(--text-primary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent-primary)')}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
-              >
-                <span>🔍</span>
-                <span>Locate study design & cohort size</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setInputPrompt('What are the main clinical findings, primary outcomes, and limitations?');
-                }}
-                style={{
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '6px',
-                  padding: '6px 10px',
-                  textAlign: 'left',
-                  fontSize: '11px',
-                  color: 'var(--text-primary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent-primary)')}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
-              >
-                <span>📊</span>
-                <span>Synthesize key findings & limitations</span>
-              </button>
-            </div>
           </div>
         )}
 
