@@ -186,6 +186,26 @@ describe('VS Code-style Left Panel & Activity Bar UX', () => {
     ]);
   });
 
+  it('renders visual OPEN badge and active styling for the currently active paper', () => {
+    usePdfStore.setState({
+      pdfs: [
+        { id: 'active-paper-1', name: 'Loaded_Phage_Paper.pdf', uploadedAt: 2000 } as any,
+        { id: 'other-paper-2', name: 'Other_Study.pdf', uploadedAt: 1000 } as any,
+      ],
+      activePdfId: 'active-paper-1',
+    });
+
+    render(
+      <LeftExplorerPanel
+        activeSidebarView="explorer"
+        onSelectPdf={vi.fn()}
+        onOpenMasterGrid={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('OPEN')).toBeInTheDocument();
+  });
+
   it('renders AboutModal correctly with shortcuts and information', () => {
     const handleClose = vi.fn();
     const { rerender } = render(<AboutModal isOpen={false} onClose={handleClose} />);
@@ -204,3 +224,4 @@ describe('VS Code-style Left Panel & Activity Bar UX', () => {
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
 });
+

@@ -518,6 +518,17 @@ body {
   }
 }
 
+/* Custom Multiline In-Cell Editor */
+.ag-root-wrapper .ag-cell.ag-cell-inline-editing {
+  padding: 0 !important;
+  overflow: visible !important;
+  z-index: 50 !important;
+}
+
+.ag-root-wrapper .ag-cell.ag-cell-inline-editing textarea {
+  box-sizing: border-box !important;
+}
+
 .ag-header,
 .ag-header-cell {
   background-color: var(--bg-tertiary) !important;

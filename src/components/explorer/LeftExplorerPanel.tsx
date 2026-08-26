@@ -48,7 +48,7 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
 }) => {
   const { columns, rows, clearTable } = useGridStore();
   const { logs, clearLogs } = useLogStore();
-  const { pdfs, addPdfFile, setActivePdf } = usePdfStore();
+  const { pdfs, activePdfId, addPdfFile, setActivePdf } = usePdfStore();
 
   // Collapsible section state for Explorer view
   const [papersOpen, setPapersOpen] = useState(true);
@@ -409,10 +409,12 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                         (file.title && r.pdfTitle === file.title))
                   ).length;
 
+                  const isActive = activePdfId === file.id;
+
                   return (
                     <div
                       key={file.id}
-                      className={`vscode-tree-item ${activeItem === file.id ? 'active' : ''}`}
+                      className={`vscode-tree-item ${isActive ? 'active' : ''}`}
                       onClick={() => {
                         setActivePdf(file.id);
                         onSelectPdf(file.id, file.name);
@@ -422,12 +424,16 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '2px',
-                        padding: '6px 10px 6px 14px',
+                        padding: '6px 10px 6px 12px',
                         borderBottom: '1px solid rgba(255, 255, 255, 0.02)',
+                        borderLeft: isActive ? '3px solid var(--accent-primary, #89b4fa)' : '3px solid transparent',
+                        background: isActive ? 'rgba(137, 180, 250, 0.12)' : 'transparent',
+                        boxShadow: isActive ? 'inset 0 0 12px rgba(137, 180, 250, 0.08)' : 'none',
                         cursor: 'pointer',
+                        transition: 'all 0.15s ease',
                       }}
                     >
-                      {/* Top Row: Single Status Icon + Paper Title */}
+                      {/* Top Row: Single Status Icon + Paper Title + OPEN Indicator */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '7px', width: '100%' }}>
                         {/* Real-time Extraction Status Indicator */}
                         {isExtracted ? (
@@ -453,13 +459,37 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
                             fontSize: '11.5px',
-                            fontWeight: activeItem === file.id ? 600 : 400,
-                            color: activeItem === file.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            fontWeight: isActive ? 600 : 400,
+                            color: isActive ? 'var(--accent-primary, #89b4fa)' : 'var(--text-secondary)',
                           }}
                           title={file.title || file.name}
                         >
                           {file.title || file.name}
                         </span>
+
+                        {/* Visual OPEN Badge for currently active paper in center panel */}
+                        {isActive && (
+                          <span
+                            style={{
+                              fontSize: '8.5px',
+                              fontWeight: 700,
+                              padding: '1px 5px',
+                              borderRadius: '3px',
+                              background: 'rgba(137, 180, 250, 0.22)',
+                              color: 'var(--accent-primary, #89b4fa)',
+                              border: '1px solid rgba(137, 180, 250, 0.35)',
+                              letterSpacing: '0.4px',
+                              textTransform: 'uppercase',
+                              flexShrink: 0,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                            }}
+                          >
+                            <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent-primary, #89b4fa)', boxShadow: '0 0 4px var(--accent-primary)' }} />
+                            OPEN
+                          </span>
+                        )}
                       </div>
 
                       {/* Sub-row: Journal & Year Metadata */}

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useRef, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
 import {
   ExternalLink,
   Download,
@@ -29,6 +29,9 @@ export interface ArticleReaderViewRef {
   nextMatch: () => void;
   prevMatch: () => void;
   clearSearch: () => void;
+  nextSection: () => void;
+  prevSection: () => void;
+  goToSection: (id: string) => void;
 }
 
 export interface ArticleReaderViewProps {
@@ -36,6 +39,7 @@ export interface ArticleReaderViewProps {
   onSwitchToPdf?: () => void;
   fontSizeScale?: number;
   onMatchCountChange?: (current: number, total: number) => void;
+  onActiveSectionChange?: (info: { id: string; title: string; index: number; total: number }) => void;
 }
 
 export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderViewProps>(({
@@ -43,17 +47,146 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
   onSwitchToPdf,
   fontSizeScale = 1.0,
   onMatchCountChange,
+  onActiveSectionChange,
 }, ref) => {
-  const [activeSectionId, setActiveSectionId] = useState<string>('abstract');
+  const sections = paper.sections || [];
+  const tables = paper.tables || [];
+  const figures = paper.figures || [];
+
+  const sectionItems = useMemo(() => {
+    const list: Array<{ id: string; domId: string; title: string; type: 'abstract' | 'section' | 'tables' | 'figures' }> = [];
+    if (paper.abstractText) {
+      list.push({ id: 'abstract', domId: 'sec-abstract', title: 'Abstract', type: 'abstract' });
+    }
+    sections.forEach((sec) => {
+      list.push({ id: sec.id, domId: `sec-${sec.id}`, title: sec.title, type: 'section' });
+    });
+    if (tables.length > 0) {
+      list.push({ id: 'tables', domId: 'sec-tables', title: `Tables & Datasets (${tables.length})`, type: 'tables' });
+    }
+    if (figures.length > 0) {
+      list.push({ id: 'figures', domId: 'sec-figures', title: `Figures & Visuals (${figures.length})`, type: 'figures' });
+    }
+    return list;
+  }, [paper.abstractText, sections, tables, figures]);
+
+  const [activeSectionId, setActiveSectionId] = useState<string>(() => sectionItems[0]?.id || 'abstract');
   const [copiedTableId, setCopiedTableId] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
   const mainContainerRef = useRef<HTMLElement>(null);
   const searchMatchesRef = useRef<HTMLElement[]>([]);
   const currentMatchIndexRef = useRef<number>(-1);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { addColumn, appendRows, activeEvidence } = useGridStore();
   const { updatePaperDocument } = usePdfStore();
+
+  const currentSectionIndex = sectionItems.findIndex((s) => s.id === activeSectionId);
+
+  // ScrollSpy: Track the active section dynamically as user scrolls the reading area
+  useEffect(() => {
+    const container = mainContainerRef.current;
+    if (!container || sectionItems.length === 0) return;
+
+    const handleScroll = () => {
+      const scrollTop = container.scrollTop;
+
+      // If at top of reading area, default to the first section (e.g. Abstract)
+      if (scrollTop < 50) {
+        const first = sectionItems[0];
+        setActiveSectionId(first?.id || 'abstract');
+        if (first) {
+          onActiveSectionChange?.({
+            id: first.id,
+            title: first.title,
+            index: 0,
+            total: sectionItems.length,
+          });
+        }
+        return;
+      }
+
+      // Find which section is currently active
+      const containerRect = container.getBoundingClientRect();
+      let currentActiveItem = sectionItems[0];
+
+      for (let i = 0; i < sectionItems.length; i++) {
+        const item = sectionItems[i];
+        const el = document.getElementById(item.domId);
+        if (el) {
+          const elRect = el.getBoundingClientRect();
+          const relativeTop = elRect.top - containerRect.top;
+          if (relativeTop <= 160) {
+            currentActiveItem = item;
+          }
+        }
+      }
+
+      if (currentActiveItem) {
+        setActiveSectionId(currentActiveItem.id);
+        const idx = sectionItems.findIndex((s) => s.id === currentActiveItem.id);
+        onActiveSectionChange?.({
+          id: currentActiveItem.id,
+          title: currentActiveItem.title,
+          index: idx >= 0 ? idx : 0,
+          total: sectionItems.length,
+        });
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+    };
+  }, [sectionItems, onActiveSectionChange]);
+
+  const handlePrevSection = () => {
+    if (currentSectionIndex > 0) {
+      const prev = sectionItems[currentSectionIndex - 1];
+      const el = document.getElementById(prev.domId);
+      el?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      setActiveSectionId(prev.id);
+      onActiveSectionChange?.({
+        id: prev.id,
+        title: prev.title,
+        index: currentSectionIndex - 1,
+        total: sectionItems.length,
+      });
+    }
+  };
+
+  const handleNextSection = () => {
+    if (currentSectionIndex < sectionItems.length - 1) {
+      const next = sectionItems[currentSectionIndex + 1];
+      const el = document.getElementById(next.domId);
+      el?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      setActiveSectionId(next.id);
+      onActiveSectionChange?.({
+        id: next.id,
+        title: next.title,
+        index: currentSectionIndex + 1,
+        total: sectionItems.length,
+      });
+    }
+  };
+
+  const handleGoToSection = (id: string) => {
+    const target = sectionItems.find((s) => s.id === id);
+    if (target) {
+      document.getElementById(target.domId)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      setActiveSectionId(target.id);
+      const idx = sectionItems.findIndex((s) => s.id === target.id);
+      onActiveSectionChange?.({
+        id: target.id,
+        title: target.title,
+        index: idx >= 0 ? idx : 0,
+        total: sectionItems.length,
+      });
+    }
+  };
 
   // In-Article Text Search & Match Navigation
   const clearSearch = () => {
@@ -177,6 +310,9 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
     nextMatch,
     prevMatch,
     clearSearch,
+    nextSection: handleNextSection,
+    prevSection: handlePrevSection,
+    goToSection: handleGoToSection,
   }));
 
   // Auto-scroll and highlight exact sentence when activeEvidence changes (with gentle flash)
@@ -250,53 +386,43 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
       }
     });
 
-    // Create new grid rows
-    const newRows = table.rows.map((row, rIdx) => {
-      const rowData: Record<string, any> = {
-        id: `row-${Date.now()}-${rIdx}`,
+    const parsedRows = table.rows.map((r, rIdx) => {
+      const rowObj: Record<string, any> = {
+        id: `tbl-${table.id}-row-${rIdx}-${Date.now()}`,
         pdfId: paper.id,
         pdfTitle: paper.name,
-        aiStatus: 'Pending Review',
+        aiStatus: 'Ready' as const,
       };
-
-      table.headers.forEach((h, cIdx) => {
-        const fieldKey = h.toLowerCase().replace(/[^a-z0-9]/g, '_');
-        let cellVal = row[cIdx] !== undefined && row[cIdx] !== null ? String(row[cIdx]).trim() : 'Not reported';
-        if (cellVal === '-' || cellVal === '' || cellVal.toLowerCase() === 'none' || cellVal.toLowerCase() === 'n/a') {
-          cellVal = 'Not reported';
-        }
-        rowData[fieldKey] = cellVal;
+      table.headers.forEach((h, hIdx) => {
+        rowObj[h] = r[hIdx] ?? '';
       });
-
-      return rowData as any;
+      return rowObj;
     });
 
-    appendRows(newRows);
-    alert(`Imported ${newRows.length} rows from "${table.label || 'Table'}" directly into the Master Data Grid.`);
+    appendRows(parsedRows as any);
   };
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Attach local PDF binary to this paper document (keeps both Reader View and PDF Canvas in workspace)
+  // Attach / Replace Local PDF File
   const attachPdfFile = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-      alert('Please select a valid .PDF document.');
+    if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
+      alert('Please select a valid PDF file.');
       return;
     }
 
     const blobUrl = URL.createObjectURL(file);
+    await updatePaperDocument(paper.id, {
+      file: file,
+      url: blobUrl,
+      sourceType: 'pdf_upload',
+      status: 'Ready',
+    });
 
-    // Read Base64
     const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = (reader.result as string).split(',')[1];
-      await updatePaperDocument(paper.id, {
-        file,
-        url: blobUrl,
-        base64,
-        sourceType: 'doi_full_pdf',
-      });
-      if (onSwitchToPdf) onSwitchToPdf();
+    reader.onload = async (event) => {
+      const base64 = event.target?.result as string;
+      if (base64) {
+        await updatePaperDocument(paper.id, { base64 });
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -312,10 +438,6 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
     const file = files[0];
     await attachPdfFile(file);
   };
-
-  const sections = paper.sections || [];
-  const tables = paper.tables || [];
-  const figures = paper.figures || [];
 
   const hasRealPdf = Boolean(
     paper.url &&
@@ -373,16 +495,16 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
         </div>
       )}
 
-      {/* Sticky Left Navigation Outline */}
+      {/* Sticky Left Navigation Outline with Active Highlight */}
       <nav
         style={{
           width: '240px',
           borderRight: '1px solid var(--border-subtle, #313244)',
           background: 'var(--bg-secondary, #181825)',
-          padding: '16px 12px',
+          padding: '16px 10px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '4px',
+          gap: '3px',
           overflowY: 'auto',
           flexShrink: 0,
         }}
@@ -396,118 +518,64 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
             letterSpacing: '0.05em',
             marginBottom: '8px',
             paddingLeft: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
           }}
         >
-          Document Outline
+          <span>Document Outline</span>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500 }}>
+            {sectionItems.length} sections
+          </span>
         </div>
 
-        {paper.abstractText && (
-          <button
-            onClick={() => {
-              setActiveSectionId('abstract');
-              document.getElementById('sec-abstract')?.scrollIntoView({ behavior: 'smooth' });
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              border: 'none',
-              background: activeSectionId === 'abstract' ? 'rgba(137, 180, 250, 0.15)' : 'transparent',
-              color: activeSectionId === 'abstract' ? 'var(--accent-primary, #89b4fa)' : 'var(--text-secondary, #a6adc8)',
-              fontSize: '12px',
-              fontWeight: 500,
-              textAlign: 'left',
-              cursor: 'pointer',
-            }}
-          >
-            <FileText size={14} />
-            <span>Abstract</span>
-          </button>
-        )}
-
-        {sections.map((sec) => (
-          <button
-            key={sec.id}
-            onClick={() => {
-              setActiveSectionId(sec.id);
-              document.getElementById(`sec-${sec.id}`)?.scrollIntoView({ behavior: 'smooth' });
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              border: 'none',
-              background: activeSectionId === sec.id ? 'rgba(137, 180, 250, 0.15)' : 'transparent',
-              color: activeSectionId === sec.id ? 'var(--accent-primary, #89b4fa)' : 'var(--text-secondary, #a6adc8)',
-              fontSize: '12px',
-              fontWeight: 500,
-              textAlign: 'left',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            <BookOpen size={14} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{sec.title}</span>
-          </button>
-        ))}
-
-        {tables.length > 0 && (
-          <button
-            onClick={() => {
-              setActiveSectionId('tables');
-              document.getElementById('sec-tables')?.scrollIntoView({ behavior: 'smooth' });
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              border: 'none',
-              background: activeSectionId === 'tables' ? 'rgba(137, 180, 250, 0.15)' : 'transparent',
-              color: activeSectionId === 'tables' ? 'var(--accent-primary, #89b4fa)' : 'var(--text-secondary, #a6adc8)',
-              fontSize: '12px',
-              fontWeight: 500,
-              textAlign: 'left',
-              cursor: 'pointer',
-            }}
-          >
-            <TableIcon size={14} />
-            <span>Tables ({tables.length})</span>
-          </button>
-        )}
-
-        {figures.length > 0 && (
-          <button
-            onClick={() => {
-              setActiveSectionId('figures');
-              document.getElementById('sec-figures')?.scrollIntoView({ behavior: 'smooth' });
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              border: 'none',
-              background: activeSectionId === 'figures' ? 'rgba(137, 180, 250, 0.15)' : 'transparent',
-              color: activeSectionId === 'figures' ? 'var(--accent-primary, #89b4fa)' : 'var(--text-secondary, #a6adc8)',
-              fontSize: '12px',
-              fontWeight: 500,
-              textAlign: 'left',
-              cursor: 'pointer',
-            }}
-          >
-            <ImageIcon size={14} />
-            <span>Figures ({figures.length})</span>
-          </button>
-        )}
+        {sectionItems.map((item) => {
+          const isActive = activeSectionId === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => {
+                setActiveSectionId(item.id);
+                document.getElementById(item.domId)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                borderLeft: isActive ? '3px solid var(--accent-primary, #89b4fa)' : '3px solid transparent',
+                background: isActive ? 'rgba(137, 180, 250, 0.16)' : 'transparent',
+                color: isActive ? 'var(--accent-primary, #89b4fa)' : 'var(--text-secondary, #a6adc8)',
+                boxShadow: isActive ? 'inset 0 0 8px rgba(137, 180, 250, 0.08)' : 'none',
+                fontSize: '12px',
+                fontWeight: isActive ? 600 : 500,
+                textAlign: 'left',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+              title={item.title}
+            >
+              {item.type === 'abstract' && (
+                <FileText size={14} style={{ flexShrink: 0, color: isActive ? 'var(--accent-primary, #89b4fa)' : 'inherit' }} />
+              )}
+              {item.type === 'section' && (
+                <BookOpen size={14} style={{ flexShrink: 0, color: isActive ? 'var(--accent-primary, #89b4fa)' : 'inherit' }} />
+              )}
+              {item.type === 'tables' && (
+                <TableIcon size={14} style={{ flexShrink: 0, color: isActive ? 'var(--accent-primary, #89b4fa)' : 'inherit' }} />
+              )}
+              {item.type === 'figures' && (
+                <ImageIcon size={14} style={{ flexShrink: 0, color: isActive ? 'var(--accent-primary, #89b4fa)' : 'inherit' }} />
+              )}
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</span>
+            </button>
+          );
+        })}
       </nav>
 
       {/* Main Reading Area */}
@@ -516,12 +584,13 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
         style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '32px 48px',
+          padding: '32px 48px 48px 48px',
           maxWidth: '960px',
           margin: '0 auto',
           fontSize: `${14.5 * (fontSizeScale || 1.0)}px`,
           lineHeight: 1.7,
           transition: 'font-size 0.15s ease',
+          position: 'relative',
         }}
       >
         {/* Paper Header Hero */}

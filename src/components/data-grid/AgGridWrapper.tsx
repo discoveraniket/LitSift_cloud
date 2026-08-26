@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef, CellValueChangedEvent, CellFocusedEvent, CellClickedEvent, CellDoubleClickedEvent, CellEditRequestEvent, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import { useGridStore } from '../../store/useGridStore';
@@ -15,6 +15,123 @@ interface AgGridWrapperProps {
   activePdfTitle?: string;
   isPreviewMode?: boolean;
 }
+
+/**
+ * Custom Multiline In-Cell Text Editor
+ * - Allows multiline text entry
+ * - Shift+Enter and Alt+Enter create newlines (\n) without exiting edit mode
+ * - Plain Enter or Ctrl+Enter commits the edit
+ * - Escape cancels the edit
+ * - Stops click events from propagating so clicking to position cursor / deselect text remains in edit mode
+ */
+const MultilineCellEditor = forwardRef((props: any, ref) => {
+  const [value, setValue] = useState(props.value ?? '');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+      const len = textareaRef.current.value.length;
+      textareaRef.current.setSelectionRange(len, len);
+    }
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    getValue: () => value,
+    isPopup: () => false,
+  }));
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setValue(e.target.value);
+    props.onValueChange?.(e.target.value);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    e.stopPropagation();
+
+    if (e.key === 'Enter') {
+      if (e.shiftKey || e.altKey) {
+        // Explicitly insert newline at cursor position
+        e.preventDefault();
+        const textarea = textareaRef.current;
+        if (textarea) {
+          const start = textarea.selectionStart ?? 0;
+          const end = textarea.selectionEnd ?? 0;
+          const val = textarea.value;
+          const newVal = val.substring(0, start) + '\n' + val.substring(end);
+          setValue(newVal);
+          props.onValueChange?.(newVal);
+          setTimeout(() => {
+            if (textareaRef.current) {
+              textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + 1;
+            }
+          }, 0);
+        }
+        return;
+      }
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl+Enter / Cmd+Enter: Commit
+        e.preventDefault();
+        props.stopEditing();
+        return;
+      }
+      // Plain Enter: Commit edit
+      e.preventDefault();
+      props.stopEditing();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      props.stopEditing(true); // Cancel
+    }
+  };
+
+  return (
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        minHeight: '28px',
+        display: 'flex',
+        alignItems: 'stretch',
+        padding: '0px',
+        background: 'var(--bg-secondary, #181825)',
+        boxSizing: 'border-box',
+      }}
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+    >
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%',
+          height: '100%',
+          minHeight: '26px',
+          resize: 'none',
+          background: 'var(--bg-tertiary, #11111b)',
+          color: 'var(--text-primary, #cdd6f4)',
+          border: '1.5px solid var(--accent-primary, #89b4fa)',
+          borderRadius: '3px',
+          padding: '4px 6px',
+          fontFamily: 'inherit',
+          fontSize: '11.5px',
+          lineHeight: '1.4',
+          outline: 'none',
+          boxShadow: '0 0 0 2px rgba(137, 180, 250, 0.25)',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          boxSizing: 'border-box',
+        }}
+      />
+    </div>
+  );
+});
+MultilineCellEditor.displayName = 'MultilineCellEditor';
 
 const EditableHeader: React.FC<any> = (params) => {
   const displayName = params.displayName || params.displayNameGetter?.() || params.column?.getColDef()?.headerName || '';
@@ -154,6 +271,19 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
           onRename: renameColumn,
         },
         editable: true,
+        cellEditor: MultilineCellEditor,
+        suppressKeyboardEvent: (params) => {
+          if (params.editing) {
+            const event = params.event;
+            if (event.key === 'Enter' && (event.shiftKey || event.altKey)) {
+              return true; // Let editor handle Shift+Enter for newline
+            }
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) {
+              return true; // Let user navigate inside textarea
+            }
+          }
+          return false;
+        },
         sortable: !isPreviewMode,
         filter: !isPreviewMode,
         suppressHeaderMenuButton: isPreviewMode,
@@ -161,15 +291,14 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         autoHeight: true,
         headerClass: isColSelected ? 'ag-header-cell-selected' : '',
         cellStyle: (params): any => {
-          const isFocusedRow = params.node.rowIndex === focusedRowIndexRef.current;
           if (isColSelected) {
             return {
               backgroundColor: 'rgba(137, 180, 250, 0.18)',
               color: 'var(--text-primary)',
               borderLeft: '1px solid var(--accent-primary)',
               borderRight: '1px solid var(--accent-primary)',
-              whiteSpace: isFocusedRow ? 'pre-wrap' : 'nowrap',
-              wordBreak: isFocusedRow ? 'break-word' : 'normal',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
               opacity: 1,
               fontStyle: 'normal',
             };
@@ -185,8 +314,8 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
               color: '#f9e2af',
               opacity: 1,
               fontStyle: 'normal',
-              whiteSpace: isFocusedRow ? 'pre-wrap' : 'nowrap',
-              wordBreak: isFocusedRow ? 'break-word' : 'normal',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
             };
           }
           if (params.data?.isDraftRow) {
@@ -195,8 +324,8 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
               color: 'var(--text-secondary)',
               opacity: 0.6,
               fontStyle: 'italic',
-              whiteSpace: isFocusedRow ? 'pre-wrap' : 'nowrap',
-              wordBreak: isFocusedRow ? 'break-word' : 'normal',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
             };
           }
           return {
@@ -204,8 +333,8 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
             color: 'var(--text-primary)',
             opacity: 1,
             fontStyle: 'normal',
-            whiteSpace: isFocusedRow ? 'pre-wrap' : 'nowrap',
-            wordBreak: isFocusedRow ? 'break-word' : 'normal',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
           };
         },
       };
@@ -433,16 +562,27 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     ) => {
       if ((rowIndex === null && !directRowData) || !column) return;
 
-      // Commit in-progress edit before switching focus/selection
+      const colId = typeof column === 'string' ? column : (column.getColId ? column.getColId() : column.colId);
+
+      // Commit in-progress edit before switching focus/selection ONLY if clicking a DIFFERENT cell
       if (gridApiRef.current?.api) {
         const editingCells = gridApiRef.current.api.getEditingCells();
         if (editingCells && editingCells.length > 0) {
-          gridApiRef.current.api.stopEditing(false);
+          const isCurrentlyEditingThisCell = editingCells.some(
+            (ec: any) =>
+              ec.rowIndex === rowIndex &&
+              (ec.column.getColId ? ec.column.getColId() : (ec.column as any).colId) === colId
+          );
+          if (!isCurrentlyEditingThisCell) {
+            gridApiRef.current.api.stopEditing(false);
+          } else {
+            // Already editing this cell; user is clicking to position cursor / deselect text
+            return;
+          }
         }
       }
 
       if (rowIndex !== null) setFocusedRowIndex(rowIndex);
-      const colId = typeof column === 'string' ? column : (column.getColId ? column.getColId() : column.colId);
       const row =
         directRowData ||
         (rowIndex !== null
@@ -588,6 +728,21 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         return;
       }
 
+      // If currently editing this cell, do not interrupt editing
+      if (gridApiRef.current?.api) {
+        const editingCells = gridApiRef.current.api.getEditingCells();
+        if (editingCells && editingCells.length > 0) {
+          const isCurrentlyEditingThisCell = editingCells.some(
+            (ec: any) =>
+              ec.rowIndex === event.rowIndex &&
+              (ec.column.getColId ? ec.column.getColId() : (ec.column as any).colId) === colId
+          );
+          if (isCurrentlyEditingThisCell) {
+            return;
+          }
+        }
+      }
+
       const row =
         (event.api && typeof event.api.getDisplayedRowAtIndex === 'function'
           ? event.api.getDisplayedRowAtIndex(event.rowIndex)?.data
@@ -714,6 +869,19 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
           sortable: !isPreviewMode,
           filter: !isPreviewMode,
           editable: true,
+          cellEditor: MultilineCellEditor,
+          suppressKeyboardEvent: (params) => {
+            if (params.editing) {
+              const event = params.event;
+              if (event.key === 'Enter' && (event.shiftKey || event.altKey)) {
+                return true;
+              }
+              if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) {
+                return true;
+              }
+            }
+            return false;
+          },
           cellClassRules: {
             'litsift-cell-active': (params) =>
               selectedCells.some((c) => c.rowId === params.data?.id && c.field === params.colDef.field) ||
@@ -728,8 +896,8 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         rowDragManaged={true}
         suppressMoveWhenRowDragging={true}
         stopEditingWhenCellsLoseFocus={true}
-        enterNavigatesVerticallyAfterEdit={true}
-        enterNavigatesVertically={true}
+        enterNavigatesVerticallyAfterEdit={false}
+        enterNavigatesVertically={false}
         undoRedoCellEditing={true}
         undoRedoCellEditingLimit={20}
         onCellValueChanged={handleCellValueChanged}
