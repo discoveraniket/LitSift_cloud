@@ -90,4 +90,21 @@ describe('ArticleReaderView & CentralViewerPanel Merged Section Toolbar', () => 
     expect(screen.getByTitle('Next Section')).toBeInTheDocument();
     expect(screen.getByTitle('Previous Section')).toBeInTheDocument();
   });
+
+  it('renders Re-fetch Article button in ArticleReaderView', () => {
+    render(
+      <ArticleReaderView
+        paper={{
+          ...samplePaper,
+          doi: '10.1038/s41467-020-17849-0',
+        }}
+      />
+    );
+
+    const refetchBtn = screen.getByRole('button', { name: /Re-fetch Article/i });
+    expect(refetchBtn).toBeInTheDocument();
+
+    const quickRefreshBtn = screen.getByRole('button', { name: /Refresh/i });
+    expect(quickRefreshBtn).toBeInTheDocument();
+  });
 });

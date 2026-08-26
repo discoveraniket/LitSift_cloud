@@ -14,10 +14,14 @@ import {
   ShieldAlert,
   ArrowUpRight,
   Paperclip,
+  RefreshCw,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { PaperDocumentInfo, PaperTable } from '../../types/paper';
 import { useGridStore } from '../../store/useGridStore';
 import { usePdfStore } from '../../store/usePdfStore';
+import { resolvePaperByDoi, normalizeDoi } from '../../services/doiService';
 import {
   highlightArticleSnippet,
   clearActiveHighlights,
@@ -439,6 +443,74 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
     await attachPdfFile(file);
   };
 
+  // Re-query academic databases & registries (OpenAlex, Europe PMC, Unpaywall, Crossref)
+  const [isRefetching, setIsRefetching] = useState(false);
+  const [refetchStatus, setRefetchStatus] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null);
+
+  const handleRefetchArticle = async () => {
+    const rawDoi = paper.doi ? normalizeDoi(paper.doi) : '';
+    if (!rawDoi) {
+      setRefetchStatus({
+        message: 'No valid DOI associated with this paper to query academic registries.',
+        type: 'error',
+      });
+      setTimeout(() => setRefetchStatus(null), 5000);
+      return;
+    }
+
+    setIsRefetching(true);
+    setRefetchStatus({ message: `Querying academic registries for DOI: ${rawDoi}...`, type: 'info' });
+
+    try {
+      const resolved = await resolvePaperByDoi(rawDoi, (p) => {
+        setRefetchStatus({ message: p.message, type: 'info' });
+      });
+
+      const mergedUpdates: Partial<PaperDocumentInfo> = {
+        doi: resolved.doi || paper.doi,
+        pmcid: resolved.pmcid || paper.pmcid,
+        title: resolved.title || paper.title,
+        authors: resolved.authors && resolved.authors.length > 0 ? resolved.authors : paper.authors,
+        journal: resolved.journal || paper.journal,
+        year: resolved.year || paper.year,
+        citationCount: resolved.citationCount ?? paper.citationCount,
+        oaStatus: resolved.oaStatus && resolved.oaStatus !== 'unknown' ? resolved.oaStatus : paper.oaStatus,
+        abstractText: resolved.abstractText || paper.abstractText,
+        sections: resolved.sections && resolved.sections.length > 0 ? resolved.sections : paper.sections,
+        tables: resolved.tables && resolved.tables.length > 0 ? resolved.tables : paper.tables,
+        figures: resolved.figures && resolved.figures.length > 0 ? resolved.figures : paper.figures,
+        landingPageUrl: resolved.landingPageUrl || paper.landingPageUrl,
+        pdfDownloadUrl: resolved.pdfDownloadUrl || paper.pdfDownloadUrl,
+        sourceType: resolved.sections && resolved.sections.length > 0 ? 'doi_structured' : (paper.sourceType || 'doi_abstract_only'),
+      };
+
+      if (resolved.url && !paper.url) {
+        mergedUpdates.url = resolved.url;
+        mergedUpdates.file = resolved.file;
+        mergedUpdates.base64 = resolved.base64;
+      }
+
+      await updatePaperDocument(paper.id, mergedUpdates);
+
+      const sectionCount = mergedUpdates.sections?.length || 0;
+      const tableCount = mergedUpdates.tables?.length || 0;
+      setRefetchStatus({
+        message: `Article refreshed! ${sectionCount > 0 ? `${sectionCount} structured sections` : 'Metadata updated'}, ${tableCount} tables retrieved.`,
+        type: 'success',
+      });
+      setTimeout(() => setRefetchStatus(null), 5000);
+    } catch (err: any) {
+      console.error('Error re-fetching article:', err);
+      setRefetchStatus({
+        message: err.message || 'Failed to re-fetch article from academic registries.',
+        type: 'error',
+      });
+      setTimeout(() => setRefetchStatus(null), 6000);
+    } finally {
+      setIsRefetching(false);
+    }
+  };
+
   const hasRealPdf = Boolean(
     paper.url &&
     paper.url.trim().length > 0 &&
@@ -658,6 +730,31 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
               </a>
             )}
 
+            {/* Quick 1-Click Refresh Button */}
+            {paper.doi && (
+              <button
+                onClick={handleRefetchArticle}
+                disabled={isRefetching}
+                title="Re-query academic registries (OpenAlex, Europe PMC, Unpaywall, Crossref) for latest metadata & full-text"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: isRefetching ? 'rgba(137, 180, 250, 0.2)' : 'var(--bg-tertiary, #11111b)',
+                  color: 'var(--accent-primary, #89b4fa)',
+                  border: '1px solid var(--border-subtle, #313244)',
+                  padding: '3px 8px',
+                  borderRadius: '12px',
+                  fontSize: '11px',
+                  cursor: isRefetching ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <RefreshCw size={10} className={isRefetching ? 'spin-animation' : ''} />
+                <span>{isRefetching ? 'Refreshing...' : 'Refresh'}</span>
+              </button>
+            )}
+
             {/* Citation Count */}
             {paper.citationCount !== undefined && (
               <span
@@ -791,6 +888,30 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
               </span>
             )}
 
+            {/* Re-fetch Article from Academic Registries / Database Button */}
+            <button
+              onClick={handleRefetchArticle}
+              disabled={isRefetching}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: isRefetching ? 'rgba(137, 180, 250, 0.15)' : 'var(--bg-tertiary, #11111b)',
+                border: `1px solid ${isRefetching ? 'var(--accent-primary, #89b4fa)' : 'var(--border-subtle, #313244)'}`,
+                color: isRefetching ? 'var(--accent-primary, #89b4fa)' : 'var(--text-primary, #cdd6f4)',
+                borderRadius: '6px',
+                padding: '6px 12px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: isRefetching ? 'not-allowed' : 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              title="Re-query OpenAlex, Europe PMC, Unpaywall & Crossref to fetch full structured text, tables, and fresh metadata"
+            >
+              <RefreshCw size={14} className={isRefetching ? 'spin-animation' : ''} />
+              <span>{isRefetching ? 'Fetching...' : 'Re-fetch Article'}</span>
+            </button>
+
             {paper.pdfDownloadUrl && (
               <a
                 href={paper.pdfDownloadUrl}
@@ -837,6 +958,61 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
               </a>
             )}
           </div>
+
+          {/* Re-fetch Status Notification */}
+          {refetchStatus && (
+            <div
+              style={{
+                marginTop: '16px',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background:
+                  refetchStatus.type === 'error'
+                    ? 'rgba(243, 139, 168, 0.12)'
+                    : refetchStatus.type === 'success'
+                    ? 'rgba(166, 227, 161, 0.12)'
+                    : 'rgba(137, 180, 250, 0.12)',
+                border: `1px solid ${
+                  refetchStatus.type === 'error'
+                    ? 'rgba(243, 139, 168, 0.35)'
+                    : refetchStatus.type === 'success'
+                    ? 'rgba(166, 227, 161, 0.35)'
+                    : 'rgba(137, 180, 250, 0.35)'
+                }`,
+                color:
+                  refetchStatus.type === 'error'
+                    ? '#f38ba8'
+                    : refetchStatus.type === 'success'
+                    ? '#a6e3a1'
+                    : '#89b4fa',
+                animation: 'fadeIn 0.2s ease',
+              }}
+            >
+              {refetchStatus.type === 'info' && <Loader2 size={14} className="spin-animation" />}
+              {refetchStatus.type === 'success' && <Check size={14} />}
+              {refetchStatus.type === 'error' && <AlertCircle size={14} />}
+              <span style={{ flex: 1 }}>{refetchStatus.message}</span>
+              <button
+                onClick={() => setRefetchStatus(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'inherit',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  lineHeight: 1,
+                  padding: '2px 4px',
+                  opacity: 0.7,
+                }}
+              >
+                ×
+              </button>
+            </div>
+          )}
         </header>
 
         {/* Abstract Box */}
@@ -893,9 +1069,53 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
             <h3 style={{ fontSize: `${14 * fontSizeScale}px`, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px 0' }}>
               Have Institutional Access to the Full PDF?
             </h3>
-            <p style={{ fontSize: `${12 * fontSizeScale}px`, color: 'var(--text-muted, #6c7086)', margin: '0 0 12px 0' }}>
-              Only the abstract is available from open registries. Drag & drop the downloaded PDF here to enable the full PDF Viewer and visual chart extraction.
+            <p style={{ fontSize: `${12 * fontSizeScale}px`, color: 'var(--text-muted, #6c7086)', margin: '0 0 14px 0', maxWidth: '520px', marginLeft: 'auto', marginRight: 'auto' }}>
+              Only the abstract is available from open registries. Drag & drop the downloaded PDF here to enable the full PDF Viewer and visual chart extraction, or retry fetching from academic registries.
             </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px' }}>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'rgba(166, 227, 161, 0.12)',
+                  border: '1px solid rgba(166, 227, 161, 0.35)',
+                  color: 'var(--accent-success, #a6e3a1)',
+                  borderRadius: '6px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                <Paperclip size={13} />
+                <span>Attach Local PDF</span>
+              </button>
+
+              {paper.doi && (
+                <button
+                  onClick={handleRefetchArticle}
+                  disabled={isRefetching}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'var(--bg-primary, #1e1e2e)',
+                    border: '1px solid var(--border-subtle, #313244)',
+                    color: 'var(--text-primary, #cdd6f4)',
+                    borderRadius: '6px',
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    cursor: isRefetching ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <RefreshCw size={13} className={isRefetching ? 'spin-animation' : ''} />
+                  <span>{isRefetching ? 'Querying Registries...' : 'Retry Fetch from Open Registries'}</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
 
