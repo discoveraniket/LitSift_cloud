@@ -5,6 +5,7 @@ import { useGridStore } from '../../store/useGridStore';
 import { usePdfStore } from '../../store/usePdfStore';
 import { GridRow } from '../../types/grid';
 import { SchemaStarterCard } from './SchemaStarterCard';
+import { EmptyGridOverlay } from './EmptyGridOverlay';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 
@@ -868,25 +869,12 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     [updateCell]
   );
 
-  if (rowData.length === 0) {
-    return (
-      <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
-        {columns.length > 0 && (
-          <div style={{ height: '32px', flexShrink: 0, borderBottom: '1px solid var(--border-subtle, #313244)', background: 'var(--bg-secondary, #181825)', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '8px', fontSize: '11px', color: 'var(--text-secondary, #a6adc8)' }}>
-            <span style={{ fontWeight: 600, color: 'var(--accent-primary, #89b4fa)' }}>Active Schema:</span>
-            {columns.map((c) => (
-              <span key={c.field} style={{ background: 'var(--bg-primary, #1e1e2e)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle, #313244)' }}>
-                {c.headerName}
-              </span>
-            ))}
-          </div>
-        )}
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <SchemaStarterCard />
-        </div>
-      </div>
-    );
-  }
+  const NoRowsOverlay = useCallback(() => {
+    if (columns.length === 0) {
+      return <SchemaStarterCard />;
+    }
+    return <EmptyGridOverlay filterPdfId={filterPdfId} activePdfTitle={activePdfTitle} />;
+  }, [columns.length, filterPdfId, activePdfTitle]);
 
   return (
     <div className="ag-theme-quartz-dark" style={{ height: '100%', width: '100%' }}>
@@ -894,6 +882,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         rowData={rowData}
         getRowId={(params) => params.data.id}
         columnDefs={colDefs}
+        noRowsOverlayComponent={NoRowsOverlay}
         readOnlyEdit={true}
         onCellEditRequest={handleCellEditRequest}
         defaultColDef={{

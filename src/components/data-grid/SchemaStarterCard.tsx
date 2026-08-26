@@ -22,13 +22,12 @@ interface SchemaStarterCardProps {
 }
 
 export const SchemaStarterCard: React.FC<SchemaStarterCardProps> = ({ onOpenSettings }) => {
-  const { columns, rows, addColumn } = useGridStore();
+  const { columns, addColumn } = useGridStore();
   const activePdf = usePdfStore((state) => state.getActivePdf());
   const [customColInput, setCustomColInput] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
 
   const hasColumns = columns.length > 0;
-  const hasRows = rows.length > 0;
   const apiKey = getGeminiApiKey();
 
   const handleApplyPresetSchema = () => {
@@ -58,10 +57,6 @@ export const SchemaStarterCard: React.FC<SchemaStarterCardProps> = ({ onOpenSett
     }
     useAgentStore.getState().sendMessage('Extract all defined schema columns from the active paper and provide exact evidence citations.', activePdf?.name || 'Active Document');
   };
-
-  if (hasRows) {
-    return null;
-  }
 
   return (
     <div

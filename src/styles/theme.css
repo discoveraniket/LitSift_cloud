@@ -436,6 +436,13 @@ body {
   border-color: var(--border-subtle) !important;
 }
 
+/* AG Grid Header & Viewport */
+.ag-header {
+  z-index: 10 !important;
+  position: relative !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
 /* AG Grid Selected Row CSS Variables Reset (prevents default grey overlay) */
 .ag-theme-quartz-dark,
 .ag-theme-alpine-dark,
@@ -444,6 +451,42 @@ body {
   --ag-selected-row-background-color: rgba(137, 180, 250, 0.08) !important;
   --ag-internal-row-overlay-color: transparent !important;
   --ag-row-hover-color: rgba(137, 180, 250, 0.045) !important;
+}
+
+/* AG Grid Overlay (Empty Table View) - Never cover headers */
+.ag-overlay {
+  top: var(--ag-header-height, 32px) !important;
+  height: calc(100% - var(--ag-header-height, 32px)) !important;
+  pointer-events: none !important;
+  background: transparent !important;
+}
+
+.ag-overlay-wrapper {
+  background-color: transparent !important;
+  pointer-events: none !important;
+}
+
+.ag-overlay-panel {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  pointer-events: auto !important;
+}
+
+.ag-overlay-no-rows-center {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  pointer-events: auto !important;
 }
 
 .ag-root-wrapper .ag-row {

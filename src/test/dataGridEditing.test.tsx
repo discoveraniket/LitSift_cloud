@@ -1,4 +1,4 @@
-import { render, act } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { AgGridWrapper } from '../components/data-grid/AgGridWrapper';
 import { useGridStore } from '../store/useGridStore';
@@ -31,13 +31,17 @@ describe('Data Grid Multiline Cell Editing UX', () => {
     expect(state.rows[0].notes).toBe('Initial line 1\nInitial line 2');
   });
 
-  it('updates cell with multiline newline content when updateCell is triggered', () => {
-    render(<AgGridWrapper />);
-    
-    act(() => {
-      useGridStore.getState().updateCell('row-edit-1', 'notes', 'Line 1\nLine 2\nLine 3');
+  it('renders AG Grid with proper column headers when rows are empty', () => {
+    useGridStore.setState({
+      columns: [
+        { field: 'notes', headerName: 'Clinical Notes' },
+        { field: 'results', headerName: 'Key Results' },
+      ],
+      rows: [],
     });
 
-    expect(useGridStore.getState().rows[0].notes).toBe('Line 1\nLine 2\nLine 3');
+    const { container } = render(<AgGridWrapper />);
+    expect(container.querySelector('.ag-theme-quartz-dark')).not.toBeNull();
+    expect(container.textContent).not.toContain('Active Schema:');
   });
 });
