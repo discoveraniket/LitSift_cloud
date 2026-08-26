@@ -189,26 +189,37 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
             const row = state.rows.find((r: any) => r.id === targetRow.id);
             if (row) {
               row[targetField] = newValue;
+              if (colHeader && colHeader !== targetField) {
+                row[colHeader] = newValue;
+              }
               if (mode === 'human_in_loop') {
                 if (!row.pendingReviewFields) row.pendingReviewFields = [];
                 if (!row.pendingReviewFields.includes(targetField)) {
                   row.pendingReviewFields.push(targetField);
                 }
+                if (colHeader && !row.pendingReviewFields.includes(colHeader)) {
+                  row.pendingReviewFields.push(colHeader);
+                }
+                row.aiStatus = 'Pending Review';
               } else {
                 if (row.pendingReviewFields) {
-                  row.pendingReviewFields = row.pendingReviewFields.filter((f: string) => f !== targetField);
+                  row.pendingReviewFields = row.pendingReviewFields.filter((f: string) => f !== targetField && f !== colHeader);
                 }
               }
               if (!row.citationMap) row.citationMap = {};
-              row.citationMap[targetField] = {
+              const citObj = {
                 pageNumber: resolvedPage,
                 sectionName: resolvedSection,
                 snippetQuote: resolvedSnippet,
                 reasoning: resolvedReasoning,
                 confidence: 0.98,
               };
-              if (state.focusedCell?.rowId === row.id && state.focusedCell?.field === targetField) {
-                state.activeCitation = row.citationMap[targetField];
+              row.citationMap[targetField] = citObj;
+              if (colHeader) {
+                row.citationMap[colHeader] = citObj;
+              }
+              if (state.focusedCell?.rowId === row.id && (state.focusedCell?.field === targetField || state.focusedCell?.field === colHeader)) {
+                state.activeCitation = citObj;
               }
             }
           })
@@ -278,17 +289,31 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         logStore.addLog('info', `Executing atomic batchUpdateCells for ${updates.length} cell(s)`);
 
         // Execute batch update as single atomic store action with exactly 1 undo snapshot
+        const allCols = gridStore.columns;
         gridStore.batchUpdateCells(
-          updates.map((u: any) => ({
-            rowId: u.rowId || gridStore.focusedCell?.rowId || gridStore.rows[0]?.id,
-            field: u.field,
-            value: u.newValue !== undefined ? u.newValue : u.value,
-            reasoning: u.reasoning,
-            sectionName: u.sectionName,
-            pageNumber: u.pageNumber,
-            snippetQuote: u.snippetQuote,
-            isAiPending: _mode === 'human_in_loop',
-          }))
+          updates.map((u: any) => {
+            const cleanField = (u.field || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const targetCol = allCols.find(
+              (c) =>
+                c.field === u.field ||
+                c.headerName.toLowerCase() === (u.field || '').toLowerCase() ||
+                c.field.toLowerCase() === (u.field || '').toLowerCase() ||
+                c.field.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanField ||
+                c.headerName.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanField
+            );
+            const resolvedField = targetCol ? targetCol.field : u.field;
+
+            return {
+              rowId: u.rowId || gridStore.focusedCell?.rowId || gridStore.rows[0]?.id,
+              field: resolvedField,
+              value: u.newValue !== undefined ? u.newValue : u.value,
+              reasoning: u.reasoning,
+              sectionName: u.sectionName,
+              pageNumber: u.pageNumber,
+              snippetQuote: u.snippetQuote,
+              isAiPending: _mode === 'human_in_loop',
+            };
+          })
         );
 
         logStore.addLog('success', `Batch update complete: ${updates.length} cells updated atomically`);
@@ -1433,7 +1458,13 @@ export function getToolsForMode(_mode: AgentExecutionMode = 'human_in_loop') {
     // Dynamically inject active column fields as an enum for single-cell operations
     if (tool.name === 'updateCell' && activeFields.length > 0 && parameters.properties?.field) {
       parameters.properties.field.enum = activeFields;
-      parameters.properties.field.description = `Target column field key. Must be one of: ${activeFields.join(', ')}`;
+      parameters.properties.field.description = `Target column field key. Must be one of: ${activeFields.join(', ')}. Columns: ${activeCols.map((c) => `${c.field} ("${c.headerName}")`).join(', ')}`;
+    }
+
+    // Dynamically inject active column fields as an enum for batch operations
+    if (tool.name === 'batchUpdateCells' && activeFields.length > 0 && parameters.properties?.updates?.items?.properties?.field) {
+      parameters.properties.updates.items.properties.field.enum = activeFields;
+      parameters.properties.updates.items.properties.field.description = `Target column field key. Must be one of: ${activeFields.join(', ')}. Columns: ${activeCols.map((c) => `${c.field} ("${c.headerName}")`).join(', ')}`;
     }
 
     return {

@@ -84,10 +84,27 @@ export const useGridStore = create<GridState>((set) => ({
         saveSnapshot(state);
         const row = state.rows.find((r) => r.id === rowId);
         if (row) {
-          row[field] = value;
+          const cleanField = (field || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const matchingCol = state.columns.find(
+            (c) =>
+              c.field === field ||
+              c.headerName.toLowerCase() === (field || '').toLowerCase() ||
+              c.field.toLowerCase() === (field || '').toLowerCase() ||
+              c.field.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanField ||
+              c.headerName.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanField
+          );
+          const targetField = matchingCol ? matchingCol.field : field;
+
+          row[targetField] = value;
+          if (matchingCol && matchingCol.headerName !== targetField) {
+            row[matchingCol.headerName] = value;
+          }
+
           // Clear pending review flag for this specific field if it was edited
           if (row.pendingReviewFields) {
-            row.pendingReviewFields = row.pendingReviewFields.filter((f) => f !== field);
+            row.pendingReviewFields = row.pendingReviewFields.filter(
+              (f) => f !== targetField && f !== field && (!matchingCol || f !== matchingCol.headerName)
+            );
           }
           if (row.isDraftRow) {
             row.isDraftRow = false;
@@ -122,15 +139,36 @@ export const useGridStore = create<GridState>((set) => ({
         updates.forEach((u) => {
           const row = state.rows.find((r) => r.id === u.rowId);
           if (row) {
-            row[u.field] = u.value;
+            const cleanUField = (u.field || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const matchingCol = state.columns.find(
+              (c) =>
+                c.field === u.field ||
+                c.headerName.toLowerCase() === (u.field || '').toLowerCase() ||
+                c.field.toLowerCase() === (u.field || '').toLowerCase() ||
+                c.field.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanUField ||
+                c.headerName.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanUField
+            );
+            const targetField = matchingCol ? matchingCol.field : u.field;
+
+            row[targetField] = u.value;
+            if (matchingCol && matchingCol.headerName !== targetField) {
+              row[matchingCol.headerName] = u.value;
+            }
+
             if (u.isAiPending) {
               if (!row.pendingReviewFields) row.pendingReviewFields = [];
-              if (!row.pendingReviewFields.includes(u.field)) {
-                row.pendingReviewFields.push(u.field);
+              if (!row.pendingReviewFields.includes(targetField)) {
+                row.pendingReviewFields.push(targetField);
               }
+              if (matchingCol && matchingCol.headerName && !row.pendingReviewFields.includes(matchingCol.headerName)) {
+                row.pendingReviewFields.push(matchingCol.headerName);
+              }
+              row.aiStatus = 'Pending Review';
             } else {
               if (row.pendingReviewFields) {
-                row.pendingReviewFields = row.pendingReviewFields.filter((f) => f !== u.field);
+                row.pendingReviewFields = row.pendingReviewFields.filter(
+                  (f) => f !== targetField && f !== u.field && (!matchingCol || f !== matchingCol.headerName)
+                );
               }
               if (!row.pendingReviewFields || row.pendingReviewFields.length === 0) {
                 row.aiStatus = 'Confirmed';
@@ -138,13 +176,17 @@ export const useGridStore = create<GridState>((set) => ({
             }
             if (u.reasoning || u.snippetQuote || u.sectionName || u.pageNumber) {
               if (!row.citationMap) row.citationMap = {};
-              row.citationMap[u.field] = {
+              const citObj = {
                 pageNumber: Number(u.pageNumber) || 1,
                 sectionName: u.sectionName || 'Updated Field',
                 snippetQuote: u.snippetQuote || String(u.value),
                 reasoning: u.reasoning || `Updated value "${u.value}"`,
                 confidence: 0.95,
               };
+              row.citationMap[targetField] = citObj;
+              if (matchingCol) {
+                row.citationMap[matchingCol.headerName] = citObj;
+              }
             }
           }
         });

@@ -257,6 +257,22 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     return rows; // Master view shows all
   }, [rows, filterPdfId, activePdfTitle]);
 
+  const isFieldPending = useCallback((row: any, colField?: string, headerName?: string) => {
+    if (!row || !colField) return false;
+    if (row.aiStatus === 'Pending Review' && (!row.pendingReviewFields || row.pendingReviewFields.length === 0)) {
+      return true;
+    }
+    const list: string[] = row.pendingReviewFields || [];
+    if (list.includes(colField)) return true;
+    if (headerName && list.includes(headerName)) return true;
+    const cleanCol = colField.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanHeader = headerName ? headerName.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+    return list.some((f) => {
+      const cleanF = f.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return cleanF === cleanCol || (cleanHeader !== '' && cleanF === cleanHeader);
+    });
+  }, []);
+
   // Construct AG Grid column definitions using stable headerComponent reference
   const colDefs = useMemo<ColDef<GridRow>[]>(() => {
     const dynamicCols: ColDef<GridRow>[] = columns.map((col) => {
@@ -264,6 +280,26 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
       return {
         field: col.field,
         headerName: col.headerName,
+        valueGetter: (params) => {
+          if (!params.data) return '';
+          if (params.data[col.field] !== undefined && params.data[col.field] !== null && params.data[col.field] !== '') {
+            return params.data[col.field];
+          }
+          if (params.data[col.headerName] !== undefined && params.data[col.headerName] !== null && params.data[col.headerName] !== '') {
+            return params.data[col.headerName];
+          }
+          const cleanCol = col.field.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const cleanHeader = col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '');
+          for (const [k, v] of Object.entries(params.data)) {
+            if (v !== undefined && v !== null && v !== '') {
+              const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (cleanK === cleanCol || (cleanHeader !== '' && cleanK === cleanHeader)) {
+                return v;
+              }
+            }
+          }
+          return params.data[col.field] ?? '';
+        },
         headerComponent: EditableHeader,
         headerComponentParams: {
           displayName: col.headerName,
@@ -303,10 +339,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
               fontStyle: 'normal',
             };
           }
-          const isCellPending =
-            params.data?.pendingReviewFields?.includes(col.field) ||
-            (params.data?.aiStatus === 'Pending Review' &&
-              (!params.data?.pendingReviewFields || params.data.pendingReviewFields.length === 0));
+          const isCellPending = isFieldPending(params.data, col.field, col.headerName);
 
           if (isCellPending) {
             return {
@@ -888,8 +921,9 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
               (!!focusedCell && params.data?.id === focusedCell.rowId && params.colDef.field === focusedCell.field),
             'cell-pending-review': (params) => {
               const field = params.colDef.field;
+              const header = params.colDef.headerName;
               if (!field || !params.data) return false;
-              return Boolean(params.data.pendingReviewFields?.includes(field));
+              return isFieldPending(params.data, field, header);
             },
           },
         }}
