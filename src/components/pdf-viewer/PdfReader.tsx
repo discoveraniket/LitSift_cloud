@@ -276,7 +276,7 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>(({ pdfUrl, zoo
     setError(null);
 
     const loadPdf = async () => {
-      if (typeof window !== 'undefined' && navigator.userAgent.includes('jsdom')) {
+      if (typeof window !== 'undefined' && (navigator.userAgent.includes('jsdom') || process.env.NODE_ENV === 'test')) {
         if (!isMounted) return;
         setNumPages(1);
         setLoading(false);

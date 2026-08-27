@@ -17,6 +17,13 @@ import {
   RefreshCw,
   AlertCircle,
   Loader2,
+  ChevronRight,
+  ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  X,
+  Layers,
 } from 'lucide-react';
 import { PaperDocumentInfo, PaperTable } from '../../types/paper';
 import { useGridStore } from '../../store/useGridStore';
@@ -44,6 +51,23 @@ export interface ArticleReaderViewProps {
   fontSizeScale?: number;
   onMatchCountChange?: (current: number, total: number) => void;
   onActiveSectionChange?: (info: { id: string; title: string; index: number; total: number }) => void;
+}
+
+export interface OutlineChildItem {
+  id: string;
+  domId: string;
+  fullTitle: string;
+  displayTitle: string;
+  type: 'abstract' | 'section' | 'tables' | 'figures';
+}
+
+export interface OutlineGroup {
+  id: string;
+  groupTitle: string;
+  domId: string;
+  isGroup: boolean;
+  type: 'abstract' | 'section' | 'tables' | 'figures';
+  children: OutlineChildItem[];
 }
 
 export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderViewProps>(({
@@ -74,9 +98,167 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
     return list;
   }, [paper.abstractText, sections, tables, figures]);
 
+  // Hierarchical Outline Grouping (Group sections with ' > ' or ' / ' under parent headers)
+  const hierarchicalGroups = useMemo(() => {
+    const groups: OutlineGroup[] = [];
+
+    // 1. Abstract
+    if (paper.abstractText) {
+      groups.push({
+        id: 'group-abstract',
+        groupTitle: 'Abstract',
+        domId: 'sec-abstract',
+        isGroup: false,
+        type: 'abstract',
+        children: [
+          {
+            id: 'abstract',
+            domId: 'sec-abstract',
+            fullTitle: 'Abstract',
+            displayTitle: 'Abstract',
+            type: 'abstract',
+          },
+        ],
+      });
+    }
+
+    // 2. Sections grouping
+    const currentGroupMap: Record<string, OutlineGroup> = {};
+
+    sections.forEach((sec, secIdx) => {
+      const rawTitle = (sec.title || `Section ${secIdx + 1}`).trim();
+      const hasDelimiter = rawTitle.includes(' > ') || rawTitle.includes(' / ');
+
+      if (hasDelimiter) {
+        const parts = rawTitle.split(/\s*(?:>|\/)\s*/);
+        const parentTitle = parts[0].trim();
+        const childTitle = parts.slice(1).join(' > ').trim();
+        const groupKey = parentTitle.toLowerCase();
+
+        if (!currentGroupMap[groupKey]) {
+          const newGroup: OutlineGroup = {
+            id: `group-${sec.id}`,
+            groupTitle: parentTitle,
+            domId: `sec-${sec.id}`,
+            isGroup: true,
+            type: 'section',
+            children: [],
+          };
+          currentGroupMap[groupKey] = newGroup;
+          groups.push(newGroup);
+        }
+
+        currentGroupMap[groupKey].children.push({
+          id: sec.id,
+          domId: `sec-${sec.id}`,
+          fullTitle: rawTitle,
+          displayTitle: childTitle || rawTitle,
+          type: 'section',
+        });
+      } else if (sec.subsections && sec.subsections.length > 0) {
+        const newGroup: OutlineGroup = {
+          id: `group-${sec.id}`,
+          groupTitle: rawTitle,
+          domId: `sec-${sec.id}`,
+          isGroup: true,
+          type: 'section',
+          children: [
+            {
+              id: sec.id,
+              domId: `sec-${sec.id}`,
+              fullTitle: rawTitle,
+              displayTitle: 'Overview',
+              type: 'section',
+            },
+            ...sec.subsections.map((sub) => ({
+              id: sub.id,
+              domId: `sec-${sub.id}`,
+              fullTitle: `${rawTitle} > ${sub.title}`,
+              displayTitle: sub.title,
+              type: 'section' as const,
+            })),
+          ],
+        };
+        groups.push(newGroup);
+      } else {
+        // Standalone section
+        groups.push({
+          id: `group-${sec.id}`,
+          groupTitle: rawTitle,
+          domId: `sec-${sec.id}`,
+          isGroup: false,
+          type: 'section',
+          children: [
+            {
+              id: sec.id,
+              domId: `sec-${sec.id}`,
+              fullTitle: rawTitle,
+              displayTitle: rawTitle,
+              type: 'section',
+            },
+          ],
+        });
+      }
+    });
+
+    // 3. Tables
+    if (tables.length > 0) {
+      groups.push({
+        id: 'group-tables',
+        groupTitle: `Tables & Datasets (${tables.length})`,
+        domId: 'sec-tables',
+        isGroup: false,
+        type: 'tables',
+        children: [
+          {
+            id: 'tables',
+            domId: 'sec-tables',
+            fullTitle: `Tables & Datasets (${tables.length})`,
+            displayTitle: `Tables & Datasets (${tables.length})`,
+            type: 'tables',
+          },
+        ],
+      });
+    }
+
+    // 4. Figures
+    if (figures.length > 0) {
+      groups.push({
+        id: 'group-figures',
+        groupTitle: `Figures & Visuals (${figures.length})`,
+        domId: 'sec-figures',
+        isGroup: false,
+        type: 'figures',
+        children: [
+          {
+            id: 'figures',
+            domId: 'sec-figures',
+            fullTitle: `Figures & Visuals (${figures.length})`,
+            displayTitle: `Figures & Visuals (${figures.length})`,
+            type: 'figures',
+          },
+        ],
+      });
+    }
+
+    return groups;
+  }, [paper.abstractText, sections, tables, figures]);
+
   const [activeSectionId, setActiveSectionId] = useState<string>(() => sectionItems[0]?.id || 'abstract');
   const [copiedTableId, setCopiedTableId] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // Outline UI States: Filter, Collapsible Groups, Resizing, and Panel Collapse
+  const [outlineFilter, setOutlineFilter] = useState('');
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [outlineWidth, setOutlineWidth] = useState<number>(() => {
+    const saved = localStorage.getItem('LITSIFT_OUTLINE_WIDTH');
+    return saved ? Math.min(480, Math.max(180, Number(saved))) : 260;
+  });
+  const [isOutlineCollapsed, setIsOutlineCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('LITSIFT_OUTLINE_COLLAPSED') === 'true';
+  });
+  const [isResizing, setIsResizing] = useState(false);
 
   const mainContainerRef = useRef<HTMLElement>(null);
   const searchMatchesRef = useRef<HTMLElement[]>([]);
@@ -87,6 +269,78 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
   const { updatePaperDocument } = usePdfStore();
 
   const currentSectionIndex = sectionItems.findIndex((s) => s.id === activeSectionId);
+
+  // Filtered Groups for Search
+  const filteredGroups = useMemo(() => {
+    const q = outlineFilter.trim().toLowerCase();
+    if (!q) return hierarchicalGroups;
+
+    return hierarchicalGroups
+      .map((grp) => {
+        const matchesGroupTitle = grp.groupTitle.toLowerCase().includes(q);
+        const matchingChildren = grp.children.filter(
+          (c) =>
+            c.displayTitle.toLowerCase().includes(q) ||
+            c.fullTitle.toLowerCase().includes(q)
+        );
+
+        if (matchesGroupTitle) {
+          return grp;
+        }
+
+        if (matchingChildren.length > 0) {
+          return {
+            ...grp,
+            children: matchingChildren,
+          };
+        }
+
+        return null;
+      })
+      .filter((g): g is OutlineGroup => g !== null);
+  }, [hierarchicalGroups, outlineFilter]);
+
+  const toggleGroupCollapse = (groupId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCollapsedGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
+  };
+
+  const handleMouseDownResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    const startX = e.clientX;
+    const startWidth = outlineWidth;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const newWidth = Math.min(480, Math.max(180, startWidth + delta));
+      setOutlineWidth(newWidth);
+      localStorage.setItem('LITSIFT_OUTLINE_WIDTH', String(newWidth));
+    };
+
+    const onMouseUp = () => {
+      setIsResizing(false);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  // Auto-expand parent group when active section is inside a collapsed group
+  useEffect(() => {
+    if (!activeSectionId) return;
+    const parentGroup = hierarchicalGroups.find((g) =>
+      g.isGroup && g.children.some((c) => c.id === activeSectionId)
+    );
+    if (parentGroup && collapsedGroups[parentGroup.id]) {
+      setCollapsedGroups((prev) => ({ ...prev, [parentGroup.id]: false }));
+    }
+  }, [activeSectionId, hierarchicalGroups]);
 
   // ScrollSpy: Track the active section dynamically as user scrolls the reading area
   useEffect(() => {
@@ -568,88 +822,450 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
         </div>
       )}
 
-      {/* Sticky Left Navigation Outline with Active Highlight */}
-      <nav
-        style={{
-          width: '240px',
-          borderRight: '1px solid var(--border-subtle, #313244)',
-          background: 'var(--bg-secondary, #181825)',
-          padding: '16px 10px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '3px',
-          overflowY: 'auto',
-          flexShrink: 0,
-        }}
-      >
-        <div
+      {/* Sticky Left Navigation Outline (Resizable, Collapsible, Hierarchical) */}
+      {!isOutlineCollapsed && (
+        <nav
           style={{
-            fontSize: '11px',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            color: 'var(--text-muted, #6c7086)',
-            letterSpacing: '0.05em',
-            marginBottom: '8px',
-            paddingLeft: '8px',
+            width: `${outlineWidth}px`,
+            borderRight: '1px solid var(--border-subtle, #313244)',
+            background: 'var(--bg-secondary, #181825)',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
+            flexDirection: 'column',
+            flexShrink: 0,
+            position: 'relative',
+            userSelect: isResizing ? 'none' : 'auto',
           }}
         >
-          <span>Document Outline</span>
-          <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500 }}>
-            {sectionItems.length} sections
-          </span>
-        </div>
+          {/* Resize Drag Splitter */}
+          <div
+            onMouseDown={handleMouseDownResize}
+            title="Drag to resize Document Outline"
+            style={{
+              position: 'absolute',
+              right: '-3px',
+              top: 0,
+              bottom: 0,
+              width: '6px',
+              cursor: 'col-resize',
+              zIndex: 30,
+              background: isResizing ? 'var(--accent-primary, #89b4fa)' : 'transparent',
+              transition: 'background 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (!isResizing) e.currentTarget.style.background = 'rgba(137, 180, 250, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              if (!isResizing) e.currentTarget.style.background = 'transparent';
+            }}
+          />
 
-        {sectionItems.map((item) => {
-          const isActive = activeSectionId === item.id;
-          return (
+          {/* Outline Header with Total Count and Collapse Button */}
+          <div
+            style={{
+              padding: '12px 10px 8px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderBottom: '1px solid var(--border-subtle, #313244)',
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+              <Layers size={13} color="var(--accent-primary, #89b4fa)" style={{ flexShrink: 0 }} />
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  color: 'var(--text-primary, #cdd6f4)',
+                  letterSpacing: '0.05em',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Document Outline
+              </span>
+              <span
+                style={{
+                  fontSize: '9.5px',
+                  color: 'var(--text-muted, #6c7086)',
+                  fontWeight: 600,
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  padding: '1px 5px',
+                  borderRadius: '10px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {sectionItems.length} sections
+              </span>
+            </div>
+
             <button
-              key={item.id}
+              type="button"
               onClick={() => {
-                setActiveSectionId(item.id);
-                document.getElementById(item.domId)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+                setIsOutlineCollapsed(true);
+                localStorage.setItem('LITSIFT_OUTLINE_COLLAPSED', 'true');
               }}
+              title="Collapse Document Outline"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted, #6c7086)',
+                cursor: 'pointer',
+                padding: '3px',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = 'var(--text-primary, #cdd6f4)';
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'var(--text-muted, #6c7086)';
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <PanelLeftClose size={14} />
+            </button>
+          </div>
+
+          {/* Section Search / Filter Bar */}
+          <div style={{ padding: '8px 10px', borderBottom: '1px solid rgba(255, 255, 255, 0.04)', flexShrink: 0 }}>
+            <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                padding: '6px 10px',
-                borderRadius: '6px',
-                border: 'none',
-                borderLeft: isActive ? '3px solid var(--accent-primary, #89b4fa)' : '3px solid transparent',
-                background: isActive ? 'rgba(137, 180, 250, 0.16)' : 'transparent',
-                color: isActive ? 'var(--accent-primary, #89b4fa)' : 'var(--text-secondary, #a6adc8)',
-                boxShadow: isActive ? 'inset 0 0 8px rgba(137, 180, 250, 0.08)' : 'none',
-                fontSize: '12px',
-                fontWeight: isActive ? 600 : 500,
-                textAlign: 'left',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                gap: '6px',
+                background: 'var(--bg-tertiary, #11111b)',
+                border: '1px solid var(--border-subtle, #313244)',
+                borderRadius: '5px',
+                padding: '3px 8px',
               }}
-              title={item.title}
             >
-              {item.type === 'abstract' && (
-                <FileText size={14} style={{ flexShrink: 0, color: isActive ? 'var(--accent-primary, #89b4fa)' : 'inherit' }} />
+              <Search size={11} color="var(--text-muted, #6c7086)" />
+              <input
+                type="text"
+                value={outlineFilter}
+                onChange={(e) => setOutlineFilter(e.target.value)}
+                placeholder="Filter outline..."
+                style={{
+                  width: '100%',
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  fontSize: '11px',
+                  color: 'var(--text-primary, #cdd6f4)',
+                }}
+              />
+              {outlineFilter && (
+                <button
+                  type="button"
+                  onClick={() => setOutlineFilter('')}
+                  title="Clear filter"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted, #6c7086)',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  <X size={10} />
+                </button>
               )}
-              {item.type === 'section' && (
-                <BookOpen size={14} style={{ flexShrink: 0, color: isActive ? 'var(--accent-primary, #89b4fa)' : 'inherit' }} />
-              )}
-              {item.type === 'tables' && (
-                <TableIcon size={14} style={{ flexShrink: 0, color: isActive ? 'var(--accent-primary, #89b4fa)' : 'inherit' }} />
-              )}
-              {item.type === 'figures' && (
-                <ImageIcon size={14} style={{ flexShrink: 0, color: isActive ? 'var(--accent-primary, #89b4fa)' : 'inherit' }} />
-              )}
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</span>
-            </button>
-          );
-        })}
-      </nav>
+            </div>
+          </div>
+
+          {/* Outline Items Tree List */}
+          <div
+            style={{
+              padding: '8px 6px',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px',
+              flex: 1,
+            }}
+          >
+            {filteredGroups.length === 0 ? (
+              <div style={{ padding: '16px 8px', textAlign: 'center', color: 'var(--text-muted, #6c7086)', fontSize: '11px' }}>
+                No matching sections found.
+              </div>
+            ) : (
+              filteredGroups.map((group) => {
+                if (!group.isGroup) {
+                  // Single Standalone Item (Abstract, Tables, Figures, Simple Top-Level)
+                  const item = group.children[0];
+                  if (!item) return null;
+                  const isActive = activeSectionId === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveSectionId(item.id);
+                        document.getElementById(item.domId)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '6px 8px',
+                        borderRadius: '5px',
+                        border: 'none',
+                        borderLeft: isActive ? '3px solid var(--accent-primary, #89b4fa)' : '3px solid transparent',
+                        background: isActive ? 'rgba(137, 180, 250, 0.16)' : 'transparent',
+                        color: isActive ? 'var(--accent-primary, #89b4fa)' : 'var(--text-secondary, #a6adc8)',
+                        boxShadow: isActive ? 'inset 0 0 8px rgba(137, 180, 250, 0.08)' : 'none',
+                        fontSize: '11.5px',
+                        fontWeight: isActive ? 600 : 500,
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        width: '100%',
+                      }}
+                      title={item.fullTitle}
+                    >
+                      {item.type === 'abstract' && (
+                        <FileText size={13} style={{ flexShrink: 0, color: isActive ? 'var(--accent-primary, #89b4fa)' : 'inherit' }} />
+                      )}
+                      {item.type === 'section' && (
+                        <BookOpen size={13} style={{ flexShrink: 0, color: isActive ? 'var(--accent-primary, #89b4fa)' : 'inherit' }} />
+                      )}
+                      {item.type === 'tables' && (
+                        <TableIcon size={13} style={{ flexShrink: 0, color: isActive ? 'var(--accent-primary, #89b4fa)' : 'inherit' }} />
+                      )}
+                      {item.type === 'figures' && (
+                        <ImageIcon size={13} style={{ flexShrink: 0, color: isActive ? 'var(--accent-primary, #89b4fa)' : 'inherit' }} />
+                      )}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.displayTitle}</span>
+                    </button>
+                  );
+                }
+
+                // Hierarchical Group with Subsections (e.g., MATERIALS AND METHODS (12), RESULTS (5))
+                const isCollapsed = Boolean(collapsedGroups[group.id] && !outlineFilter);
+                const hasActiveChild = group.children.some((c) => c.id === activeSectionId);
+
+                return (
+                  <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginBottom: '2px' }}>
+                    {/* Parent Group Header */}
+                    <div
+                      onClick={() => {
+                        const firstChild = group.children[0];
+                        if (firstChild) {
+                          setActiveSectionId(firstChild.id);
+                          document.getElementById(firstChild.domId)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '5px 6px 5px 4px',
+                        borderRadius: '5px',
+                        cursor: 'pointer',
+                        background: hasActiveChild ? 'rgba(137, 180, 250, 0.08)' : 'transparent',
+                        color: hasActiveChild ? 'var(--text-primary, #cdd6f4)' : 'var(--text-secondary, #a6adc8)',
+                        transition: 'all 0.15s ease',
+                      }}
+                      title={group.groupTitle}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden' }}>
+                        <button
+                          type="button"
+                          onClick={(e) => toggleGroupCollapse(group.id, e)}
+                          title={isCollapsed ? 'Expand section group' : 'Collapse section group'}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-muted, #6c7086)',
+                            cursor: 'pointer',
+                            padding: '2px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                        </button>
+                        <BookOpen size={12} color="var(--accent-secondary, #cba6f7)" style={{ flexShrink: 0 }} />
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            letterSpacing: '0.02em',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {group.groupTitle}
+                        </span>
+                      </div>
+
+                      <span
+                        style={{
+                          fontSize: '9px',
+                          color: 'var(--text-muted, #6c7086)',
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          padding: '1px 5px',
+                          borderRadius: '8px',
+                          fontWeight: 600,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {group.children.length}
+                      </span>
+                    </div>
+
+                    {/* Nested Subsections (With clean, un-prefixed titles) */}
+                    {!isCollapsed && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '1px',
+                          paddingLeft: '14px',
+                          marginLeft: '9px',
+                          borderLeft: '1px solid rgba(255, 255, 255, 0.07)',
+                        }}
+                      >
+                        {group.children.map((child) => {
+                          const isChildActive = activeSectionId === child.id;
+                          return (
+                            <button
+                              key={child.id}
+                              onClick={() => {
+                                setActiveSectionId(child.id);
+                                document.getElementById(child.domId)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '4.5px 8px',
+                                borderRadius: '4px',
+                                border: 'none',
+                                borderLeft: isChildActive ? '2.5px solid var(--accent-primary, #89b4fa)' : '2.5px solid transparent',
+                                background: isChildActive ? 'rgba(137, 180, 250, 0.16)' : 'transparent',
+                                color: isChildActive ? 'var(--accent-primary, #89b4fa)' : 'var(--text-secondary, #a6adc8)',
+                                fontSize: '11px',
+                                fontWeight: isChildActive ? 600 : 400,
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                width: '100%',
+                              }}
+                              title={child.fullTitle}
+                            >
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{child.displayTitle}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </nav>
+      )}
+
+      {/* Collapsed State: Sleek Docked Mini-Sidebar Rail */}
+      {isOutlineCollapsed && (
+        <aside
+          onClick={() => {
+            setIsOutlineCollapsed(false);
+            localStorage.setItem('LITSIFT_OUTLINE_COLLAPSED', 'false');
+          }}
+          title={`Click to expand Document Outline (${sectionItems.length} sections)`}
+          style={{
+            width: '38px',
+            borderRight: '1px solid var(--border-subtle, #313244)',
+            background: 'var(--bg-secondary, #181825)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            padding: '12px 0',
+            gap: '12px',
+            flexShrink: 0,
+            cursor: 'pointer',
+            userSelect: 'none',
+            transition: 'background 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'var(--bg-secondary, #181825)';
+          }}
+        >
+          <button
+            type="button"
+            title="Expand Document Outline"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOutlineCollapsed(false);
+              localStorage.setItem('LITSIFT_OUTLINE_COLLAPSED', 'false');
+            }}
+            style={{
+              background: 'rgba(137, 180, 250, 0.12)',
+              border: '1px solid rgba(137, 180, 250, 0.25)',
+              color: 'var(--accent-primary, #89b4fa)',
+              cursor: 'pointer',
+              padding: '6px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <PanelLeftOpen size={15} />
+          </button>
+
+          {/* Vertical Title & Section Count */}
+          <div
+            style={{
+              writingMode: 'vertical-rl',
+              transform: 'rotate(180deg)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '10px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              color: 'var(--text-muted, #6c7086)',
+              marginTop: '6px',
+            }}
+          >
+            <span>Outline</span>
+            <span
+              style={{
+                fontSize: '9px',
+                background: 'rgba(255, 255, 255, 0.06)',
+                color: 'var(--text-secondary, #a6adc8)',
+                padding: '2px 4px',
+                borderRadius: '8px',
+                transform: 'rotate(90deg)',
+                fontWeight: 600,
+              }}
+            >
+              {sectionItems.length}
+            </span>
+          </div>
+        </aside>
+      )}
 
       {/* Main Reading Area */}
       <main
@@ -666,6 +1282,7 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
           position: 'relative',
         }}
       >
+
         {/* Paper Header Hero */}
         <header style={{ marginBottom: '32px', borderBottom: '1px solid var(--border-subtle, #313244)', paddingBottom: '24px' }}>
           {/* Metadata Badges */}

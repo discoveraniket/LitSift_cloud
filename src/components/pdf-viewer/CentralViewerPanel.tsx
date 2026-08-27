@@ -50,7 +50,6 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
   const [readerFontSizeScale, setReaderFontSizeScale] = useState<number>(1.0);
   const [viewMode, setViewMode] = useState<'pdf' | 'reader'>('pdf');
   const [isPillCollapsed, setIsPillCollapsed] = useState(false);
-  const [activeSectionInfo, setActiveSectionInfo] = useState<{ id: string; title: string; index: number; total: number } | null>(null);
 
   const pdfs = usePdfStore((state) => state.pdfs);
 
@@ -73,11 +72,6 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
 
   // Target PDF ID can come from activeTab or activePdfId prop
   const targetPdfId = (activeTab?.type === 'pdf' && activeTab.pdfId) ? activeTab.pdfId : activePdfId;
-
-  // Reset active section info when switching paper
-  useEffect(() => {
-    setActiveSectionInfo(null);
-  }, [targetPdfId]);
 
   // Retrieve matching paper document from usePdfStore
   const foundPdf = pdfs.find((p) => p.id === targetPdfId || p.name === activePdfTitle);
@@ -510,86 +504,6 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
                 </button>
               </div>
 
-              {/* Merged Active Section Indicator & Controls (Reader Mode) */}
-              {viewMode === 'reader' && activeSectionInfo && activeSectionInfo.total > 0 && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    background: 'rgba(0, 0, 0, 0.35)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '16px',
-                    padding: '2px 8px',
-                    maxWidth: '240px',
-                  }}
-                  title={`Section: ${activeSectionInfo.title} (${activeSectionInfo.index + 1} of ${activeSectionInfo.total})`}
-                >
-                  <BookOpen size={11} color="var(--accent-primary, #89b4fa)" style={{ flexShrink: 0 }} />
-                  <span
-                    onClick={() => articleReaderRef.current?.goToSection(activeSectionInfo.id)}
-                    style={{
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      color: 'var(--text-primary, #cdd6f4)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      maxWidth: '120px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {activeSectionInfo.title}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: '9.5px',
-                      color: 'var(--text-muted, #6c7086)',
-                      fontWeight: 500,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {activeSectionInfo.index + 1}/{activeSectionInfo.total}
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1px', flexShrink: 0 }}>
-                    <button
-                      onClick={() => articleReaderRef.current?.prevSection()}
-                      disabled={activeSectionInfo.index <= 0}
-                      title="Previous Section"
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: activeSectionInfo.index <= 0 ? 'var(--text-muted, #585b70)' : 'var(--text-secondary, #a6adc8)',
-                        cursor: activeSectionInfo.index <= 0 ? 'not-allowed' : 'pointer',
-                        padding: '1px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        opacity: activeSectionInfo.index <= 0 ? 0.4 : 1,
-                      }}
-                    >
-                      <ChevronUp size={12} />
-                    </button>
-                    <button
-                      onClick={() => articleReaderRef.current?.nextSection()}
-                      disabled={activeSectionInfo.index >= activeSectionInfo.total - 1}
-                      title="Next Section"
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: activeSectionInfo.index >= activeSectionInfo.total - 1 ? 'var(--text-muted, #585b70)' : 'var(--text-secondary, #a6adc8)',
-                        cursor: activeSectionInfo.index >= activeSectionInfo.total - 1 ? 'not-allowed' : 'pointer',
-                        padding: '1px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        opacity: activeSectionInfo.index >= activeSectionInfo.total - 1 ? 0.4 : 1,
-                      }}
-                    >
-                      <ChevronDown size={12} />
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {/* Permanent Search Box (Active in both PDF & Reader Mode) */}
               {Boolean(foundPdf) && (
                 <div
@@ -870,9 +784,6 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
               onMatchCountChange={(curr, tot) => {
                 setCurrentMatch(curr);
                 setTotalMatches(tot);
-              }}
-              onActiveSectionChange={(info) => {
-                setActiveSectionInfo(info);
               }}
             />
           ) : (
