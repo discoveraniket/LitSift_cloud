@@ -3,7 +3,7 @@ import { useGridStore } from '../store/useGridStore';
 import { usePdfStore } from '../store/usePdfStore';
 import { useLogStore } from '../store/useLogStore';
 import { getGeminiApiKey, getSelectedGeminiModel } from './geminiService';
-import { getPdfBase64, buildPaperMarkdownContext } from './pdfUtils';
+import { getPdfBase64, buildPaperMarkdownContext, resolveEffectiveGroundingMode } from './pdfUtils';
 import { GoogleGenAI, Type } from '@google/genai';
 import { GridRow } from '../types/grid';
 
@@ -908,39 +908,41 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
       }
 
       const contentsParts: any[] = [];
+      const effectiveMode = pdfInfo ? resolveEffectiveGroundingMode(pdfInfo) : 'none';
+      let groundingLogMode = 'None (Detached)';
 
-      if (pdfInfo) {
-        let hasPdfBinary = false;
-        if (pdfInfo.base64 || pdfInfo.file || pdfInfo.url) {
-          try {
-            const rawBase64 = await getPdfBase64(pdfInfo);
-            const base64Data = rawBase64 && rawBase64.includes(',') ? rawBase64.split(',')[1] : rawBase64;
-            if (base64Data) {
-              contentsParts.push({
-                inlineData: {
-                  mimeType: 'application/pdf',
-                  data: base64Data.trim(),
-                },
-              });
-              hasPdfBinary = true;
-            }
-          } catch (e: any) {
-            logStore.addLog('warn', `PDF binary read note for "${pdfInfo.name}": ${e.message}`);
-          }
-        }
-
-        // If no PDF binary was attached, attach high-density structured Markdown representation
-        if (!hasPdfBinary) {
-          const docMarkdown = buildPaperMarkdownContext(pdfInfo);
-          if (docMarkdown.trim().length > 0) {
+      if (pdfInfo && effectiveMode === 'pdf') {
+        try {
+          const rawBase64 = await getPdfBase64(pdfInfo);
+          const base64Data = rawBase64 && rawBase64.includes(',') ? rawBase64.split(',')[1] : rawBase64;
+          if (base64Data) {
             contentsParts.push({
-              text: `[DOCUMENT CONTENT: "${pdfInfo.title || pdfInfo.name}"]\n${docMarkdown}`,
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: base64Data.trim(),
+              },
             });
+            groundingLogMode = 'PDF Multimodal Binary';
           }
+        } catch (e: any) {
+          logStore.addLog('warn', `PDF binary read note for "${pdfInfo.name}": ${e.message}`);
         }
       }
 
-      const isAbstractOnly = pdfInfo?.sourceType === 'doi_abstract_only' || (!pdfInfo?.url && !pdfInfo?.file && !pdfInfo?.sections?.length);
+      if (contentsParts.length === 0 && pdfInfo && effectiveMode !== 'none') {
+        const isAbstractOnlyMode = effectiveMode === 'abstract_only';
+        const docMarkdown = buildPaperMarkdownContext(pdfInfo, { abstractOnly: isAbstractOnlyMode });
+        if (docMarkdown.trim().length > 0) {
+          contentsParts.push({
+            text: `[DOCUMENT CONTENT (${isAbstractOnlyMode ? 'Abstract Only' : 'Structured Text'}): "${pdfInfo.title || pdfInfo.name}"]\n${docMarkdown}`,
+          });
+          groundingLogMode = isAbstractOnlyMode ? 'Abstract-Only Text' : 'Structured Markdown Text';
+        }
+      }
+
+      logStore.addLog('info', `Active grounding payload mode for extraction: ${groundingLogMode}`);
+
+      const isAbstractOnly = effectiveMode === 'abstract_only' || pdfInfo?.sourceType === 'doi_abstract_only' || (!pdfInfo?.url && !pdfInfo?.file && !pdfInfo?.sections?.length);
 
       // Construct dynamic structured JSON schema from active table grid columns
       const columnProperties: Record<string, any> = {};
@@ -1271,33 +1273,32 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
         const targetPdf = pdfStore.pdfs.find((p) => p.id === targetRow.pdfId || p.name === targetRow.pdfTitle) || pdfStore.getActivePdf();
 
         const contentsParts: any[] = [];
-        if (targetPdf) {
-          let hasPdfBinary = false;
-          if (targetPdf.base64 || targetPdf.file || targetPdf.url) {
-            try {
-              const rawBase64 = await getPdfBase64(targetPdf);
-              const base64Data = rawBase64 && rawBase64.includes(',') ? rawBase64.split(',')[1] : rawBase64;
-              if (base64Data) {
-                contentsParts.push({
-                  inlineData: {
-                    mimeType: 'application/pdf',
-                    data: base64Data.trim(),
-                  },
-                });
-                hasPdfBinary = true;
-              }
-            } catch (e: any) {
-              logStore.addLog('warn', `PDF binary read note for "${targetPdf.name}": ${e.message}`);
-            }
-          }
+        const effectiveMode = targetPdf ? resolveEffectiveGroundingMode(targetPdf) : 'none';
 
-          if (!hasPdfBinary) {
-            const docMarkdown = buildPaperMarkdownContext(targetPdf);
-            if (docMarkdown.trim().length > 0) {
+        if (targetPdf && effectiveMode === 'pdf') {
+          try {
+            const rawBase64 = await getPdfBase64(targetPdf);
+            const base64Data = rawBase64 && rawBase64.includes(',') ? rawBase64.split(',')[1] : rawBase64;
+            if (base64Data) {
               contentsParts.push({
-                text: `[DOCUMENT CONTENT: "${targetPdf.title || targetPdf.name}"]\n${docMarkdown}`,
+                inlineData: {
+                  mimeType: 'application/pdf',
+                  data: base64Data.trim(),
+                },
               });
             }
+          } catch (e: any) {
+            logStore.addLog('warn', `PDF binary read note for "${targetPdf.name}": ${e.message}`);
+          }
+        }
+
+        if (contentsParts.length === 0 && targetPdf && effectiveMode !== 'none') {
+          const isAbstractOnlyMode = effectiveMode === 'abstract_only';
+          const docMarkdown = buildPaperMarkdownContext(targetPdf, { abstractOnly: isAbstractOnlyMode });
+          if (docMarkdown.trim().length > 0) {
+            contentsParts.push({
+              text: `[DOCUMENT CONTENT (${isAbstractOnlyMode ? 'Abstract Only' : 'Structured Text'}): "${targetPdf.title || targetPdf.name}"]\n${docMarkdown}`,
+            });
           }
         }
 

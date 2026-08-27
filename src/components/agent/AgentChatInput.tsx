@@ -8,7 +8,13 @@ import {
   Cpu,
   ChevronDown,
   Layers,
+  Eye,
+  EyeOff,
+  Copy,
+  Check,
 } from 'lucide-react';
+import { usePdfStore, GroundingMode } from '../../store/usePdfStore';
+import { getGroundingPayloadDetails } from '../../services/pdfUtils';
 
 export interface ContextItemDetail {
   id: string;
@@ -59,7 +65,20 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showContextPopover, setShowContextPopover] = useState(false);
+  const [showPayloadPreview, setShowPayloadPreview] = useState(false);
+  const [hasCopiedPayload, setHasCopiedPayload] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  const activePdf = usePdfStore((state) => state.getActivePdf());
+  const setPaperGroundingMode = usePdfStore((state) => state.setPaperGroundingMode);
+  const payloadDetails = getGroundingPayloadDetails(activePdf);
+
+  const handleCopyPayload = () => {
+    if (!payloadDetails.previewContent) return;
+    navigator.clipboard.writeText(payloadDetails.previewContent);
+    setHasCopiedPayload(true);
+    setTimeout(() => setHasCopiedPayload(false), 2000);
+  };
 
   // Dynamic textarea height adjustment
   useEffect(() => {
@@ -122,45 +141,44 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
           transition: 'all 0.15s ease',
         }}
       >
-        {/* Top Minimal Context Icon Bar */}
+        {/* Top Floating Action Pill: Context Inspector */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
-            marginBottom: '4px',
-            position: 'relative',
+            justifyContent: 'space-between',
+            marginBottom: '6px',
           }}
         >
-          {/* Minimal Single Context View Button (Antigravity-Style) */}
-          <div ref={popoverRef} style={{ position: 'relative' }}>
+          <div style={{ position: 'relative' }} ref={popoverRef}>
             <button
               type="button"
-              onClick={() => setShowContextPopover((prev) => !prev)}
+              onClick={() => setShowContextPopover(!showContextPopover)}
               title={
                 hasDynamicSelection
-                  ? `Context Active: ${selectionContextInfo?.summaryLabel} (Click to inspect or dismiss)`
+                  ? `Active Selection (${dynamicCount} items) + Document Grounding Context`
                   : 'View Attached Prompt Contexts (PDF, Dataset Schema)'
               }
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '4px',
-                background: showContextPopover
-                  ? 'rgba(137, 180, 250, 0.22)'
-                  : hasDynamicSelection
-                  ? 'rgba(137, 180, 250, 0.14)'
-                  : 'rgba(255, 255, 255, 0.05)',
-                border: hasDynamicSelection
-                  ? '1px solid var(--accent-primary)'
-                  : '1px solid var(--border-subtle)',
-                borderRadius: '5px',
-                padding: '2px 6px',
-                fontSize: '10px',
-                color: hasDynamicSelection ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                gap: '5px',
+                padding: '2.5px 7px',
+                fontSize: '10.5px',
                 fontWeight: 500,
+                borderRadius: '4px',
+                background: hasDynamicSelection
+                  ? 'rgba(137, 180, 250, 0.15)'
+                  : showContextPopover
+                  ? 'rgba(255, 255, 255, 0.08)'
+                  : 'rgba(255, 255, 255, 0.04)',
+                border: hasDynamicSelection
+                  ? '1px solid rgba(137, 180, 250, 0.4)'
+                  : '1px solid var(--border-subtle)',
+                color: hasDynamicSelection
+                  ? 'var(--accent-primary)'
+                  : 'var(--text-secondary)',
                 cursor: 'pointer',
-                userSelect: 'none',
                 transition: 'all 0.15s ease',
               }}
             >
@@ -170,12 +188,12 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
                 <span
                   style={{
                     background: 'var(--accent-primary)',
-                    color: 'var(--bg-secondary)',
-                    borderRadius: '10px',
-                    padding: '0 4px',
+                    color: '#11111b',
                     fontSize: '9px',
                     fontWeight: 700,
-                    lineHeight: '13px',
+                    padding: '0 4px',
+                    borderRadius: '10px',
+                    marginLeft: '2px',
                   }}
                 >
                   {dynamicCount}
@@ -191,12 +209,12 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
                   bottom: '100%',
                   left: 0,
                   marginBottom: '8px',
-                  width: '330px',
-                  maxHeight: '320px',
+                  width: '360px',
+                  maxHeight: '430px',
                   background: 'var(--bg-secondary)',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: '8px',
-                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
+                  boxShadow: '0 10px 30px rgba(0, 0, 0, 0.55)',
                   zIndex: 1000,
                   display: 'flex',
                   flexDirection: 'column',
@@ -209,7 +227,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '7px 10px',
+                    padding: '8px 10px',
                     background: 'var(--bg-tertiary)',
                     borderBottom: '1px solid var(--border-subtle)',
                     fontSize: '11px',
@@ -335,7 +353,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
                     </div>
                   )}
 
-                  {/* Permanent Workspace Context (Static, non-dismissible) */}
+                  {/* Permanent Workspace Context (Grounding Controls & Inspection) */}
                   <div>
                     <div
                       style={{
@@ -349,54 +367,202 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
                     >
                       Permanent Grounding Context
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {/* Active PDF Root Doc */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {/* Active Research Document Grounding Card */}
                       <div
                         style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
                           background: 'rgba(255, 255, 255, 0.03)',
                           border: '1px solid var(--border-subtle)',
-                          borderRadius: '5px',
-                          padding: '5px 7px',
+                          borderRadius: '6px',
+                          padding: '7px 8px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
-                          <FileText size={11} color="var(--accent-primary)" style={{ flexShrink: 0 }} />
-                          <div style={{ overflow: 'hidden' }}>
+                        {/* Title & Format Badge Row */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                            <FileText size={12} color="var(--accent-primary)" style={{ flexShrink: 0 }} />
                             <div
                               style={{
                                 fontSize: '10.5px',
-                                fontWeight: 500,
+                                fontWeight: 600,
                                 color: 'var(--text-primary)',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
-                                maxWidth: '210px',
+                                maxWidth: '200px',
                               }}
-                              title={activePdfTitle || 'Root Document'}
+                              title={activePdf?.title || activePdfTitle || 'Root Document'}
                             >
-                              {activePdfTitle || 'Root Research Document'}
+                              {activePdf?.title || activePdfTitle || 'Root Research Document'}
                             </div>
-                            <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Root Grounding Document</div>
                           </div>
+                          <span
+                            style={{
+                              fontSize: '8.5px',
+                              background: payloadDetails.badgeBg,
+                              color: payloadDetails.badgeColor,
+                              padding: '1.5px 5px',
+                              borderRadius: '3px',
+                              fontWeight: 600,
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {payloadDetails.modeLabel}
+                          </span>
                         </div>
-                        <span
+
+                        {/* Grounding Mode Selector & Payload Size Row */}
+                        <div
                           style={{
-                            fontSize: '9px',
-                            background: 'rgba(166, 227, 161, 0.15)',
-                            color: '#a6e3a1',
-                            padding: '1px 4px',
-                            borderRadius: '3px',
-                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            background: 'rgba(0, 0, 0, 0.2)',
+                            borderRadius: '4px',
+                            padding: '4px 6px',
+                            gap: '6px',
                           }}
                         >
-                          Static
-                        </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontWeight: 500 }}>
+                              Mode:
+                            </span>
+                            <select
+                              value={activePdf?.groundingMode || 'auto'}
+                              onChange={(e) => {
+                                if (activePdf) {
+                                  setPaperGroundingMode(activePdf.id, e.target.value as GroundingMode);
+                                }
+                              }}
+                              disabled={!activePdf}
+                              style={{
+                                background: 'var(--bg-tertiary)',
+                                color: 'var(--text-primary)',
+                                border: '1px solid var(--border-subtle)',
+                                borderRadius: '3px',
+                                fontSize: '9.5px',
+                                padding: '1.5px 4px',
+                                cursor: 'pointer',
+                                outline: 'none',
+                              }}
+                            >
+                              <option value="auto">Auto (Optimal)</option>
+                              {payloadDetails.hasPdf && (
+                                <option value="pdf">Full PDF (Multimodal Vision)</option>
+                              )}
+                              <option value="structured_text">Full Structured Text</option>
+                              <option value="abstract_only">Abstract-Only (Fast)</option>
+                              <option value="none">Exclude Document</option>
+                            </select>
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: '8.5px',
+                              color: 'var(--text-muted)',
+                              textAlign: 'right',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                            title={payloadDetails.sizeEstimate}
+                          >
+                            {payloadDetails.sizeEstimate}
+                          </div>
+                        </div>
+
+                        {/* Action Bar & Expandable Preview Toggle */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '2px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setShowPayloadPreview(!showPayloadPreview)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--accent-primary)',
+                              fontSize: '9.5px',
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              padding: 0,
+                            }}
+                          >
+                            {showPayloadPreview ? <EyeOff size={11} /> : <Eye size={11} />}
+                            <span>{showPayloadPreview ? 'Hide Payload Preview' : 'Inspect Prompt Payload'}</span>
+                          </button>
+                        </div>
+
+                        {/* In-Place Expandable Raw Payload Preview Card */}
+                        {showPayloadPreview && (
+                          <div
+                            style={{
+                              marginTop: '4px',
+                              background: 'rgba(0, 0, 0, 0.4)',
+                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                              borderRadius: '5px',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '4px 6px',
+                                background: 'rgba(255, 255, 255, 0.03)',
+                                borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                              }}
+                            >
+                              <span style={{ fontSize: '8.5px', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.4px' }}>
+                                RAW PAYLOAD PREVIEW
+                              </span>
+                              <button
+                                type="button"
+                                onClick={handleCopyPayload}
+                                title="Copy raw payload text to clipboard"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: hasCopiedPayload ? '#a6e3a1' : 'var(--text-muted)',
+                                  fontSize: '8.5px',
+                                  cursor: 'pointer',
+                                  padding: 0,
+                                }}
+                              >
+                                {hasCopiedPayload ? <Check size={10} /> : <Copy size={10} />}
+                                <span>{hasCopiedPayload ? 'Copied' : 'Copy'}</span>
+                              </button>
+                            </div>
+                            <pre
+                              style={{
+                                margin: 0,
+                                padding: '6px 8px',
+                                maxHeight: '140px',
+                                overflowY: 'auto',
+                                fontSize: '9px',
+                                lineHeight: '1.4',
+                                fontFamily: 'var(--font-mono, monospace)',
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word',
+                                color: 'var(--text-secondary)',
+                              }}
+                            >
+                              {payloadDetails.previewContent}
+                            </pre>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Master Data Grid Schema */}
+                      {/* Master Data Grid Schema Card */}
                       <div
                         style={{
                           display: 'flex',

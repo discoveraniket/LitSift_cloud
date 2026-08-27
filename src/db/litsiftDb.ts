@@ -1,7 +1,7 @@
 import Dexie, { Table } from 'dexie';
 import { SchemaColumn, GridRow } from '../types/grid';
 import { AgentMessage } from '../types/agent';
-import { OpenAccessStatus, DocumentSourceType, PaperAuthor, PaperSection, PaperTable, PaperFigure } from '../types/paper';
+import { OpenAccessStatus, DocumentSourceType, GroundingMode, PaperAuthor, PaperSection, PaperTable, PaperFigure } from '../types/paper';
 
 export interface StoredPdf {
   id: string;
@@ -21,6 +21,7 @@ export interface StoredPdf {
   citationCount?: number;
   oaStatus?: OpenAccessStatus;
   sourceType?: DocumentSourceType;
+  groundingMode?: GroundingMode;
   
   // Abstract & Structured Content
   abstractText?: string;

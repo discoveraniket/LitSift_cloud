@@ -2,6 +2,8 @@ export type OpenAccessStatus = 'gold' | 'green' | 'hybrid' | 'bronze' | 'closed'
 
 export type DocumentSourceType = 'pdf_upload' | 'doi_full_pdf' | 'doi_abstract_only' | 'doi_structured';
 
+export type GroundingMode = 'auto' | 'pdf' | 'structured_text' | 'abstract_only' | 'none';
+
 export interface PaperAuthor {
   name: string;
   institution?: string;
@@ -43,6 +45,7 @@ export interface PaperDocumentInfo {
   citationCount?: number;
   oaStatus: OpenAccessStatus;
   sourceType: DocumentSourceType;
+  groundingMode?: GroundingMode;
   
   // Abstract & Structured Text
   abstractText?: string;

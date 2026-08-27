@@ -1,4 +1,4 @@
-import { PdfDocumentInfo, usePdfStore } from '../store/usePdfStore';
+import { PdfDocumentInfo, usePdfStore, GroundingMode } from '../store/usePdfStore';
 
 export async function getPdfBase64(pdfInfo: PdfDocumentInfo): Promise<string> {
   if (pdfInfo.base64) {
@@ -45,15 +45,51 @@ const BOILERPLATE_SECTION_REGEX =
   /^(author('?s)?\s*contributions?|competing\s*interests?|conflicts?\s*of\s*interest|coi|funding|financial\s*disclosure|grant\s*support|references|bibliography|disclaimer)/i;
 
 /**
+ * Resolves the effective grounding mode for a paper based on user preference and available content.
+ */
+export function resolveEffectiveGroundingMode(paper: any): GroundingMode {
+  if (!paper) return 'none';
+  const preference: GroundingMode = paper.groundingMode || 'auto';
+  if (preference === 'none') return 'none';
+
+  const hasPdf = Boolean(paper.base64 || paper.file || paper.url);
+  const hasSections = Boolean(paper.sections && paper.sections.length > 0);
+  const hasAbstract = Boolean(paper.abstractText && paper.abstractText.trim().length > 0);
+
+  if (preference === 'pdf') {
+    if (hasPdf) return 'pdf';
+    if (hasSections) return 'structured_text';
+    if (hasAbstract) return 'abstract_only';
+    return 'none';
+  }
+
+  if (preference === 'structured_text') {
+    if (hasSections || hasAbstract) return 'structured_text';
+    if (hasPdf) return 'pdf';
+    return 'none';
+  }
+
+  if (preference === 'abstract_only') {
+    if (hasAbstract) return 'abstract_only';
+    if (hasSections) return 'structured_text';
+    if (hasPdf) return 'pdf';
+    return 'none';
+  }
+
+  // Auto fallback order: PDF > Structured Text > Abstract Only > None
+  if (hasPdf) return 'pdf';
+  if (hasSections) return 'structured_text';
+  if (hasAbstract) return 'abstract_only';
+  return 'none';
+}
+
+/**
  * Builds a structured, high-density Markdown representation of a paper document
  * from its metadata, abstract, PMC XML / BioC JSON body sections, and semantic tables.
- * Applies selective section filtering:
- * - PRESERVES scientific & repository sections: Data Availability, Supplementary Material, Ethics Statement, Acknowledgments
- * - EXCLUDES pure administrative boilerplate: Author Contributions, Funding, Competing Interests, References
- * - Compacts table cell representations without losing data
- * - Compresses multi-space and consecutive empty line clutter
  */
-export function buildPaperMarkdownContext(paper: any): string {
+export function buildPaperMarkdownContext(paper: any, options?: { abstractOnly?: boolean }): string {
+  if (!paper) return '';
+  const isAbstractOnly = options?.abstractOnly === true;
   const parts: string[] = [];
 
   // 1. Header & Academic Metadata
@@ -72,6 +108,11 @@ export function buildPaperMarkdownContext(paper: any): string {
   // 2. Abstract
   if (paper.abstractText && paper.abstractText.trim()) {
     parts.push(`## Abstract\n${paper.abstractText.trim()}`);
+  }
+
+  if (isAbstractOnly) {
+    parts.push('\n---\n*Note: Abstract-only context mode selected. Full body sections and tables were excluded to minimize context length.*');
+    return parts.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
 
   // 3. Structured Body Sections (excluding administrative boilerplate)
@@ -152,5 +193,125 @@ export function buildPaperMarkdownContext(paper: any): string {
   parts.push('\n---\n*Note: Non-scientific administrative boilerplate sections (References, Author Contributions, Funding Statements, Competing Interests) were intentionally omitted from this text representation to optimize context tokens.*');
 
   return parts.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+export interface GroundingPayloadDetails {
+  effectiveMode: GroundingMode;
+  modeLabel: string;
+  badgeColor: string;
+  badgeBg: string;
+  sizeEstimate: string;
+  previewContent: string;
+  hasPdf: boolean;
+  hasSections: boolean;
+  hasAbstract: boolean;
+}
+
+/**
+ * Computes payload metadata, token/size estimates, and preview content for the active paper.
+ */
+export function getGroundingPayloadDetails(paper: any): GroundingPayloadDetails {
+  if (!paper) {
+    return {
+      effectiveMode: 'none',
+      modeLabel: 'No Document Attached',
+      badgeColor: 'var(--text-muted)',
+      badgeBg: 'rgba(255, 255, 255, 0.05)',
+      sizeEstimate: '0 tokens',
+      previewContent: '(No document currently selected in workspace)',
+      hasPdf: false,
+      hasSections: false,
+      hasAbstract: false,
+    };
+  }
+
+  const effectiveMode = resolveEffectiveGroundingMode(paper);
+  const hasPdf = Boolean(paper.base64 || paper.file || paper.url);
+  const hasSections = Boolean(paper.sections && paper.sections.length > 0);
+  const hasAbstract = Boolean(paper.abstractText && paper.abstractText.trim().length > 0);
+
+  if (effectiveMode === 'none') {
+    return {
+      effectiveMode: 'none',
+      modeLabel: 'Detached (No Document Context)',
+      badgeColor: '#a6adc8',
+      badgeBg: 'rgba(166, 173, 200, 0.12)',
+      sizeEstimate: '0 tokens (Omitted from prompt)',
+      previewContent: `[EXCLUDED FROM PROMPT CONTEXT]\nPaper "${paper.title || paper.name}" will not be attached to LLM requests while grounding is detached.`,
+      hasPdf,
+      hasSections,
+      hasAbstract,
+    };
+  }
+
+  if (effectiveMode === 'pdf') {
+    let fileSizeStr = 'Binary Stream';
+    if (paper.file && paper.file.size) {
+      const mb = (paper.file.size / (1024 * 1024)).toFixed(2);
+      fileSizeStr = `${mb} MB PDF`;
+    } else if (paper.base64) {
+      const approxBytes = (paper.base64.length * 3) / 4;
+      const mb = (approxBytes / (1024 * 1024)).toFixed(2);
+      fileSizeStr = `${mb} MB PDF`;
+    }
+
+    const preview = `[MULTIMODAL PDF BINARY ATTACHMENT]
+• Document: "${paper.title || paper.name}"
+• MIME Type: application/pdf
+• Payload Type: Inline Base64 Data Stream
+• Multimodal Capability: Native Vision (Gemini reads text, multi-column layouts, figures, vector tables, and visual evidence coordinates)
+• DOI: ${paper.doi || 'N/A'}
+• Journal: ${paper.journal || 'N/A'} ${paper.year ? `(${paper.year})` : ''}
+• Authors: ${paper.authors ? paper.authors.map((a: any) => (typeof a === 'string' ? a : a.name)).join(', ') : 'N/A'}`;
+
+    return {
+      effectiveMode: 'pdf',
+      modeLabel: 'PDF Multimodal (Binary)',
+      badgeColor: '#89b4fa',
+      badgeBg: 'rgba(137, 180, 250, 0.15)',
+      sizeEstimate: `${fileSizeStr} (Multimodal Vision)`,
+      previewContent: preview,
+      hasPdf,
+      hasSections,
+      hasAbstract,
+    };
+  }
+
+  if (effectiveMode === 'abstract_only') {
+    const text = buildPaperMarkdownContext(paper, { abstractOnly: true });
+    const approxTokens = Math.ceil(text.length / 4);
+    const kb = (new Blob([text]).size / 1024).toFixed(1);
+
+    return {
+      effectiveMode: 'abstract_only',
+      modeLabel: 'Abstract-Only Text',
+      badgeColor: '#fab387',
+      badgeBg: 'rgba(250, 179, 135, 0.15)',
+      sizeEstimate: `~${approxTokens.toLocaleString()} tokens (${kb} KB text)`,
+      previewContent: text,
+      hasPdf,
+      hasSections,
+      hasAbstract,
+    };
+  }
+
+  // Structured Text
+  const fullText = buildPaperMarkdownContext(paper, { abstractOnly: false });
+  const approxTokens = Math.ceil(fullText.length / 4);
+  const kb = (new Blob([fullText]).size / 1024).toFixed(1);
+  const sectionCount = paper.sections?.length || 0;
+  const tableCount = paper.tables?.length || 0;
+
+  return {
+    effectiveMode: 'structured_text',
+    modeLabel: 'Full Structured Text',
+    badgeColor: '#cba6f7',
+    badgeBg: 'rgba(203, 166, 247, 0.15)',
+    sizeEstimate: `~${approxTokens.toLocaleString()} tokens (${kb} KB · ${sectionCount} sec, ${tableCount} tbl)`,
+    previewContent: fullText,
+    hasPdf,
+    hasSections,
+    hasAbstract,
+  };
 }
 

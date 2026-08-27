@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { db, StoredPdf } from '../db/litsiftDb';
-import { PaperDocumentInfo } from '../types/paper';
+import { PaperDocumentInfo, GroundingMode } from '../types/paper';
 
-export type { PaperDocumentInfo as PdfDocumentInfo };
+export type { PaperDocumentInfo as PdfDocumentInfo, GroundingMode };
 
 interface PdfState {
   pdfs: PaperDocumentInfo[];
@@ -15,6 +15,7 @@ interface PdfState {
   addPaperDocument: (paper: PaperDocumentInfo) => Promise<PaperDocumentInfo>;
   addPdf: (paper: PaperDocumentInfo) => Promise<PaperDocumentInfo>;
   updatePaperDocument: (id: string, updates: Partial<PaperDocumentInfo>) => Promise<void>;
+  setPaperGroundingMode: (id: string, mode: GroundingMode) => Promise<void>;
   addPdfUrl: (id: string, name: string, url: string) => Promise<void>;
   removePdf: (id: string) => Promise<void>;
   clearAllPdfs: () => Promise<void>;
@@ -58,6 +59,7 @@ export const usePdfStore = create<PdfState>((set, get) => ({
             citationCount: item.citationCount,
             oaStatus: item.oaStatus || 'unknown',
             sourceType: item.sourceType || (item.blob ? 'pdf_upload' : 'doi_abstract_only'),
+            groundingMode: item.groundingMode || 'auto',
             abstractText: item.abstractText,
             sections: item.sections,
             tables: item.tables,
@@ -100,6 +102,7 @@ export const usePdfStore = create<PdfState>((set, get) => ({
       file,
       oaStatus: 'unknown',
       sourceType: 'pdf_upload',
+      groundingMode: 'auto',
       uploadedAt: Date.now(),
     };
 
@@ -113,6 +116,7 @@ export const usePdfStore = create<PdfState>((set, get) => ({
         status: 'Ready',
         oaStatus: 'unknown',
         sourceType: 'pdf_upload',
+        groundingMode: 'auto',
         uploadedAt: Date.now(),
       };
       await db.pdfs.put(storedPdf);
@@ -130,44 +134,50 @@ export const usePdfStore = create<PdfState>((set, get) => ({
   },
 
   addPaperDocument: async (paper: PaperDocumentInfo) => {
+    const fullPaper: PaperDocumentInfo = {
+      ...paper,
+      groundingMode: paper.groundingMode || 'auto',
+    };
+
     // Save to IndexedDB
     try {
       const storedPdf: StoredPdf = {
-        id: paper.id,
-        name: paper.name,
-        title: paper.title,
-        blob: paper.file,
-        base64: paper.base64,
-        status: paper.status,
-        doi: paper.doi,
-        pmcid: paper.pmcid,
-        authors: paper.authors,
-        journal: paper.journal,
-        year: paper.year,
-        citationCount: paper.citationCount,
-        oaStatus: paper.oaStatus,
-        sourceType: paper.sourceType,
-        abstractText: paper.abstractText,
-        sections: paper.sections,
-        tables: paper.tables,
-        figures: paper.figures,
-        landingPageUrl: paper.landingPageUrl,
-        pdfDownloadUrl: paper.pdfDownloadUrl,
-        errorMessage: paper.errorMessage,
-        uploadedAt: paper.uploadedAt || Date.now(),
+        id: fullPaper.id,
+        name: fullPaper.name,
+        title: fullPaper.title,
+        blob: fullPaper.file,
+        base64: fullPaper.base64,
+        status: fullPaper.status,
+        doi: fullPaper.doi,
+        pmcid: fullPaper.pmcid,
+        authors: fullPaper.authors,
+        journal: fullPaper.journal,
+        year: fullPaper.year,
+        citationCount: fullPaper.citationCount,
+        oaStatus: fullPaper.oaStatus,
+        sourceType: fullPaper.sourceType,
+        groundingMode: fullPaper.groundingMode || 'auto',
+        abstractText: fullPaper.abstractText,
+        sections: fullPaper.sections,
+        tables: fullPaper.tables,
+        figures: fullPaper.figures,
+        landingPageUrl: fullPaper.landingPageUrl,
+        pdfDownloadUrl: fullPaper.pdfDownloadUrl,
+        errorMessage: fullPaper.errorMessage,
+        uploadedAt: fullPaper.uploadedAt || Date.now(),
       };
       await db.pdfs.put(storedPdf);
-      await db.settings.put({ key: 'activePdfId', value: paper.id });
+      await db.settings.put({ key: 'activePdfId', value: fullPaper.id });
     } catch (err) {
       console.error('Error saving Paper Document to IndexedDB:', err);
     }
 
     set((state) => ({
-      pdfs: [...state.pdfs.filter((p) => p.id !== paper.id), paper],
-      activePdfId: paper.id,
+      pdfs: [...state.pdfs.filter((p) => p.id !== fullPaper.id), fullPaper],
+      activePdfId: fullPaper.id,
     }));
 
-    return paper;
+    return fullPaper;
   },
 
   addPdf: async (paper: PaperDocumentInfo) => {
@@ -194,6 +204,10 @@ export const usePdfStore = create<PdfState>((set, get) => ({
     }
   },
 
+  setPaperGroundingMode: async (id: string, mode: GroundingMode) => {
+    await get().updatePaperDocument(id, { groundingMode: mode });
+  },
+
   addPdfUrl: async (id, name, url) => {
     set((state) => {
       if (state.pdfs.some((p) => p.id === id)) return state;
@@ -207,6 +221,7 @@ export const usePdfStore = create<PdfState>((set, get) => ({
             status: 'Ready',
             oaStatus: 'unknown',
             sourceType: 'pdf_upload',
+            groundingMode: 'auto',
             uploadedAt: Date.now(),
           },
         ],

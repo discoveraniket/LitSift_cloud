@@ -1,7 +1,7 @@
 import { GoogleGenAI, FunctionCallingConfigMode } from '@google/genai';
 import { usePdfStore } from '../store/usePdfStore';
 import { useGridStore } from '../store/useGridStore';
-import { getPdfBase64, buildPaperMarkdownContext } from './pdfUtils';
+import { getPdfBase64, buildPaperMarkdownContext, resolveEffectiveGroundingMode } from './pdfUtils';
 import { getToolsForMode, agentToolsRegistry, AgentExecutionMode } from './agentToolRegistry';
 import { useAgentStore } from '../store/useAgentStore';
 import { useLogStore } from '../store/useLogStore';
@@ -92,34 +92,32 @@ export async function validateAgentPrerequisites(
     };
   }
 
-  // 4. Document Content Availability Guard (PDF Binary OR Structured Text / Abstract)
+  // 4. Document Content Availability Guard (PDF Binary OR Structured Text / Abstract OR Detached)
   let pdfBase64: string | undefined;
-  if (activePdf) {
-    const hasTextContent = Boolean(
-      (activePdf.abstractText && activePdf.abstractText.trim().length > 0) ||
-      (activePdf.sections && activePdf.sections.length > 0)
-    );
+  const effectiveMode = activePdf ? resolveEffectiveGroundingMode(activePdf) : 'none';
 
-    if (activePdf.base64 || activePdf.file || activePdf.url) {
-      try {
-        logStore.setActiveStep(`Verifying attached document "${activePdf.name}"...`);
-        pdfBase64 = await getPdfBase64(activePdf);
-      } catch (err: any) {
-        logStore.addLog('warn', `PDF binary read note for "${activePdf.name}": ${err.message}`);
-        // If no text content is available, only then report error
-        if (!hasTextContent && isDocumentQuery) {
-          return {
-            valid: false,
-            error: `⚠️ **Unable to read PDF file "${activePdf.name}".**\n\nThe binary file data could not be retrieved from local IndexedDB storage. Please re-upload the PDF in the Left Explorer.`,
-          };
-        }
+  if (activePdf && effectiveMode === 'pdf') {
+    try {
+      logStore.setActiveStep(`Verifying attached document "${activePdf.name}"...`);
+      pdfBase64 = await getPdfBase64(activePdf);
+    } catch (err: any) {
+      logStore.addLog('warn', `PDF binary read note for "${activePdf.name}": ${err.message}`);
+      const hasTextContent = Boolean(
+        (activePdf.abstractText && activePdf.abstractText.trim().length > 0) ||
+        (activePdf.sections && activePdf.sections.length > 0)
+      );
+      if (!hasTextContent && isDocumentQuery) {
+        return {
+          valid: false,
+          error: `⚠️ **Unable to read PDF file "${activePdf.name}".**\n\nThe binary file data could not be retrieved from local IndexedDB storage. Please re-upload the PDF in the Left Explorer.`,
+        };
       }
-    } else if (!hasTextContent && isDocumentQuery) {
-      return {
-        valid: false,
-        error: `📄 **No Document Content Available for "${activePdf.name}"**\n\nPlease select or upload a research paper with text or PDF content.`,
-      };
     }
+  } else if (activePdf && effectiveMode === 'none' && !activePdf.groundingMode && isDocumentQuery) {
+    return {
+      valid: false,
+      error: `📄 **No Document Content Available for "${activePdf.name}"**\n\nPlease select or upload a research paper with text or PDF content.`,
+    };
   }
 
   // 5. Schema Guard
@@ -342,11 +340,12 @@ ${rowsSummary || '  (No populated rows)'}
 ${userPrompt}`;
     }
 
-    // Build multi-turn contents array with root document anchor (PDF binary or Structured Markdown) and conversation history
+    // Build multi-turn contents array with root document anchor (PDF binary or Structured Markdown or Abstract Only)
     const contents: any[] = [];
     const rootUserParts: any[] = [];
+    const effectiveGrounding = validation.activePdf ? resolveEffectiveGroundingMode(validation.activePdf) : 'none';
 
-    if (validation.pdfBase64) {
+    if (effectiveGrounding === 'pdf' && validation.pdfBase64) {
       const cleanBase64 = validation.pdfBase64.includes(',')
         ? validation.pdfBase64.split(',')[1]
         : validation.pdfBase64;
@@ -356,11 +355,18 @@ ${userPrompt}`;
           data: cleanBase64.trim(),
         },
       });
-    } else if (validation.activePdf) {
-      const docMarkdown = buildPaperMarkdownContext(validation.activePdf);
+    } else if (effectiveGrounding === 'structured_text' && validation.activePdf) {
+      const docMarkdown = buildPaperMarkdownContext(validation.activePdf, { abstractOnly: false });
       if (docMarkdown.trim().length > 0) {
         rootUserParts.push({
-          text: `[ACTIVE DOCUMENT CONTENT: "${activePdfTitle}"]\n${docMarkdown}`,
+          text: `[ACTIVE DOCUMENT CONTENT (Structured Text): "${activePdfTitle}"]\n${docMarkdown}`,
+        });
+      }
+    } else if (effectiveGrounding === 'abstract_only' && validation.activePdf) {
+      const docMarkdown = buildPaperMarkdownContext(validation.activePdf, { abstractOnly: true });
+      if (docMarkdown.trim().length > 0) {
+        rootUserParts.push({
+          text: `[ACTIVE DOCUMENT ABSTRACT: "${activePdfTitle}"]\n${docMarkdown}`,
         });
       }
     }
