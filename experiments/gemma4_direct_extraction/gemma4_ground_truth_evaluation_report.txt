@@ -1,0 +1,350 @@
+
+================================================================================
+📊 LITSIFT BENCHMARK REPORT: GEMMA 4 12B vs HUMAN GROUND TRUTH
+================================================================================
+Timestamp:               2026-08-28T12:47:23.220Z
+Evaluated Model:         google/gemma-4-12b-qat
+Server Endpoint:         http://192.168.0.25:1234/v1
+Target Paper:            Green approach to phytopathogen: Characterization of lytic bacteriophages of Pseudomonas sp., an etiology of the bacterial blight of pomegranate
+Evaluated Content:       Pages 1-8 (Abstract, Methods, Results, Discussion)
+Target Schema:           19 Columns
+Ground Truth Dataset:    2 Verified Rows in LitSift Workspace
+
+--------------------------------------------------------------------------------
+1. PERFORMANCE & TELEMETRY
+--------------------------------------------------------------------------------
+• Time to First Token (TTFT): 293.721 seconds
+• Total Latency:              607.57 seconds
+• Emitted Output Tokens:      ~654 tokens
+• Emitted Reasoning Tokens:   ~2206 tokens
+• Generation Throughput:      ~2.1 tokens/sec
+• Ground Truth Accuracy:      71% (18 Exact, 12 Partial, 0 Correct Empty)
+
+--------------------------------------------------------------------------------
+2. SIDE-BY-SIDE GROUND TRUTH COMPARISON MATRIX
+--------------------------------------------------------------------------------
+
+[ROW 1]: "vB_Psp.S_PRɸL2" (Ground Truth Row ID: extracted-1787908412155-0)
+================================================================================
+✅ [Article DOI] (EXACT_MATCH)
+   • Ground Truth:    10.1016/j.micres.2019.126300
+   • Gemma 4 Output:  10.1016/j.micres.2019.126300
+   • Ground Citation: "https://doi.org/10.1016/j.micres.2019.126300..."
+
+✅ [Phage Name] (EXACT_MATCH)
+   • Ground Truth:    vB_Psp.S_PRɸL2
+   • Gemma 4 Output:  vB_Psp.S_PRɸL2
+   • Ground Citation: "The phages obtained from Pavana river water and pomegranate orchard soil were named as vB_Psp.S_PRɸL..."
+
+✅ [Phage Genome Accession/Bioproject] (EXACT_MATCH)
+   • Ground Truth:    Not reported
+   • Gemma 4 Output:  Not reported
+   • Ground Citation: "Not reported in document..."
+
+🟡 [Phage Genome size (bp)] (SEMANTIC_PARTIAL)
+   • Ground Truth:    25.403 kb
+   • Gemma 4 Output:  25,403
+   • Ground Citation: "The genome size of phages PRɸL2 and SSɸL8 was approximately 25.403 kb and 29.877 kb respectively...."
+
+✅ [Phage GC content (%)] (EXACT_MATCH)
+   • Ground Truth:    Not reported
+   • Gemma 4 Output:  Not reported
+   • Ground Citation: "Not reported in document..."
+
+❌ [Phage TEM shows structural similarity with] (MISMATCH)
+   • Ground Truth:    Siphoviridae
+   • Gemma 4 Output:  Not reported
+   • Ground Citation: "PRɸL2 phage belonged to family Siphoviridae..."
+
+❌ [Phage TEM dimensions/Capsid morphology] (MISMATCH)
+   • Ground Truth:    isometric head of 72 nm and an extremely long, more of the less flexible tail of about 383 x 12 nm
+   • Gemma 4 Output:  Isometric head of 72 nm; extremely long, more or less flexible tail of about 383 x 12 nm; conspicuous cross striations; terminal knob
+   • Ground Citation: "PRɸL2 phage belonged to family Siphoviridae with an isometric head of 72 nm and an extremely long, m..."
+
+🟡 [Phage Taxonomy] (SEMANTIC_PARTIAL)
+   • Ground Truth:    Siphoviridae
+   • Gemma 4 Output:  Order Caudovirales, Family Siphoviridae
+   • Ground Citation: "Both the phages belonged to the order Caudovirales representing the families Siphoviridae (vB_Psp.S_..."
+
+✅ [Phage type: Lytic/ Lysogenic/ Engineered] (EXACT_MATCH)
+   • Ground Truth:    Lytic
+   • Gemma 4 Output:  Lytic
+   • Ground Citation: "All phages were lytic in nature..."
+
+🟡 [Place of Sample collection] (SEMANTIC_PARTIAL)
+   • Ground Truth:    Pavana river, Pimpri, Pune
+   • Gemma 4 Output:  Pavana river, Pimpri, Pune, Maharashtra, India
+   • Ground Citation: "Pavana river water (Pune, Maharashtra)..."
+
+✅ [Phage isolation Sample] (EXACT_MATCH)
+   • Ground Truth:    river water
+   • Gemma 4 Output:  River water
+   • Ground Citation: "The isolation of bacteriophages against pathogen Pseudomonas sp. SK 10 was carried from two differen..."
+
+✅ [Host Bacterial Species] (EXACT_MATCH)
+   • Ground Truth:    Pseudomonas sp.
+   • Gemma 4 Output:  *Pseudomonas* sp.
+   • Ground Citation: "Characterization of lytic bacteriophages of Pseudomonas sp...."
+
+🟡 [Studied Host Strain/ Propagating Bacterial Strain] (SEMANTIC_PARTIAL)
+   • Ground Truth:    Pseudomonas sp. SK 10
+   • Gemma 4 Output:  SK 10
+   • Ground Citation: "The pure culture of the isolate Pseudomonas sp. SK 10 was streaked on sterile NA plates prior to eac..."
+
+🟡 [Phage's Plaque characteristics/Shape] (SEMANTIC_PARTIAL)
+   • Ground Truth:    circular
+   • Gemma 4 Output:  Lytic, circular; 2 mm diameter
+   • Ground Citation: "vB_Psp.S_PRɸL2 Pavana river, Pimpri, Pune Lytic, circular 2..."
+
+✅ [Optimal MOI] (EXACT_MATCH)
+   • Ground Truth:    0.1
+   • Gemma 4 Output:  0.1
+   • Ground Citation: "PRɸL2 phage showed optimum MOI at 0.1..."
+
+🟡 [Latent period (min)] (SEMANTIC_PARTIAL)
+   • Ground Truth:    20 min
+   • Gemma 4 Output:  20
+   • Ground Citation: "PRɸL2 showed a latent period of 20 min..."
+
+✅ [Burst size (phage/infected bacterium)] (EXACT_MATCH)
+   • Ground Truth:    85 ( ± 4)
+   • Gemma 4 Output:  85 (± 4)
+   • Ground Citation: "PRɸL2 showed a latent period of 20 min with a burst size of 85 ( ± 4) phage particles per infected h..."
+
+❌ [Optimal Temperature (°C)] (MISMATCH)
+   • Ground Truth:    4 to 50 °C
+   • Gemma 4 Output:  28
+   • Ground Citation: "The phage PRɸL2 showed stability over a wide temperature range from 4 to 50 °C..."
+
+❌ [Optimal pH] (MISMATCH)
+   • Ground Truth:    6–9
+   • Gemma 4 Output:  7
+   • Ground Citation: "PRɸL2 showed high stability over pH range of 6–9..."
+
+
+[ROW 2]: "vB_Psp.M_SSɸL8" (Ground Truth Row ID: extracted-1787908412155-1)
+================================================================================
+✅ [Article DOI] (EXACT_MATCH)
+   • Ground Truth:    10.1016/j.micres.2019.126300
+   • Gemma 4 Output:  10.1016/j.micres.2019.126300
+   • Ground Citation: "https://doi.org/10.1016/j.micres.2019.126300..."
+
+✅ [Phage Name] (EXACT_MATCH)
+   • Ground Truth:    vB_Psp.M_SSɸL8
+   • Gemma 4 Output:  vB_Psp.M_SSɸL8
+   • Ground Citation: "The phages obtained from Pavana river water and pomegranate orchard soil were named as vB_Psp.S_PRɸL..."
+
+✅ [Phage Genome Accession/Bioproject] (EXACT_MATCH)
+   • Ground Truth:    Not reported
+   • Gemma 4 Output:  Not reported
+   • Ground Citation: "Not reported in document..."
+
+🟡 [Phage Genome size (bp)] (SEMANTIC_PARTIAL)
+   • Ground Truth:    29.877 kb
+   • Gemma 4 Output:  29,877
+   • Ground Citation: "The genome size of phages PRɸL2 and SSɸL8 was approximately 25.403 kb and 29.877 kb respectively...."
+
+✅ [Phage GC content (%)] (EXACT_MATCH)
+   • Ground Truth:    Not reported
+   • Gemma 4 Output:  Not reported
+   • Ground Citation: "Not reported in document..."
+
+❌ [Phage TEM shows structural similarity with] (MISMATCH)
+   • Ground Truth:    Myoviridae
+   • Gemma 4 Output:  Not reported
+   • Ground Citation: "While phage SSɸL8 belonged to Myoviridae family..."
+
+❌ [Phage TEM dimensions/Capsid morphology] (MISMATCH)
+   • Ground Truth:    isometric head of 59 nm and a contractile tail of 101 x 17 nm in the extended state
+   • Gemma 4 Output:  Isometric head of 59 nm; contractile tail of 101 x 17 nm in the extended state; contractile tail measured 42 x 22 nm in the contracted state; neck, base plate of 7 x 2 nm, and fibres of about 12 x 3 nm with a terminal swelling
+   • Ground Citation: "While phage SSɸL8 belonged to Myoviridae family showed an isometric head of 59 nm and a contractile ..."
+
+🟡 [Phage Taxonomy] (SEMANTIC_PARTIAL)
+   • Ground Truth:    Myoviridae
+   • Gemma 4 Output:  Order Caudovirales, Family Myoviridae
+   • Ground Citation: "Both the phages belonged to the order Caudovirales representing the families Siphoviridae (vB_Psp.S_..."
+
+✅ [Phage type: Lytic/ Lysogenic/ Engineered] (EXACT_MATCH)
+   • Ground Truth:    Lytic
+   • Gemma 4 Output:  Lytic
+   • Ground Citation: "All phages were lytic in nature..."
+
+🟡 [Place of Sample collection] (SEMANTIC_PARTIAL)
+   • Ground Truth:    Solapur Soil (blight infested pomegranate orchard), Solapur
+   • Gemma 4 Output:  Solapur Soil (blight infested pomegranate orchard), Solapur, Maharashtra, India
+   • Ground Citation: "Solapur Soil (blight infested pomegranate orchard), Solapur..."
+
+✅ [Phage isolation Sample] (EXACT_MATCH)
+   • Ground Truth:    soil
+   • Gemma 4 Output:  Soil
+   • Ground Citation: "The isolation of bacteriophages against pathogen Pseudomonas sp. SK 10 was carried from two differen..."
+
+✅ [Host Bacterial Species] (EXACT_MATCH)
+   • Ground Truth:    Pseudomonas sp.
+   • Gemma 4 Output:  *Pseudomonas* sp.
+   • Ground Citation: "Characterization of lytic bacteriophages of Pseudomonas sp...."
+
+🟡 [Studied Host Strain/ Propagating Bacterial Strain] (SEMANTIC_PARTIAL)
+   • Ground Truth:    Pseudomonas sp. SK 10
+   • Gemma 4 Output:  SK 10
+   • Ground Citation: "The pure culture of the isolate Pseudomonas sp. SK 10 was streaked on sterile NA plates prior to eac..."
+
+🟡 [Phage's Plaque characteristics/Shape] (SEMANTIC_PARTIAL)
+   • Ground Truth:    circular
+   • Gemma 4 Output:  Lytic, circular; 2 mm diameter
+   • Ground Citation: "vB_Psp.M_SSɸL8 Solapur Soil (blight infested pomegranate orchard), Solapur Lytic, circular 2..."
+
+✅ [Optimal MOI] (EXACT_MATCH)
+   • Ground Truth:    0.01
+   • Gemma 4 Output:  0.01
+   • Ground Citation: "0.01 was the optimum MOI for phage SSɸL8...."
+
+🟡 [Latent period (min)] (SEMANTIC_PARTIAL)
+   • Ground Truth:    10–20 min
+   • Gemma 4 Output:  10 – 20
+   • Ground Citation: "SSɸL8 revealed 10–20 min of the latent period..."
+
+✅ [Burst size (phage/infected bacterium)] (EXACT_MATCH)
+   • Ground Truth:    24 ( ± 5)
+   • Gemma 4 Output:  24 (± 5)
+   • Ground Citation: "SSɸL8 revealed 10–20 min of the latent period with a burst size of 24 ( ± 5) phage particles per inf..."
+
+❌ [Optimal Temperature (°C)] (MISMATCH)
+   • Ground Truth:    4 to 50 °C
+   • Gemma 4 Output:  28
+   • Ground Citation: "Similarly, phage SSɸL8 showed stability over wide temperature range same as PRɸL2 from 4 to 50 °C..."
+
+❌ [Optimal pH] (MISMATCH)
+   • Ground Truth:    4–8
+   • Gemma 4 Output:  7
+   • Ground Citation: "SSɸL8 showed high stability over pH range 4–8..."
+
+
+--------------------------------------------------------------------------------
+3. MODEL THINKING & REASONING TRACE (UNCAPPED)
+--------------------------------------------------------------------------------
+Precision scientific literature data extraction for bacteriophages.
+Extract distinct phages into a Markdown table based on a specific 19-column schema.
+
+        *   Strict accuracy (exact numbers, accessions, etc.).
+        *   Missing data discipline (write "Not reported" or "Not specified").
+        *   Multi-entity rows (one row per phage).
+        *   Clean output (Table + 2-sentence summary).
+A research paper about lytic bacteriophages of *Pseudomonas* sp. (pomegranate blight).
+
+    *   *Phage 1:* vB_Psp.S_PRɸL2
+    *   *Phage 2:* vB_Psp.M_SSɸL8
+
+    *   **Phage 1: vB_Psp.S_PRɸL2**
+        *   *Article DOI:* 10.1016/j.micres.2019.126300
+        *   *Phage Name:* vB_Psp.S_PRɸL2
+        *   *Genome Accession:* Not reported (The paper mentions 16S rRNA for the host, but not the phage genome).
+        *   *Genome size (bp):* 25.403 kb = 25,403 bp.
+        *   *GC content:* Not reported.
+        *   *TEM structural similarity:* Not explicitly stated as "similar to X", but belongs to Siphoviridae.
+        *   *TEM dimensions/Capsid morphology:* Isometric head of 72 nm; extremely long, more or less flexible tail of about 383 x 12 nm; conspicuous cross striations; terminal knob.
+        *   *Taxonomy:* Order Caudovirales, Family Siphoviridae.
+        *   *Phage type:* Lytic.
+        *   *Place of Sample collection:* Pavana river, Pimpri, Pune, Maharashtra, India.
+        *   *Phage isolation Sample:* River water.
+        *   *Host Bacterial Species:* *Pseudomonas* sp.
+        *   *Studied Host Strain:* SK 10.
+        *   *Plaque characteristics/Shape:* Lytic, circular; 2 mm diameter.
+        *   *Optimal MOI:* 0.1.
+        *   *Latent period (min):* 20 min.
+        *   *Burst size:* 85 (± 4) phage particles per infected host cell.
+        *   *Optimal Temperature (°C):* Not explicitly stated as "optimal", but stable from 4 to 50 °C (optimum stability at 28 °C).
+        *   *Optimal pH:* Not explicitly stated as "optimal", but high stability over pH range of 6 – 9 (optimum stability at pH 7).
+
+    *   **Phage 2: vB_Psp.M_SSɸL8**
+        *   *Article DOI:* 10.1016/j.micres.2019.126300
+        *   *Phage Name:* vB_Psp.M_SSɸL8
+        *   *Genome Accession:* Not reported.
+        *   *Genome size (bp):* 29.877 kb = 29,877 bp.
+        *   *GC content:* Not reported.
+        *   *TEM structural similarity:* Not explicitly stated as "similar to X", but belongs to Myoviridae.
+        *   *TEM dimensions/Capsid morphology:* Isometric head of 59 nm; contractile tail of 101 x 17 nm in the extended state; contractile tail measured 42 x 22 nm in the contracted state; neck, base plate of 7 x 2 nm, and fibres of about 12 x 3 nm with a terminal swelling.
+        *   *Taxonomy:* Order Caudovirales, Family Myoviridae.
+        *   *Phage type:* Lytic.
+        *   *Place of Sample collection:* Solapur Soil (blight infested pomegranate orchard), Solapur, Maharashtra, India.
+        *   *Phage isolation Sample:* Soil.
+        *   *Host Bacterial Species:* *Pseudomonas* sp.
+        *   *Studied Host Strain:* SK 10.
+        *   *Plaque characteristics/Shape:* Lytic, circular; 2 mm diameter.
+        *   *Optimal MOI:* 0.01.
+        *   *Latent period (min):* 10 – 20 min.
+        *   *Burst size:* 24 (± 5) phage particles per infected host cell.
+        *   *Optimal Temperature (°C):* Not explicitly stated as "optimal", but stable from 4 to 50 °C (optimum stability at 28 °C).
+        *   *Optimal pH:* Not explicitly stated as "optimal", but high stability over pH range of 4 – 8 (optimum stability at pH 7).
+
+    *   *Refining "Optimal Temperature/pH":* The text says "Both the phages showed optimum stability at pH 7" and "showing 98.32% stability at 28 °C" (for PRɸL2) and "showing 99.9% stability at 28 °C" (for SSɸL8). I will use 28 °C and pH 7 as the optimal values based on the "optimum stability" phrasing.
+
+    *   *Refining "Genome size":* 25.403 kb -> 25,403 bp. 29.877 kb -> 29,877 bp.
+
+    *   *Refining "Phage type":* Text says "All phages were lytic in nature".
+
+    *   *Refining "Phage TEM shows structural similarity with":* The text doesn't say "similar to [Specific Phage Name]". It just classifies them. I will put "Not reported" or "Not specified" unless a specific comparison is made. Wait, the discussion mentions some other phages (ϕ PSA1, ϕ PSA2, ϕ IBB-PF7A), but it doesn't say the *isolated* phages are *similar* to them in a way that fits the "structural similarity" column usually reserved for specific comparisons. I'll stick to "Not reported".
+
+    *   *Refining "Phage Taxonomy":*
+        *   PRɸL2: Order Caudovirales, Family Siphoviridae.
+        *   SSɸL8: Order Caudovirales, Family Myoviridae.
+
+    *   *Refining "Plaque characteristics":* "Lytic, circular" and "2 mm diameter".
+
+    *   *Refining "Host Bacterial Species":* *Pseudomonas* sp.
+
+    *   *Refining "Studied Host Strain":* SK 10.
+
+    *   *Refining "Place of Sample collection":*
+        *   PRɸL2: Pavana river, Pimpri, Pune, Maharashtra, India.
+        *   SSɸL8: Solapur Soil (blight infested pomegranate orchard), Solapur, Maharashtra, India.
+
+    *   *Refining "Phage isolation Sample":*
+        *   PRɸL2: River water.
+        *   SSɸL8: Soil.
+
+    *   *Refining "Phage Genome Accession/Bioproject":* Not reported.
+
+    *   *Refining "Phage GC content":* Not reported.
+
+    *   *Refining "Phage TEM dimensions/Capsid morphology":*
+        *   PRɸL2: Isometric head of 72 nm; extremely long, more or less flexible tail of about 383 x 12 nm; conspicuous cross striations; terminal knob.
+        *   SSɸL8: Isometric head of 59 nm; contractile tail of 101 x 17 nm in the extended state; contractile tail measured 42 x 22 nm in the contracted state; neck, base plate of 7 x 2 nm, and fibres of about 12 x 3 nm with a terminal swelling.
+
+    *   *Refining "Optimal MOI":*
+        *   PRɸL2: 0.1.
+        *   SSɸL8: 0.01.
+
+    *   *Refining "Latent period (min)":*
+        *   PRɸL2: 20 min.
+        *   SSɸL8: 10 – 20 min.
+
+    *   *Refining "Burst size":*
+        *   PRɸL2: 85 (± 4).
+        *   SSɸL8: 24 (± 5).
+
+    *   *Refining "Optimal Temperature (°C)":*
+        *   PRɸL2: 28 °C.
+        *   SSɸL8: 28 °C.
+
+    *   *Refining "Optimal pH":*
+        *   PRɸL2: 7.
+        *   SSɸL8: 7.
+
+    *   *Check:* Did I miss any phages? No, only two were characterized in detail.
+    *   *Check:* Are the units correct? bp for genome size, min for latent period, etc.
+    *   *Check:* Is the DOI correct? 10.1016/j.micres.2019.126300.
+
+    *   *Summary:* The study characterizes two lytic bacteriophages, vB_Psp.S_PRɸL2 and vB_Psp.M_SSɸL8, isolated from river water and soil against *Pseudomonas* sp. causing pomegranate bacterial blight. The phages exhibit distinct morphologies, genome sizes, and environmental stabilities, making them potential candidates for biological control.
+
+--------------------------------------------------------------------------------
+4. EXTRACTED MARKDOWN TABLE
+--------------------------------------------------------------------------------
+| Article DOI | Phage Name | Phage Genome Accession/Bioproject | Phage Genome size (bp) | Phage GC content (%) | Phage TEM shows structural similarity with | Phage TEM dimensions/Capsid morphology | Phage Taxonomy | Phage type: Lytic/ Lysogenic/ Engineered | Place of Sample collection | Phage isolation Sample | Host Bacterial Species | Studied Host Strain/ Propagating Bacterial Strain | Phage's Plaque characteristics/Shape | Optimal MOI | Latent period (min) | Burst size (phage/infected bacterium) | Optimal Temperature (°C) | Optimal pH |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 10.1016/j.micres.2019.126300 | vB_Psp.S_PRɸL2 | Not reported | 25,403 | Not reported | Not reported | Isometric head of 72 nm; extremely long, more or less flexible tail of about 383 x 12 nm; conspicuous cross striations; terminal knob | Order Caudovirales, Family Siphoviridae | Lytic | Pavana river, Pimpri, Pune, Maharashtra, India | River water | *Pseudomonas* sp. | SK 10 | Lytic, circular; 2 mm diameter | 0.1 | 20 | 85 (± 4) | 28 | 7 |
+| 10.1016/j.micres.2019.126300 | vB_Psp.M_SSɸL8 | Not reported | 29,877 | Not reported | Not reported | Isometric head of 59 nm; contractile tail of 101 x 17 nm in the extended state; contractile tail measured 42 x 22 nm in the contracted state; neck, base plate of 7 x 2 nm, and fibres of about 12 x 3 nm with a terminal swelling | Order Caudovirales, Family Myoviridae | Lytic | Solapur Soil (blight infested pomegranate orchard), Solapur, Maharashtra, India | Soil | *Pseudomonas* sp. | SK 10 | Lytic, circular; 2 mm diameter | 0.01 | 10 – 20 | 24 (± 5) | 28 | 7 |
+
+This study characterizes two distinct lytic bacteriophages, vB_Psp.S_PRɸL2 and vB_Psp.M_SSɸL8, isolated from river water and soil against *Pseudomonas* sp. causing bacterial blight in pomegranate. The phages demonstrate unique morphological features, genome sizes, and environmental stabilities, suggesting their potential as effective biocontrol agents.
+
+================================================================================

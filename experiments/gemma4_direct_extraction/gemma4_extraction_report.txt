@@ -1,0 +1,217 @@
+================================================================================
+📊 LITSIFT BENCHMARK REPORT: GEMMA 4 DIRECT EXTRACTION TEST
+================================================================================
+Timestamp:          2026-08-28T12:10:26.993Z
+Target Endpoint:    http://192.168.0.25:1234/v1
+Target Model:       google/gemma-4-12b-qat
+Paper Evaluated:    Isolation and characterization of thermostable lytic bacteriophage Lys68 and endolysin against Pseudomonas aeruginosa and Salmonella enterica
+
+--------------------------------------------------------------------------------
+1. PERFORMANCE & TELEMETRY
+--------------------------------------------------------------------------------
+• Time to First Token (TTFT): 24.937 seconds
+• Total Execution Time:       368.30 seconds
+• Generated Output Tokens:    ~548 tokens
+• Generation Speed:           ~1.6 tokens/sec
+• Verbatim Quote Audit Score: 100% (3/3 exact matches in source)
+
+--------------------------------------------------------------------------------
+2. MODEL THINKING & REASONING TRACE
+--------------------------------------------------------------------------------
+Precision scientific literature data extraction.
+Extract key data points from a provided research paper into a Markdown table.
+Phage / Entity Name, Host Organism, Burst Size (virions/cell) & Latent Period, Genome Length (bp) & GenBank Accession, TEM Morphology & Family, Primary Lytic / Biofilm Finding, Exact Verbatim Evidence Quote.
+
+        *   Strict accuracy (no fabrication).
+        *   Verbatim evidence (exact quotes).
+        *   Tabular format (Markdown table only + brief summary).
+        *   Multiple entities (separate rows).
+
+    *   *Entity 1: Phage Pa-P1*
+        *   Host: *Pseudomonas aeruginosa* (specifically PAO1 and clinical MDR strains).
+        *   Burst Size/Latent Period: 165 ± 12 virions/cell; 22 minutes.
+        *   Genome Length/Accession: 66,420 bp; KJ475444.
+        *   TEM Morphology/Family: Icosahedral head (68 ± 3 nm) and a long contractile tail (135 ± 5 nm); Myoviridae.
+        *   Primary Lytic Finding: Lysed 18 of 22 (81.8%) clinical MDR *P. aeruginosa* isolates.
+        *   Quote: "One-step growth curves revealed that Pa-P1 has a latent period of 22 minutes and an average burst size of 165 ± 12 virions per infected bacterial cell at 37°C." / "Whole-genome sequencing of Pa-P1 revealed a double-stranded DNA genome of 66,420 base pairs with a GC content of 55.4%, encoding 89 open reading frames (GenBank Accession: KJ475444)." / "Lytic assays confirmed that Pa-P1 lyse 18 of 22 (81.8%) clinical MDR P. aeruginosa isolates..."
+
+    *   *Entity 2: Phage Lys68*
+        *   Host: *Salmonella enterica* (specifically serovar Typhimurium).
+        *   Burst Size/Latent Period: 142 virions/cell; 18 minutes.
+        *   Genome Length/Accession: Not explicitly stated for the whole phage genome, but the endolysin gene Lys68 is 489 bp (KJ475445). *Correction*: The prompt asks for Genome Length & GenBank Accession. For Lys68, the text gives the endolysin gene length. I should check if the phage genome is mentioned. It's not. I will use the endolysin gene info or "Not specified" for the phage genome.
+        *   TEM Morphology/Family: Siphoviridae member with a flexible non-contractile tail of 180 nm.
+        *   Primary Lytic Finding: Effectively cleared *Salmonella enterica* biofilm biomass by 74.5% within 4 hours.
+        *   Quote: "Phage Lys68 was classified as a Siphoviridae member with a flexible non-contractile tail of 180 nm." / "Phage Lys68 exhibited a latent period of 18 min and a burst size of 142 virions/cell." / "phage Lys68 effectively cleared Salmonella enterica biofilm biomass by 74.5% within 4 hours."
+
+    *   *Entity 3: Lys68 Endolysin (Optional but good to include as it's a distinct entity in the title/text)*
+        *   Host: *Salmonella enterica* (implied by the phage).
+        *   Burst Size/Latent Period: N/A (Enzyme).
+        *   Genome Length/Accession: 489 bp; KJ475445.
+        *   TEM Morphology/Family: N/A (Polypeptide).
+        *   Primary Lytic Finding: Degraded *Salmonella enterica* biofilm biomass by 74.5 ± 4.2% within 4 hours at 37°C.
+        *   Quote: "The cloned endolysin gene (Lys68, 489 bp) demonstrated high thermal stability... The endolysin gene Lys68 spans 489 bp and encodes a 162-amino-acid polypeptide with a predicted molecular weight of 18.2 kDa (GenBank Accession: KJ475445)." / "recombinant Lys68 endolysin in combination with 0.5 mM EDTA degraded established Salmonella enterica biofilm biomass by 74.5 ± 4.2% within 4 hours at 37°C."
+
+    *   *Refining the Table Rows:*
+        1. Phage Pa-P1
+        2. Phage Lys68
+        3. Lys68 Endolysin (Since the prompt asks for "phages / enzymes", I should include the endolysin as a separate row or part of Lys68. The prompt says "phages / entities". Lys68 is both a phage and an endolysin. I will list the Phage and the Endolysin separately to ensure all data points are captured accurately.)
+
+    *   *Row 1: Phage Pa-P1*
+        *   Host: *Pseudomonas aeruginosa*
+        *   Burst/Latent: 165 ± 12 virions/cell; 22 min
+        *   Genome/Accession: 66,420 bp; KJ475444
+        *   Morphology/Family: Icosahedral head (68 ± 3 nm), long contractile tail (135 ± 5 nm); Myoviridae
+        *   Finding: Lysed 18 of 22 (81.8%) clinical MDR *P. aeruginosa* isolates
+        *   Quote: "One-step growth curves revealed that Pa-P1 has a latent period of 22 minutes and an average burst size of 165 ± 12 virions per infected bacterial cell at 37°C."
+
+    *   *Row 2: Phage Lys68*
+        *   Host: *Salmonella enterica*
+        *   Burst/Latent: 142 virions/cell; 18 min
+        *   Genome/Accession: Not specified (Phage genome)
+        *   Morphology/Family: Siphoviridae; flexible non-contractile tail of 180 nm
+        *   Finding: Cleared *Salmonella enterica* biofilm biomass by 74.5% within 4 hours
+        *   Quote: "Phage Lys68 exhibited a latent period of 18 min and a burst size of 142 virions/cell."
+
+    *   *Row 3: Lys68 Endolysin*
+        *   Host: *Salmonella enterica*
+        *   Burst/Latent: N/A
+        *   Genome/Accession: 489 bp; KJ475445
+        *   Morphology/Family: N/A (Polypeptide)
+        *   Finding: Degraded *Salmonella enterica* biofilm biomass by 74.5 ± 4.2% within 4 hours at 37°C
+        *   Quote: "The endolysin gene Lys68 spans 489 bp and encodes a 162-amino-acid polypeptide with a predicted molecular weight of 18.2 kDa (GenBank Accession: KJ475445)."
+
+    *   Check against rules:
+        *   Strict accuracy? Yes.
+        *   Verbatim evidence? Yes.
+        *   Tabular format? Yes.
+        *   Multiple entities? Yes (Pa-P1, Lys68 Phage, Lys68 Endolysin).
+
+    *Self-Correction during drafting:* The prompt asks for "Phage / Entity Name". I will group the Phage Lys68 and the Endolysin clearly.
+
+    *Refining Row 2 (Phage Lys68) Genome:* The text doesn't give the phage genome length, only the endolysin gene length. I will put "Not specified" for the phage genome length to maintain accuracy.
+
+    *Refining Row 1 (Pa-P1) Quote:* I'll pick the most comprehensive quote for the finding.
+
+    *Final Table Construction:*
+    | Phage / Entity Name | Host Organism | Burst Size (virions/cell) & Latent Period | Genome Length (bp) & GenBank Accession | TEM Morphology & Family | Primary Lytic / Biofilm Finding | Exact Verbatim Evidence Quote |
+    | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+    | Phage Pa-P1 | *Pseudomonas aeruginosa* | 165 ± 12 virions/cell; 22 min | 66,420 bp; KJ475444 | Icosahedral head (68 ± 3 nm), long contractile tail (135 ± 5 nm); Myoviridae | Lysed 18 of 22 (81.8%) clinical MDR *P. aeruginosa* isolates | "One-step growth curves revealed that Pa-P1 has a latent period of 22 minutes and an average burst size of 165 ± 12 virions per infected bacterial cell at 37°C." |
+    | Phage Lys68 | *Salmonella enterica* | 142 virions/cell; 18 min | Not specified | Siphoviridae; flexible non-contractile tail of 180 nm | Cleared *Salmonella enterica* biofilm biomass by 74.5% within 4 hours | "Phage Lys68 exhibited a latent period of 18 min and a burst size of 142 virions/cell." |
+    | Lys68 Endolysin | *Salmonella enterica* | N/A | 489 bp; KJ475445 | N/A (Polypeptide) | Degraded *Salmonella enterica* biofilm biomass by 74.5 ± 4.2% within 4 hours at 37°C | "The endolysin gene Lys68 spans 489 bp and encodes a 162-amino-acid polypeptide with a predicted molecular weight of 18.2 kDa (GenBank Accession: KJ475445)." |
+
+    *Wait, let me double check the "Primary Lytic Finding" for Lys68 Phage.*
+    Text: "phage Lys68 effectively cleared Salmonella enterica biofilm biomass by 74.5% within 4 hours."
+    Text: "recombinant Lys68 endolysin in combination with 0.5 mM EDTA degraded established Salmonella enterica biofilm biomass by 74.5 ± 4.2% within 4 hours at 37°C."
+    Actually, the 74.5% finding is attributed to the *endolysin* in the results section, but the abstract says "phage Lys68 effectively cleared...". I will stick to the specific finding for each.
+
+    *Final check on Pa-P1 quote:*
+    "Lytic assays confirmed that Pa-P1 lyse 18 of 22 (81.8%) clinical MDR P. aeruginosa isolates" -> This is the finding.
+
+    *Final check on Lys68 Phage quote:*
+    "Phage Lys68 exhibited a latent period of 18 min and a burst size of 142 virions/cell." -> This is the growth data. I'll use the biofilm one for the finding.
+
+    *Final check on Lys68 Endolysin quote:*
+    "The endolysin gene Lys68 spans 489 bp and encodes a 162-amino-acid polypeptide with a predicted molecular weight of 18.2 kDa (GenBank Accession: KJ475445)."
+
+    *Wait, the prompt asks for "Primary Lytic / Biofilm Finding".*
+    For Pa-P1: "lyse 18 of 22 (81.8%) clinical MDR P. aeruginosa isolates"
+    For Lys68 Phage: "effectively cleared Salmonella enterica biofilm biomass by 74.5% within 4 hours"
+    For Lys68 Endolysin: "degraded established Salmonella enterica biofilm biomass by 74.5 ± 4.2% within 4 hours at 37°C"
+
+    Let's refine the table.
+
+    *One more check:* The prompt says "Extract all distinct phages / enzymes".
+    1. Phage Pa-P1
+    2. Phage Lys68
+    3. Lys68 Endolysin
+
+    I will proceed.
+
+--------------------------------------------------------------------------------
+3. EXTRACTED MARKDOWN TABLE OUTPUT
+--------------------------------------------------------------------------------
+| Phage / Entity Name | Host Organism | Burst Size (virions/cell) & Latent Period | Genome Length (bp) & GenBank Accession | TEM Morphology & Family | Primary Lytic / Biofilm Finding | Exact Verbatim Evidence Quote |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Phage Pa-P1 | *Pseudomonas aeruginosa* | 165 ± 12 virions/cell; 22 min | 66,420 bp; KJ475444 | Icosahedral head (68 ± 3 nm), long contractile tail (135 ± 5 nm); Myoviridae | Lysed 18 of 22 (81.8%) clinical MDR *P. aeruginosa* isolates | "One-step growth curves revealed that Pa-P1 has a latent period of 22 minutes and an average burst size of 165 ± 12 virions per infected bacterial cell at 37°C." |
+| Phage Lys68 | *Salmonella enterica* | 142 virions/cell; 18 min | Not specified | Siphoviridae; flexible non-contractile tail of 180 nm | Effectively cleared *Salmonella enterica* biofilm biomass by 74.5% within 4 hours | "phage Lys68 effectively cleared Salmonella enterica biofilm biomass by 74.5% within 4 hours." |
+| Lys68 Endolysin | *Salmonella enterica* | N/A | 489 bp; KJ475445 | N/A (Polypeptide) | Degraded established *Salmonella enterica* biofilm biomass by 74.5 ± 4.2% within 4 hours at 37°C | "recombinant Lys68 endolysin in combination with 0.5 mM EDTA degraded established Salmonella enterica biofilm biomass by 74.5 ± 4.2% within 4 hours at 37°C." |
+
+**Summary:**
+The study characterizes two novel entities from municipal wastewater: Phage Pa-P1, a Myoviridae phage targeting *P. aeruginosa* with a high lytic success rate against clinical MDR strains, and Phage Lys68, a Siphoviridae phage targeting *S. enterica*. Additionally, the study highlights the Lys68 endolysin, which demonstrates significant thermal stability and the ability to degrade *S. enterica* biofilms.
+
+--------------------------------------------------------------------------------
+4. VERBATIM CITATION AUDIT DETAILS
+--------------------------------------------------------------------------------
+[Quote 1] ✅ EXACT MATCH
+"One-step growth curves revealed that Pa-P1 has a latent period of 22 minutes and an average burst size of 165 ± 12 virions per infected bacterial cell at 37°C."
+
+[Quote 2] ✅ EXACT MATCH
+"phage Lys68 effectively cleared Salmonella enterica biofilm biomass by 74.5% within 4 hours."
+
+[Quote 3] ✅ EXACT MATCH
+"recombinant Lys68 endolysin in combination with 0.5 mM EDTA degraded established Salmonella enterica biofilm biomass by 74.5 ± 4.2% within 4 hours at 37°C."
+
+
+--------------------------------------------------------------------------------
+5. PROMPT TEMPLATE USED
+--------------------------------------------------------------------------------
+[SYSTEM PROMPT]:
+You are a precision scientific literature data extraction system.
+Your mission is to read the provided research paper and extract all key data points for the specified schema columns into a clean, structured Markdown table.
+
+CRITICAL EXTRACTION RULES:
+1. STRICT ACCURACY: Extract exact numbers, accession numbers, biological host names, and metrics. Do not fabricate or estimate.
+2. VERBATIM EVIDENCE: In the "Exact Verbatim Evidence Quote" column, provide the EXACT, word-for-word quote from the text supporting the extracted row.
+3. TABULAR FORMAT: Output ONLY the completed Markdown table followed by a brief summary. Do not output markdown code fences or conversational fluff.
+4. MULTIPLE ENTITIES: If the paper studies multiple phages/entities (e.g. Pa-P1 and Lys68), create a separate row for EACH entity.
+
+[USER PROMPT]:
+### DOCUMENT TO EXTRACT:
+Title: Isolation and characterization of thermostable lytic bacteriophage Lys68 and endolysin against Pseudomonas aeruginosa and Salmonella enterica
+DOI: 10.1016/j.micres.2021.126800
+
+### FULL DOCUMENT TEXT:
+# Title: Isolation and characterization of thermostable lytic bacteriophage Lys68 and endolysin against Pseudomonas aeruginosa and Salmonella enterica
+
+## Abstract
+Multidrug-resistant (MDR) strains of Pseudomonas aeruginosa and Salmonella enterica serovar Typhimurium present severe challenges in clinical and food safety settings. In this study, we isolated and characterized a novel lytic bacteriophage, designated as Phage Pa-P1, and a companion Salmonella phage Lys68 from municipal wastewater effluents. Phage Pa-P1 possesses an icosahedral head (diameter 68 ± 3 nm) and a long contractile tail (length 135 ± 5 nm), characteristic of the Myoviridae family. One-step growth curves revealed that Pa-P1 has a latent period of 22 minutes and an average burst size of 165 ± 12 virions per infected bacterial cell at 37°C. Whole-genome sequencing of Pa-P1 revealed a double-stranded DNA genome of 66,420 base pairs with a GC content of 55.4%, encoding 89 open reading frames (GenBank Accession: KJ475444). The cloned endolysin gene (Lys68, 489 bp) demonstrated high thermal stability, retaining >80% lytic activity after incubation at 65°C for 30 minutes in the presence of 0.5 mM EDTA. Lytic assays confirmed that Pa-P1 lyse 18 of 22 (81.8%) clinical MDR P. aeruginosa isolates, while phage Lys68 effectively cleared Salmonella enterica biofilm biomass by 74.5% within 4 hours.
+
+## Materials and Methods
+### Phage Isolation and Host Strains
+Phages were enriched and isolated from municipal wastewater samples collected in October 2020. The indicator host strains used for plaque assays were Pseudomonas aeruginosa PAO1 and Salmonella enterica serovar Typhimurium ATCC 14028. Phages were purified by three consecutive single-plaque isolations using the double-layer agar method.
+
+### Transmission Electron Microscopy (TEM)
+Purified phage particles at a titer of 1.0 × 10^10 PFU/mL were deposited onto carbon-coated copper grids (400 mesh) and negatively stained with 2% (w/v) uranyl acetate (pH 4.5) for 45 s. Morphology was inspected using a JEOL JEM-1400 transmission electron microscope operated at an accelerating voltage of 80 kV.
+
+### One-Step Growth Experiment
+Mid-exponential phase P. aeruginosa PAO1 (OD600 = 0.5) was infected with phage Pa-P1 at a multiplicity of infection (MOI) of 0.01 and incubated at 37°C for 10 min for adsorption. Unadsorbed phages were removed by centrifugation at 10,000 × g for 2 min. Samples were collected every 5 min over a 60-min period and titrated to calculate the latent period and burst size.
+
+### Genomic DNA Sequencing and Bioinformatic Analysis
+Phage genomic DNA was extracted using the standard phenol-chloroform method with proteinase K treatment. Whole-genome sequencing was conducted on an Illumina NovaSeq 6000 platform with 150 bp paired-end reads. Assembly was performed de novo with SPAdes v3.14. Annotation of open reading frames was completed using RAST and BLASTp against the NCBI non-redundant database.
+
+## Results
+### Morphological and Biological Characteristics
+Transmission electron microscopy revealed that Phage Pa-P1 exhibits an icosahedral head of 68 nm and a contractile tail of 135 nm, placing it taxonomically within the Myoviridae family. Phage Lys68 was classified as a Siphoviridae member with a flexible non-contractile tail of 180 nm. One-step growth analysis showed that Phage Pa-P1 had a latent period of 22 min with a burst size of 165 virions/cell. Phage Lys68 exhibited a latent period of 18 min and a burst size of 142 virions/cell.
+
+### Genomic Architecture and Accession
+The complete genome of Phage Pa-P1 comprises 66,420 bp of double-stranded DNA with a 55.4% GC content. Bioinformatic analysis identified 89 predicted ORFs, with no putative virulence factor or antimicrobial resistance genes detected. The complete sequence was deposited in GenBank under accession number KJ475444. The endolysin gene Lys68 spans 489 bp and encodes a 162-amino-acid polypeptide with a predicted molecular weight of 18.2 kDa (GenBank Accession: KJ475445).
+
+### Lytic Spectrum and Biofilm Degradation
+Phage Pa-P1 demonstrated broad lytic activity, successfully lysing 18 of 22 (81.8%) tested clinical MDR P. aeruginosa strains. Microtiter crystal violet assays demonstrated that recombinant Lys68 endolysin in combination with 0.5 mM EDTA degraded established Salmonella enterica biofilm biomass by 74.5 ± 4.2% within 4 hours at 37°C.
+
+---
+
+### TARGET SCHEMA COLUMNS:
+1. Phage / Entity Name
+2. Host Organism
+3. Burst Size (virions/cell) & Latent Period
+4. Genome Length (bp) & GenBank Accession
+5. TEM Morphology & Family
+6. Primary Lytic / Biofilm Finding
+7. Exact Verbatim Evidence Quote
+
+---
+
+### INSTRUCTION:
+Extract all distinct phages / enzymes from the document and populate the Markdown table with all 7 columns defined above. Include the exact verbatim quote for each row.
+================================================================================

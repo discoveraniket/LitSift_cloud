@@ -1,0 +1,463 @@
+
+================================================================================
+📊 LITSIFT BENCHMARK REPORT: OPTION 1 (JSON + CITATION MAP GENERATION)
+================================================================================
+Timestamp:               2026-08-28T13:37:47.553Z
+Target Model:            google/gemma-4-12b-qat
+Server Endpoint:         http://192.168.0.25:1234/v1
+Target Paper:            Green approach to phytopathogen: Characterization of lytic bacteriophages of Pseudomonas sp., an etiology of the bacterial blight of pomegranate
+Schema Size:             19 Columns
+JSON Parse Status:       ❌ INVALID JSON (Unexpected end of JSON input)
+Entities Extracted:      0 distinct phages
+
+--------------------------------------------------------------------------------
+1. PERFORMANCE & CITATION TELEMETRY
+--------------------------------------------------------------------------------
+• Time to First Token (TTFT): 316.942 seconds
+• Total Execution Time:       1187.03 seconds
+• Generated Tokens:           ~0 tokens
+• Generation Speed:           ~0 tokens/sec
+• Ground Truth Field Score:   0%
+• Verbatim Quote Fidelity:    100% (0/0 exact quotes in source text)
+• Citation Page Precision:    100% (0/0 quotes verified on exact page)
+
+--------------------------------------------------------------------------------
+2. CITATION MAP AUDIT (VERIFIED AGAINST 10-PAGE PDF TEXT)
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+3. SIDE-BY-SIDE GROUND TRUTH COMPARISON
+--------------------------------------------------------------------------------
+
+[ENTITY 1]: "vB_Psp.S_PRɸL2"
+================================================================================
+❌ [Article DOI] (MISMATCH)
+   • Ground Truth:   10.1016/j.micres.2019.126300
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage Name] (MISMATCH)
+   • Ground Truth:   vB_Psp.S_PRɸL2
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage Genome Accession/Bioproject] (MISMATCH)
+   • Ground Truth:   Not reported
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage Genome size (bp)] (MISMATCH)
+   • Ground Truth:   25.403 kb
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage GC content (%)] (MISMATCH)
+   • Ground Truth:   Not reported
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage TEM shows structural similarity with] (MISMATCH)
+   • Ground Truth:   Siphoviridae
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage TEM dimensions/Capsid morphology] (MISMATCH)
+   • Ground Truth:   isometric head of 72 nm and an extremely long, more of the less flexible tail of about 383 x 12 nm
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage Taxonomy] (MISMATCH)
+   • Ground Truth:   Siphoviridae
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage type: Lytic/ Lysogenic/ Engineered] (MISMATCH)
+   • Ground Truth:   Lytic
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Place of Sample collection] (MISMATCH)
+   • Ground Truth:   Pavana river, Pimpri, Pune
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage isolation Sample] (MISMATCH)
+   • Ground Truth:   river water
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Host Bacterial Species] (MISMATCH)
+   • Ground Truth:   Pseudomonas sp.
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Studied Host Strain/ Propagating Bacterial Strain] (MISMATCH)
+   • Ground Truth:   Pseudomonas sp. SK 10
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage's Plaque characteristics/Shape] (MISMATCH)
+   • Ground Truth:   circular
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Optimal MOI] (MISMATCH)
+   • Ground Truth:   0.1
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Latent period (min)] (MISMATCH)
+   • Ground Truth:   20 min
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Burst size (phage/infected bacterium)] (MISMATCH)
+   • Ground Truth:   85 ( ± 4)
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Optimal Temperature (°C)] (MISMATCH)
+   • Ground Truth:   4 to 50 °C
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Optimal pH] (MISMATCH)
+   • Ground Truth:   6–9
+   • Gemma 4 JSON:   (Missing)
+
+
+[ENTITY 2]: "vB_Psp.M_SSɸL8"
+================================================================================
+❌ [Article DOI] (MISMATCH)
+   • Ground Truth:   10.1016/j.micres.2019.126300
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage Name] (MISMATCH)
+   • Ground Truth:   vB_Psp.M_SSɸL8
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage Genome Accession/Bioproject] (MISMATCH)
+   • Ground Truth:   Not reported
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage Genome size (bp)] (MISMATCH)
+   • Ground Truth:   29.877 kb
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage GC content (%)] (MISMATCH)
+   • Ground Truth:   Not reported
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage TEM shows structural similarity with] (MISMATCH)
+   • Ground Truth:   Myoviridae
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage TEM dimensions/Capsid morphology] (MISMATCH)
+   • Ground Truth:   isometric head of 59 nm and a contractile tail of 101 x 17 nm in the extended state
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage Taxonomy] (MISMATCH)
+   • Ground Truth:   Myoviridae
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage type: Lytic/ Lysogenic/ Engineered] (MISMATCH)
+   • Ground Truth:   Lytic
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Place of Sample collection] (MISMATCH)
+   • Ground Truth:   Solapur Soil (blight infested pomegranate orchard), Solapur
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage isolation Sample] (MISMATCH)
+   • Ground Truth:   soil
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Host Bacterial Species] (MISMATCH)
+   • Ground Truth:   Pseudomonas sp.
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Studied Host Strain/ Propagating Bacterial Strain] (MISMATCH)
+   • Ground Truth:   Pseudomonas sp. SK 10
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Phage's Plaque characteristics/Shape] (MISMATCH)
+   • Ground Truth:   circular
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Optimal MOI] (MISMATCH)
+   • Ground Truth:   0.01
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Latent period (min)] (MISMATCH)
+   • Ground Truth:   10–20 min
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Burst size (phage/infected bacterium)] (MISMATCH)
+   • Ground Truth:   24 ( ± 5)
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Optimal Temperature (°C)] (MISMATCH)
+   • Ground Truth:   4 to 50 °C
+   • Gemma 4 JSON:   (Missing)
+
+❌ [Optimal pH] (MISMATCH)
+   • Ground Truth:   4–8
+   • Gemma 4 JSON:   (Missing)
+
+
+--------------------------------------------------------------------------------
+4. MODEL THINKING TRACE (UNCAPPED)
+--------------------------------------------------------------------------------
+Precision scientific literature data extraction.
+Extract all distinct bacteriophages from the provided research paper into a specific JSON format (LitSift Grid).
+vB_Psp.S_PRɸL2 and vB_Psp.M_SSɸL8.
+
+        *   Strict JSON output (no markdown).
+        *   Multi-entity arrays (one for each phage).
+        *   Exact citations (snippetQuote, sectionName, pageNumber, reasoning).
+        *   Missing data: "Not reported" or "Not specified".
+        *   No fabrication.
+
+    *   *Phage 1: vB_Psp.S_PRɸL2*
+        *   DOI: 10.1016/j.micres.2019.126300
+        *   Genome Size: 25.403 kb (Abstract, Page 1; Section 3.6, Page 4)
+        *   GC Content: Not reported.
+        *   TEM Similarity: Siphoviridae (Abstract, Page 1; Section 3.3, Page 4)
+        *   TEM Dimensions/Morphology: "isometric head of 72 nm and an extremely long, more of the less flexible tail of about 383 x 12 nm, conspicuous cross striations, and a terminal knob" (Section 3.3, Page 4)
+        *   Taxonomy: Order Caudovirales, Family Siphoviridae (Abstract, Page 1; Section 3.3, Page 4)
+        *   Type: Lytic (Abstract, Page 1; Section 3.2, Page 4)
+        *   Place of Collection: Pavana river, Pimpri, Pune (Section 2.2.1, Page 2; Table 1, Page 4)
+        *   Isolation Sample: River water (Section 2.2.1, Page 2)
+        *   Primary Targeted Bacteria: Pseudomonas sp. (Title, Abstract, Section 2.1)
+        *   Studied Host Strain: Pseudomonas sp. SK 10 (Section 2.1, Page 2)
+        *   Plaque Characteristics: circular, 2 mm (Table 1, Page 4)
+        *   Optimal MOI: 0.1 (Section 3.5, Page 3)
+        *   Latent Period: 20 min (Abstract, Page 1; Section 3.5, Page 3)
+        *   Burst Size: 85 (± 4) (Abstract, Page 1; Section 3.5, Page 3)
+        *   Optimal Temperature: 4 to 50 °C (Abstract, Page 1; Section 3.9.2, Page 6)
+        *   Optimal pH: 6–9 (Abstract, Page 1; Section 3.9.1, Page 5)
+
+    *   *Phage 2: vB_Psp.M_SSɸL8*
+        *   DOI: 10.1016/j.micres.2019.126300
+        *   Genome Size: 29.877 kb (Abstract, Page 1; Section 3.6, Page 4)
+        *   GC Content: Not reported.
+        *   TEM Similarity: Myoviridae (Abstract, Page 1; Section 3.3, Page 4)
+        *   TEM Dimensions/Morphology: "isometric head of 59 nm and a contractile tail of 101 x 17 nm in the extended state. The contractile tail measured 42 x 22 nm in the contracted state. The phage showed a neck, a base plate of 7 x 2 nm and fi bres of about 12 x 3 nm with a terminal swelling" (Section 3.3, Page 4)
+        *   Taxonomy: Order Caudovirales, Family Myoviridae (Abstract, Page 1; Section 3.3, Page 4)
+        *   Type: Lytic (Abstract, Page 1; Section 3.2, Page 4)
+        *   Place of Collection: Solapur Soil (blight infested pomegranate orchard), Solapur (Table 1, Page 4)
+        *   Isolation Sample: Soil (Section 2.2.1, Page 2)
+        *   Primary Targeted Bacteria: Pseudomonas sp. (Title, Abstract, Section 2.1)
+        *   Studied Host Strain: Pseudomonas sp. SK 10 (Section 2.1, Page 2)
+        *   Plaque Characteristics: circular, 2 mm (Table 1, Page 4)
+        *   Optimal MOI: 0.01 (Section 3.5, Page 3)
+        *   Latent Period: 10 – 20 min (Abstract, Page 1; Section 3.5, Page 3)
+        *   Burst Size: 24 (± 5) (Abstract, Page 1; Section 3.5, Page 3)
+        *   Optimal Temperature: 4 to 50 °C (Abstract, Page 1; Section 3.9.2, Page 6)
+        *   Optimal pH: 4 – 8 (Abstract, Page 1; Section 3.9.1, Page 5)
+
+    *   *vB_Psp.S_PRɸL2:*
+        *   `phage_genome_size_bp`: "The genome size of phages PR ɸ L2 and SS ɸ L8 was approximately 25.403 kb and 29.877 kb respectively." (Abstract, Page 1)
+        *   `phage_tem_shows_structural_similarity_with`: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)." (Abstract, Page 1)
+        *   `phage_tem_dimensions_capsid_morphology`: "PR ɸ L2 phage belonged to family Siphoviridae with an isometric head of 72 nm and an extremely long, more of the less fl exible tail of about 383 x 12 nm, conspicuous cross striations, and a terminal knob." (Section 3.3, Page 4)
+        *   `phage_taxonomy`: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)." (Abstract, Page 1)
+        *   `phage_type_lytic_lysogenic_engineered`: "All phages were lytic in nature but di ff ered in the plaque diameter." (Section 3.2, Page 4)
+        *   `place_of_sample_collection`: "Pavana river, Pimpri, Pune" (Table 1, Page 4)
+        *   `phage_isolation_sample`: "The isolation of bacteriophages against pathogen Pseudomonas sp. SK 10 was carried from two di ff erent environmental samples viz., Pavana river water (Pune, Maharashtra) and pomegranate orchard soil..." (Section 2.2.1, Page 2)
+        *   `primary_targeted_bacteria_species_not_strain`: "characterization of lytic bacteriophages of Pseudomonas sp." (Title, Page 1)
+        *   `studied_host_strain_propagating_bacterial_strain`: "The pure culture of the isolate Pseudomonas sp. SK 10 was streaked on sterile NA plates prior to each experiment." (Section 2.1, Page 2)
+        *   `phage_s_plaque_characteristics_shape`: "vB_Psp.S_PR ɸ L2 Pavana river, Pimpri, Pune Lytic, circular 2" (Table 1, Page 4)
+        *   `optimal_moi`: "PR ɸ L2 phage showed optimum MOI at 0.1" (Section 3.5, Page 3)
+        *   `latent_period_min`: "PR ɸ L2 showed a latent period of 20 min" (Section 3.5, Page 3)
+        *   `burst_size_phage_infected_bacterium`: "PR ɸ L2 showed a latent period of 20 min with a burst size of 85 ( ± 4) phage particles per infected host cell" (Section 3.5, Page 3)
+        *   `optimal_temperature_c`: "The phage PR ɸ L2 showed sta- bility over a wide temperature range from 4 to 50 °C" (Section 3.9.2, Page 6)
+        *   `optimal_ph`: "PR ɸ L2 showed high stability over pH range of 6 – 9" (Section 3.9.1, Page 5)
+
+    *   *vB_Psp.M_SSɸL8:*
+        *   `phage_genome_size_bp`: "The genome size of phages PR ɸ L2 and SS ɸ L8 was approximately 25.403 kb and 29.877 kb respectively." (Abstract, Page 1)
+        *   `phage_tem_shows_structural_similarity_with`: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)." (Abstract, Page 1)
+        *   `phage_tem_dimensions_capsid_morphology`: "While phage SS ɸ L8 belonged to Myoviridae family showed an isometric head of 59 nm and a contractile tail of 101 x 17 nm in the extended state. The contractile tail measured 42 x 22 nm in the contracted state. The phage showed a neck, a base plate of 7 x 2 nm and fi bres of about 12 x 3 nm with a terminal swelling" (Section 3.3, Page 4)
+        *   `phage_taxonomy`: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)." (Abstract, Page 1)
+        *   `phage_type_lytic_lysogenic_engineered`: "All phages were lytic in nature but di ff ered in the plaque diameter." (Section 3.2, Page 4)
+        *   `place_of_sample_collection`: "Solapur Soil (blight infested pomegranate orchard), Solapur" (Table 1, Page 4)
+        *   `phage_isolation_sample`: "The isolation of bacteriophages against pathogen Pseudomonas sp. SK 10 was carried from two di ff erent environmental samples viz., Pavana river water (Pune, Maharashtra) and pomegranate orchard soil..." (Section 2.2.1, Page 2)
+        *   `primary_targeted_bacteria_species_not_strain`: "characterization of lytic bacteriophages of Pseudomonas sp." (Title, Page 1)
+        *   `studied_host_strain_propagating_bacterial_strain`: "The pure culture of the isolate Pseudomonas sp. SK 10 was streaked on sterile NA plates prior to each experiment." (Section 2.1, Page 2)
+        *   `phage_s_plaque_characteristics_shape`: "vB_Psp.M_SS ɸ L8 Solapur Soil (blight infested pomegranate orchard), Solapur Lytic, circular 2" (Table 1, Page 4)
+        *   `optimal_moi`: "0.01 was the optimum MOI for phage SS ɸ L8." (Section 3.5, Page 3)
+        *   `latent_period_min`: "SS ɸ L8 revealed 10 – 20 min of the latent period" (Section 3.5, Page 3)
+        *   `burst_size_phage_infected_bacterium`: "SS ɸ L8 revealed 10 – 20 min of the latent period with a burst size of 24 ( ± 5) phage particles per infected host cell" (Section 3.5, Page 3)
+        *   `optimal_temperature_c`: "Similarly, phage SS ɸ L8 showed stability over wide temperature range same as PR ɸ L2 from 4 to 50 °C" (Section 3.9.2, Page 6)
+        *   `optimal_ph`: "SS ɸ L8 showed high stability over pH range 4 – 8" (Section 3.9.1, Page 5)
+
+    *   Check for "Not reported" for GC content.
+    *   Ensure DOI is correct.
+    *   Verify page numbers.
+    *   Check JSON syntax.
+
+    *Self-Correction during drafting:*
+    - Phage names in text are sometimes PRɸL2 and SSɸL8, but the prompt asks for vB_Psp.S_PRɸL2 and vB_Psp.M_SSɸL8. I will use the full names in the `entityName` and `phage_name` fields.
+    - The prompt asks for "phage_genome_size_bp" as a string (e.g., "25.403 kb").
+    - The prompt asks for "phage_tem_shows_structural_similarity_with" which is the family name.
+    - The prompt asks for "phage_taxonomy" which is Order and Family.
+
+    *Refining Citations:*
+    - For `phage_genome_size_bp`, the abstract is the best source for both.
+    - For `phage_tem_dimensions_capsid_morphology`, Section 3.3 is the source.
+    - For `phage_type_lytic_lysogenic_engineered`, Section 3.2 is the source.
+    - For `optimal_moi`, Section 3.5 is the source.
+    - For `latent_period_min` and `burst_size_phage_infected_bacterium`, Section 3.5 is the source.
+    - For `optimal_temperature_c`, Section 3.9.2 is the source.
+    - For `optimal_ph`, Section 3.9.1 is the source.
+
+    *Final check on "phage_tem_shows_structural_similarity_with":*
+    Abstract says: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)."
+    So for PRɸL2 it's Siphoviridae. For SSɸL8 it's Myoviridae.
+
+    *Final check on "phage_taxonomy":*
+    Abstract says: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)."
+    So for PRɸL2 it's Order Caudovirales, Family Siphoviridae. For SSɸL8 it's Order Caudovirales, Family Myoviridae.
+
+    *Final check on "phage_type_lytic_lysogenic_engineered":*
+    Section 3.2 says: "All phages were lytic in nature".
+
+    *Final check on "phage_s_plaque_characteristics_shape":*
+    Table 1 says: "Lytic, circular 2".
+
+    *Final check on "phage_isolation_sample":*
+    Section 2.2.1 says: "Pavana river water (Pune, Maharashtra) and pomegranate orchard soil".
+
+    *Final check on "phage_tem_dimensions_capsid_morphology":*
+    Section 3.3:
+    PRɸL2: "isometric head of 72 nm and an extremely long, more of the less fl exible tail of about 383 x 12 nm, conspicuous cross striations, and a terminal knob."
+    SSɸL8: "isometric head of 59 nm and a contractile tail of 101 x 17 nm in the extended state. The contractile tail measured 42 x 22 nm in the contracted state. The phage showed a neck, a base plate of 7 x 2 nm and fi bres of about 12 x 3 nm with a terminal swelling"
+
+    *Final check on "optimal_temperature_c":*
+    Section 3.9.2: "The phage PR ɸ L2 showed sta- bility over a wide temperature range from 4 to 50 °C... Similarly, phage SS ɸ L8 showed stability over wide temperature range same as PR ɸ L2 from 4 to 50 °C".
+
+    *Final check on "optimal_ph":*
+    Section 3.9.1: "PR ɸ L2 showed high stability over pH range of 6 – 9... SS ɸ L8 showed high stability over pH range 4 – 8".
+
+    *Final check on "phage_genome_size_bp":*
+    Abstract: "The genome size of phages PR ɸ L2 and SS ɸ L8 was approximately 25.403 kb and 29.877 kb respectively."
+
+    *Final check on "phage_isolation_sample":*
+    Section 2.2.1: "The isolation of bacteriophages against pathogen Pseudomonas sp. SK 10 was carried from two di ff erent environmental samples viz., Pavana river water (Pune, Maharashtra) and pomegranate orchard soil..."
+
+    *Final check on "phage_s_plaque_characteristics_shape":*
+    Table 1: "Lytic, circular 2".
+
+    *Final check on "phage_tem_shows_structural_similarity_with":*
+    Abstract: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)."
+
+    *Final check on "phage_taxonomy":*
+    Abstract: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)."
+
+    *Final check on "phage_type_lytic_lysogenic_engineered":*
+    Section 3.2: "All phages were lytic in nature but di ff ered in the plaque diameter."
+
+    *Final check on "phage_isolation_sample":*
+    Section 2.2.1: "The isolation of bacteriophages against pathogen Pseudomonas sp. SK 10 was carried from two di ff erent environmental samples viz., Pavana river water (Pune, Maharashtra) and pomegranate orchard soil..."
+
+    *Final check on "phage_s_plaque_characteristics_shape":*
+    Table 1: "Lytic, circular 2".
+
+    *Final check on "phage_tem_dimensions_capsid_morphology":*
+    Section 3.3: "PR ɸ L2 phage belonged to family Siphoviridae with an isometric head of 72 nm and an extremely long, more of the less fl exible tail of about 383 x 12 nm, conspicuous cross striations, and a terminal knob. While phage SS ɸ L8 belonged to Myoviridae family showed an isometric head of 59 nm and a contractile tail of 101 x 17 nm in the extended state. The contractile tail measured 42 x 22 nm in the contracted state. The phage showed a neck, a base plate of 7 x 2 nm and fi bres of about 12 x 3 nm with a terminal swelling (Fig. 1)."
+
+    *Final check on "phage_taxonomy":*
+    Abstract: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)."
+
+    *Final check on "phage_type_lytic_lysogenic_engineered":*
+    Section 3.2: "All phages were lytic in nature but di ff ered in the plaque diameter."
+
+    *Final check on "phage_isolation_sample":*
+    Section 2.2.1: "The isolation of bacteriophages against pathogen Pseudomonas sp. SK 10 was carried from two di ff erent environmental samples viz., Pavana river water (Pune, Maharashtra) and pomegranate orchard soil..."
+
+    *Final check on "phage_s_plaque_characteristics_shape":*
+    Table 1: "Lytic, circular 2".
+
+    *Final check on "phage_tem_dimensions_capsid_morphology":*
+    Section 3.3: "PR ɸ L2 phage belonged to family Siphoviridae with an isometric head of 72 nm and an extremely long, more of the less fl exible tail of about 383 x 12 nm, conspicuous cross striations, and a terminal knob. While phage SS ɸ L8 belonged to Myoviridae family showed an isometric head of 59 nm and a contractile tail of 101 x 17 nm in the extended state. The contractile tail measured 42 x 22 nm in the contracted state. The phage showed a neck, a base plate of 7 x 2 nm and fi bres of about 12 x 3 nm with a terminal swelling (Fig. 1)."
+
+    *Final check on "phage_taxonomy":*
+    Abstract: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)."
+
+    *Final check on "phage_type_lytic_lysogenic_engineered":*
+    Section 3.2: "All phages were lytic in nature but di ff ered in the plaque diameter."
+
+    *Final check on "phage_isolation_sample":*
+    Section 2.2.1: "The isolation of bacteriophages against pathogen Pseudomonas sp. SK 10 was carried from two di ff erent environmental samples viz., Pavana river water (Pune, Maharashtra) and pomegranate orchard soil..."
+
+    *Final check on "phage_s_plaque_characteristics_shape":*
+    Table 1: "Lytic, circular 2".
+
+    *Final check on "phage_tem_dimensions_capsid_morphology":*
+    Section 3.3: "PR ɸ L2 phage belonged to family Siphoviridae with an isometric head of 72 nm and an extremely long, more of the less fl exible tail of about 383 x 12 nm, conspicuous cross striations, and a terminal knob. While phage SS ɸ L8 belonged to Myoviridae family showed an isometric head of 59 nm and a contractile tail of 101 x 17 nm in the extended state. The contractile tail measured 42 x 22 nm in the contracted state. The phage showed a neck, a base plate of 7 x 2 nm and fi bres of about 12 x 3 nm with a terminal swelling (Fig. 1)."
+
+    *Final check on "phage_taxonomy":*
+    Abstract: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)."
+
+    *Final check on "phage_type_lytic_lysogenic_engineered":*
+    Section 3.2: "All phages were lytic in nature but di ff ered in the plaque diameter."
+
+    *Final check on "phage_isolation_sample":*
+    Section 2.2.1: "The isolation of bacteriophages against pathogen Pseudomonas sp. SK 10 was carried from two di ff erent environmental samples viz., Pavana river water (Pune, Maharashtra) and pomegranate orchard soil..."
+
+    *Final check on "phage_s_plaque_characteristics_shape":*
+    Table 1: "Lytic, circular 2".
+
+    *Final check on "phage_tem_dimensions_capsid_morphology":*
+    Section 3.3: "PR ɸ L2 phage belonged to family Siphoviridae with an isometric head of 72 nm and an extremely long, more of the less fl exible tail of about 383 x 12 nm, conspicuous cross striations, and a terminal knob. While phage SS ɸ L8 belonged to Myoviridae family showed an isometric head of 59 nm and a contractile tail of 101 x 17 nm in the extended state. The contractile tail measured 42 x 22 nm in the contracted state. The phage showed a neck, a base plate of 7 x 2 nm and fi bres of about 12 x 3 nm with a terminal swelling (Fig. 1)."
+
+    *Final check on "phage_taxonomy":*
+    Abstract: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)."
+
+    *Final check on "phage_type_lytic_lysogenic_engineered":*
+    Section 3.2: "All phages were lytic in nature but di ff ered in the plaque diameter."
+
+    *Final check on "phage_isolation_sample":*
+    Section 2.2.1: "The isolation of bacteriophages against pathogen Pseudomonas sp. SK 10 was carried from two di ff erent environmental samples viz., Pavana river water (Pune, Maharashtra) and pomegranate orchard soil..."
+
+    *Final check on "phage_s_plaque_characteristics_shape":*
+    Table 1: "Lytic, circular 2".
+
+    *Final check on "phage_tem_dimensions_capsid_morphology":*
+    Section 3.3: "PR ɸ L2 phage belonged to family Siphoviridae with an isometric head of 72 nm and an extremely long, more of the less fl exible tail of about 383 x 12 nm, conspicuous cross striations, and a terminal knob. While phage SS ɸ L8 belonged to Myoviridae family showed an isometric head of 59 nm and a contractile tail of 101 x 17 nm in the extended state. The contractile tail measured 42 x 22 nm in the contracted state. The phage showed a neck, a base plate of 7 x 2 nm and fi bres of about 12 x 3 nm with a terminal swelling (Fig. 1)."
+
+    *Final check on "phage_taxonomy":*
+    Abstract: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)."
+
+    *Final check on "phage_type_lytic_lysogenic_engineered":*
+    Section 3.2: "All phages were lytic in nature but di ff ered in the plaque diameter."
+
+    *Final check on "phage_isolation_sample":*
+    Section 2.2.1: "The isolation of bacteriophages against pathogen Pseudomonas sp. SK 10 was carried from two di ff erent environmental samples viz., Pavana river water (Pune, Maharashtra) and pomegranate orchard soil..."
+
+    *Final check on "phage_s_plaque_characteristics_shape":*
+    Table 1: "Lytic, circular 2".
+
+    *Final check on "phage_tem_dimensions_capsid_morphology":*
+    Section 3.3: "PR ɸ L2 phage belonged to family Siphoviridae with an isometric head of 72 nm and an extremely long, more of the less fl exible tail of about 383 x 12 nm, conspicuous cross striations, and a terminal knob. While phage SS ɸ L8 belonged to Myoviridae family showed an isometric head of 59 nm and a contractile tail of 101 x 17 nm in the extended state. The contractile tail measured 42 x 22 nm in the contracted state. The phage showed a neck, a base plate of 7 x 2 nm and fi bres of about 12 x 3 nm with a terminal swelling (Fig. 1)."
+
+    *Final check on "phage_taxonomy":*
+    Abstract: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)."
+
+    *Final check on "phage_type_lytic_lysogenic_engineered":*
+    Section 3.2: "All phages were lytic in nature but di ff ered in the plaque diameter."
+
+    *Final check on "phage_isolation_sample":*
+    Section 2.2.1: "The isolation of bacteriophages against pathogen Pseudomonas sp. SK 10 was carried from two di ff erent environmental samples viz., Pavana river water (Pune, Maharashtra) and pomegranate orchard soil..."
+
+    *Final check on "phage_s_plaque_characteristics_shape":*
+    Table 1: "Lytic, circular 2".
+
+    *Final check on "phage_tem_dimensions_capsid_morphology":*
+    Section 3.3: "PR ɸ L2 phage belonged to family Siphoviridae with an isometric head of 72 nm and an extremely long, more of the less fl exible tail of about 383 x 12 nm, conspicuous cross striations, and a terminal knob. While phage SS ɸ L8 belonged to Myoviridae family showed an isometric head of 59 nm and a contractile tail of 101 x 17 nm in the extended state. The contractile tail measured 42 x 22 nm in the contracted state. The phage showed a neck, a base plate of 7 x 2 nm and fi bres of about 12 x 3 nm with a terminal swelling (Fig. 1)."
+
+    *Final check on "phage_taxonomy":*
+    Abstract: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (vB_Psp.M_SS ɸ L8)."
+
+    *Final check on "phage_type_lytic_lysogenic_engineered":*
+    Section 3.2: "All phages were lytic in nature but di ff ered in the plaque diameter."
+
+    *Final check on "phage_isolation_sample":*
+    Section 2.2.1: "The isolation of bacteriophages against pathogen Pseudomonas sp. SK 10 was carried from two di ff erent environmental samples viz., Pavana river water (Pune, Maharashtra) and pomegranate orchard soil..."
+
+    *Final check on "phage_s_plaque_characteristics_shape":*
+    Table 1: "Lytic, circular 2".
+
+    *Final check on "phage_tem_dimensions_capsid_morphology":*
+    Section 3.3: "PR ɸ L2 phage belonged to family Siphoviridae with an isometric head of 72 nm and an extremely long, more of the less fl exible tail of about 383 x 12 nm, conspicuous cross striations, and a terminal knob. While phage SS ɸ L8 belonged to Myoviridae family showed an isometric head of 59 nm and a contractile tail of 101 x 17 nm in the extended state. The contractile tail measured 42 x 22 nm in the contracted state. The phage showed a neck, a base plate of 7 x 2 nm and fi bres of about 12 x 3 nm with a terminal swelling (Fig. 1)."
+
+    *Final check on "phage_taxonomy":*
+    Abstract: "Both the phages belonged to the order Caudovirales representing the fa- milies Siphoviridae (vB_Psp.S_PR ɸ L2) and Myoviridae (
+
+--------------------------------------------------------------------------------
+5. RAW JSON OUTPUT
+--------------------------------------------------------------------------------
+
+
+================================================================================
