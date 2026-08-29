@@ -8,6 +8,7 @@ describe('ArticleReaderView Hierarchical & Resizable Outline Suite', () => {
     id: 'paper-hierarchical-1',
     name: 'Pseudomonas Phage Study',
     title: 'Pseudomonas Phage Study',
+    oaStatus: 'gold',
     sourceType: 'doi_structured',
     status: 'Ready',
     uploadedAt: Date.now(),

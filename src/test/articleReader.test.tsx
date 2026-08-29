@@ -55,6 +55,7 @@ describe('ArticleReaderView & CentralViewerPanel Merged Section Toolbar', () => 
     id: 'paper-hierarchical',
     name: 'Pseudomonas Phage Study',
     title: 'Pseudomonas Phage Study',
+    oaStatus: 'gold',
     sourceType: 'doi_structured',
     status: 'Ready',
     uploadedAt: Date.now(),
@@ -135,10 +136,10 @@ describe('ArticleReaderView & CentralViewerPanel Merged Section Toolbar', () => 
   it('renders hierarchical section groups with parent headers and clean child titles', () => {
     render(<ArticleReaderView paper={hierarchicalPaper} />);
 
-    // Parent group headers
+    // Parent group headers and standalone items
     expect(screen.getByText('RESULTS')).toBeInTheDocument();
     expect(screen.getByText('MATERIALS AND METHODS')).toBeInTheDocument();
-    expect(screen.getByText('DISCUSSION')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /DISCUSSION/i })).toBeInTheDocument();
 
     // Child subsections rendered without the redundant parent prefix
     expect(screen.getByRole('button', { name: /Isolated phage AM\.P2 morphology/i })).toBeInTheDocument();

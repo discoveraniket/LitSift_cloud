@@ -1004,8 +1004,7 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
                     <button
                       key={item.id}
                       onClick={() => {
-                        setActiveSectionId(item.id);
-                        document.getElementById(item.domId)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+                        handleGoToSection(item.id);
                       }}
                       style={{
                         display: 'flex',
@@ -1058,8 +1057,7 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
                       onClick={() => {
                         const firstChild = group.children[0];
                         if (firstChild) {
-                          setActiveSectionId(firstChild.id);
-                          document.getElementById(firstChild.domId)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+                          handleGoToSection(firstChild.id);
                         }
                       }}
                       style={{
@@ -1141,8 +1139,7 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
                             <button
                               key={child.id}
                               onClick={() => {
-                                setActiveSectionId(child.id);
-                                document.getElementById(child.domId)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+                                handleGoToSection(child.id);
                               }}
                               style={{
                                 display: 'flex',
