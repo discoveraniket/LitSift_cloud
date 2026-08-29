@@ -24,6 +24,7 @@ import {
   Search,
   X,
   Layers,
+  Database,
 } from 'lucide-react';
 import { PaperDocumentInfo, PaperTable } from '../../types/paper';
 import { useGridStore } from '../../store/useGridStore';
@@ -34,6 +35,102 @@ import {
   clearActiveHighlights,
   flashActiveHighlights,
 } from '../../services/highlightUtils';
+
+/**
+ * Resolves the underlying database / text provenance for a paper document.
+ */
+export function getPaperTextSourceInfo(paper: PaperDocumentInfo): {
+  name: string;
+  shortName: string;
+  url?: string;
+  isStructured: boolean;
+} {
+  if (paper.textSource) {
+    const isEpmc = paper.textSource.toLowerCase().includes('europe');
+    const isPmc = paper.textSource.toLowerCase().includes('ncbi') || paper.textSource.toLowerCase().includes('pubmed');
+    const isOa = paper.textSource.toLowerCase().includes('openalex');
+    const isCrossref = paper.textSource.toLowerCase().includes('crossref');
+    const isPdf = paper.textSource.toLowerCase().includes('pdf');
+
+    return {
+      name: paper.textSource,
+      shortName: isEpmc
+        ? 'Europe PMC'
+        : isPmc
+        ? 'PubMed Central'
+        : isOa
+        ? 'OpenAlex'
+        : isCrossref
+        ? 'Crossref'
+        : isPdf
+        ? 'PDF Layer'
+        : paper.textSource,
+      url:
+        paper.textSourceUrl ||
+        (paper.pmcid
+          ? `https://europepmc.org/article/PMC/${paper.pmcid.replace(/^PMC/, '')}`
+          : paper.doi
+          ? `https://doi.org/${paper.doi}`
+          : undefined),
+      isStructured: Boolean(paper.sections && paper.sections.length > 0),
+    };
+  }
+
+  // Derive source when textSource was not pre-populated
+  if (paper.sections && paper.sections.length > 0) {
+    if (paper.pmcid) {
+      return {
+        name: `Europe PMC (PMC${paper.pmcid.replace(/^PMC/, '')})`,
+        shortName: 'Europe PMC',
+        url: `https://europepmc.org/article/PMC/${paper.pmcid.replace(/^PMC/, '')}`,
+        isStructured: true,
+      };
+    }
+    if (paper.sourceType === 'pdf_upload' || paper.file) {
+      return {
+        name: 'Extracted from PDF File',
+        shortName: 'PDF Text Layer',
+        isStructured: true,
+      };
+    }
+    return {
+      name: 'Europe PMC (JATS XML)',
+      shortName: 'Europe PMC',
+      url: paper.doi ? `https://doi.org/${paper.doi}` : undefined,
+      isStructured: true,
+    };
+  }
+
+  if (paper.abstractText) {
+    if (paper.doi) {
+      return {
+        name: 'OpenAlex Academic Registry',
+        shortName: 'OpenAlex',
+        url: `https://doi.org/${paper.doi}`,
+        isStructured: false,
+      };
+    }
+    return {
+      name: 'Extracted PDF Abstract',
+      shortName: 'PDF Text',
+      isStructured: false,
+    };
+  }
+
+  if (paper.url || paper.file) {
+    return {
+      name: 'Uploaded PDF Document',
+      shortName: 'PDF File',
+      isStructured: false,
+    };
+  }
+
+  return {
+    name: 'Academic Registry',
+    shortName: 'Registry',
+    isStructured: false,
+  };
+}
 
 export interface ArticleReaderViewRef {
   search: (query: string) => void;
@@ -737,6 +834,8 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
         landingPageUrl: resolved.landingPageUrl || paper.landingPageUrl,
         pdfDownloadUrl: resolved.pdfDownloadUrl || paper.pdfDownloadUrl,
         sourceType: resolved.sections && resolved.sections.length > 0 ? 'doi_structured' : (paper.sourceType || 'doi_abstract_only'),
+        textSource: resolved.textSource || paper.textSource,
+        textSourceUrl: resolved.textSourceUrl || paper.textSourceUrl,
       };
 
       if (resolved.url && !paper.url) {
@@ -774,6 +873,8 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
     paper.sourceType !== 'doi_abstract_only' &&
     paper.sourceType !== 'doi_structured'
   );
+
+  const textSourceInfo = useMemo(() => getPaperTextSourceInfo(paper), [paper]);
 
   return (
     <div
@@ -1343,6 +1444,45 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
               >
                 DOI: {paper.doi} <ArrowUpRight size={10} />
               </a>
+            )}
+
+            {/* Database / Text Provenance Source Badge */}
+            {textSourceInfo && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'rgba(203, 166, 247, 0.12)',
+                  color: 'var(--accent-secondary, #cba6f7)',
+                  border: '1px solid rgba(203, 166, 247, 0.28)',
+                  padding: '3px 8px',
+                  borderRadius: '12px',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                }}
+                title={`Database Text Source: ${textSourceInfo.name}${textSourceInfo.isStructured ? ' (Full structured sections retrieved)' : ' (Abstract & metadata)'}`}
+              >
+                <Database size={11} />
+                <span><strong>{textSourceInfo.shortName}</strong></span>
+                {textSourceInfo.url && (
+                  <a
+                    href={textSourceInfo.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: 'var(--accent-secondary, #cba6f7)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      textDecoration: 'none',
+                      opacity: 0.8,
+                    }}
+                    title={`Open source record on ${textSourceInfo.shortName}`}
+                  >
+                    <ArrowUpRight size={10} />
+                  </a>
+                )}
+              </span>
             )}
 
             {/* Quick 1-Click Refresh Button */}

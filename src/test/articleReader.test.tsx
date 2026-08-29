@@ -217,4 +217,38 @@ describe('ArticleReaderView & CentralViewerPanel Merged Section Toolbar', () => 
     const quickRefreshBtn = screen.getByRole('button', { name: /Refresh/i });
     expect(quickRefreshBtn).toBeInTheDocument();
   });
+
+  it('renders minimal database text source badge in article header', () => {
+    // 1. Europe PMC structured paper
+    const { rerender } = render(
+      <ArticleReaderView
+        paper={{
+          ...samplePaper,
+          pmcid: 'PMC7095448',
+          textSource: 'Europe PMC (JATS XML)',
+        }}
+      />
+    );
+
+    expect(screen.getByText('Europe PMC')).toBeInTheDocument();
+
+    // 2. OpenAlex abstract-only paper
+    rerender(
+      <ArticleReaderView
+        paper={{
+          id: 'paper-oa',
+          name: 'OpenAlex Paper',
+          title: 'OpenAlex Paper Title',
+          status: 'Ready',
+          uploadedAt: 1000,
+          oaStatus: 'gold',
+          sourceType: 'doi_abstract_only',
+          doi: '10.1016/j.test.2025.01',
+          abstractText: 'Sample abstract text here.',
+        }}
+      />
+    );
+
+    expect(screen.getByText('OpenAlex')).toBeInTheDocument();
+  });
 });

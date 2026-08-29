@@ -533,6 +533,25 @@ export async function resolvePaperByDoi(
     progressPercent: 100,
   });
 
+  let textSource = 'OpenAlex';
+  let textSourceUrl: string | undefined = landingPageUrl || `https://doi.org/${doi}`;
+
+  if (sections.length > 0) {
+    if (pmcid) {
+      textSource = 'Europe PMC (JATS XML)';
+      textSourceUrl = `https://europepmc.org/article/PMC/${pmcid}`;
+    } else {
+      textSource = 'PubMed Central (Structured XML)';
+      textSourceUrl = `https://doi.org/${doi}`;
+    }
+  } else if (pdfBlob) {
+    textSource = 'Publisher PDF';
+    textSourceUrl = pdfDownloadUrl || landingPageUrl;
+  } else if (abstractText) {
+    textSource = openAlexData ? 'OpenAlex (Abstract)' : 'Crossref (Abstract)';
+    textSourceUrl = openAlexData?.id || landingPageUrl || `https://doi.org/${doi}`;
+  }
+
   const paperId = `doi-${doi.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
   const paperDocument: PaperDocumentInfo = {
@@ -547,6 +566,8 @@ export async function resolvePaperByDoi(
     citationCount,
     oaStatus,
     sourceType,
+    textSource,
+    textSourceUrl,
     abstractText,
     sections: sections.length > 0 ? sections : undefined,
     tables: tables.length > 0 ? tables : undefined,

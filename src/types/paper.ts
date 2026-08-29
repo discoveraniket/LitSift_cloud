@@ -60,6 +60,10 @@ export interface PaperDocumentInfo {
   pdfDownloadUrl?: string;
   landingPageUrl?: string;
   
+  // Database / Repository Text Provenance
+  textSource?: string;
+  textSourceUrl?: string;
+  
   status: 'Ready' | 'Extracted' | 'Error';
   uploadedAt: number;
   errorMessage?: string;
