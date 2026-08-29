@@ -29,108 +29,12 @@ import {
 import { PaperDocumentInfo, PaperTable } from '../../types/paper';
 import { useGridStore } from '../../store/useGridStore';
 import { usePdfStore } from '../../store/usePdfStore';
-import { resolvePaperByDoi, normalizeDoi } from '../../services/doiService';
+import { resolvePaperByDoi, normalizeDoi, getPaperTextSourceInfo } from '../../services/doiService';
 import {
   highlightArticleSnippet,
   clearActiveHighlights,
   flashActiveHighlights,
 } from '../../services/highlightUtils';
-
-/**
- * Resolves the underlying database / text provenance for a paper document.
- */
-export function getPaperTextSourceInfo(paper: PaperDocumentInfo): {
-  name: string;
-  shortName: string;
-  url?: string;
-  isStructured: boolean;
-} {
-  if (paper.textSource) {
-    const isEpmc = paper.textSource.toLowerCase().includes('europe');
-    const isPmc = paper.textSource.toLowerCase().includes('ncbi') || paper.textSource.toLowerCase().includes('pubmed');
-    const isOa = paper.textSource.toLowerCase().includes('openalex');
-    const isCrossref = paper.textSource.toLowerCase().includes('crossref');
-    const isPdf = paper.textSource.toLowerCase().includes('pdf');
-
-    return {
-      name: paper.textSource,
-      shortName: isEpmc
-        ? 'Europe PMC'
-        : isPmc
-        ? 'PubMed Central'
-        : isOa
-        ? 'OpenAlex'
-        : isCrossref
-        ? 'Crossref'
-        : isPdf
-        ? 'PDF Layer'
-        : paper.textSource,
-      url:
-        paper.textSourceUrl ||
-        (paper.pmcid
-          ? `https://europepmc.org/article/PMC/${paper.pmcid.replace(/^PMC/, '')}`
-          : paper.doi
-          ? `https://doi.org/${paper.doi}`
-          : undefined),
-      isStructured: Boolean(paper.sections && paper.sections.length > 0),
-    };
-  }
-
-  // Derive source when textSource was not pre-populated
-  if (paper.sections && paper.sections.length > 0) {
-    if (paper.pmcid) {
-      return {
-        name: `Europe PMC (PMC${paper.pmcid.replace(/^PMC/, '')})`,
-        shortName: 'Europe PMC',
-        url: `https://europepmc.org/article/PMC/${paper.pmcid.replace(/^PMC/, '')}`,
-        isStructured: true,
-      };
-    }
-    if (paper.sourceType === 'pdf_upload' || paper.file) {
-      return {
-        name: 'Extracted from PDF File',
-        shortName: 'PDF Text Layer',
-        isStructured: true,
-      };
-    }
-    return {
-      name: 'Europe PMC (JATS XML)',
-      shortName: 'Europe PMC',
-      url: paper.doi ? `https://doi.org/${paper.doi}` : undefined,
-      isStructured: true,
-    };
-  }
-
-  if (paper.abstractText) {
-    if (paper.doi) {
-      return {
-        name: 'OpenAlex Academic Registry',
-        shortName: 'OpenAlex',
-        url: `https://doi.org/${paper.doi}`,
-        isStructured: false,
-      };
-    }
-    return {
-      name: 'Extracted PDF Abstract',
-      shortName: 'PDF Text',
-      isStructured: false,
-    };
-  }
-
-  if (paper.url || paper.file) {
-    return {
-      name: 'Uploaded PDF Document',
-      shortName: 'PDF File',
-      isStructured: false,
-    };
-  }
-
-  return {
-    name: 'Academic Registry',
-    shortName: 'Registry',
-    isStructured: false,
-  };
-}
 
 export interface ArticleReaderViewRef {
   search: (query: string) => void;

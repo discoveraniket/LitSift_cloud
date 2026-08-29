@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@google/genai', () => ({
@@ -24,6 +24,8 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
     name: 'Zeta Phage against Klebsiella',
     title: 'Zeta Phage against Klebsiella',
     status: 'Ready',
+    oaStatus: 'gold',
+    sourceType: 'doi_structured',
     uploadedAt: 1000,
   };
 
@@ -32,6 +34,8 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
     name: 'Alpha Phage against Pseudomonas aeruginosa',
     title: 'Alpha Phage against Pseudomonas aeruginosa',
     status: 'Ready',
+    oaStatus: 'gold',
+    sourceType: 'doi_structured',
     uploadedAt: 2000,
   };
 
@@ -40,6 +44,8 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
     name: 'Beta Phage against Staphylococcus aureus',
     title: 'Beta Phage against Staphylococcus aureus',
     status: 'Ready',
+    oaStatus: 'gold',
+    sourceType: 'doi_structured',
     uploadedAt: 3000,
   };
 
@@ -55,11 +61,12 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
         {
           id: 'row-1',
           pdfId: 'paper-b',
-          pdfTitle: paperB.title,
+          pdfTitle: paperB.title || paperB.name,
+          aiStatus: 'Confirmed',
           data: { Host: 'Pseudomonas' },
         },
       ],
-      columns: [{ id: 'col-1', name: 'Host', type: 'text' }],
+      columns: [{ field: 'Host', headerName: 'Host' }],
     });
   });
 
