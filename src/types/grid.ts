@@ -69,6 +69,7 @@ export interface GridState {
   addColumn: (headerName: string, initialValues?: Record<string, any>, citations?: Record<string, any>) => void;
   renameColumn: (field: string, newHeaderName: string) => void;
   deleteColumn: (field: string) => void;
+  updatePaperTitle: (pdfId: string, oldTitle: string, newTitle: string) => void;
   mergeSelectedRows: (rowIds: string[], consolidatedRow?: Record<string, any>, citations?: Record<string, any>) => void;
   splitSelectedRow: (rowId: string, targetField?: string) => void;
   disaggregateRow: (targetRowId: string, replacementRows: Array<Record<string, any>>, citations?: Record<string, any>) => void;

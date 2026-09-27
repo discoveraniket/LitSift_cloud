@@ -365,6 +365,33 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
+  updatePaperTitle: (pdfId, oldTitle, newTitle) =>
+    set(
+      produce((state: GridState) => {
+        saveSnapshot(state);
+        let changed = false;
+        const oldClean = (oldTitle || '').trim().toLowerCase();
+        state.rows.forEach((row) => {
+          const matchById = Boolean(pdfId && row.pdfId && row.pdfId === pdfId);
+          const matchByTitle = Boolean(
+            oldClean &&
+            row.pdfTitle &&
+            row.pdfTitle.trim().toLowerCase() === oldClean
+          );
+          if (matchById || matchByTitle) {
+            row.pdfTitle = newTitle;
+            if (!row.pdfId && pdfId) {
+              row.pdfId = pdfId;
+            }
+            changed = true;
+          }
+        });
+        if (changed) {
+          persistToStorage(state.columns, state.rows);
+        }
+      })
+    ),
+
   mergeSelectedRows: (rowIds, consolidatedRow, citations) =>
     set(
       produce((state: GridState) => {

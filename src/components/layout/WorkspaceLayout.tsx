@@ -153,6 +153,19 @@ export const WorkspaceLayout: React.FC = () => {
     }
   }, [activePdf?.id]);
 
+  // Synchronize open PDF tab titles when a paper is renamed
+  useEffect(() => {
+    if (activePdf) {
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.type === 'pdf' && t.pdfId === activePdf.id && t.title !== activePdf.name
+            ? { ...t, title: activePdf.name }
+            : t
+        )
+      );
+    }
+  }, [activePdf?.name, activePdf?.id]);
+
   // Global drag-and-drop listener for .litsift files
   useEffect(() => {
     const handleDragOverWindow = (e: DragEvent) => {

@@ -30,7 +30,9 @@ import {
 import { PaperDocumentInfo, PaperTable } from '../../types/paper';
 import { useGridStore } from '../../store/useGridStore';
 import { usePdfStore } from '../../store/usePdfStore';
-import { resolvePaperByDoi, normalizeDoi, getPaperTextSourceInfo } from '../../services/doiService';
+import { useAgentStore } from '../../store/useAgentStore';
+import { resolvePaperByDoi, normalizeDoi, resolveIdentifierToDoi, getPaperTextSourceInfo } from '../../services/doiService';
+import { extractDoiFromRow } from '../../services/enrichmentService';
 import {
   highlightArticleSnippet,
   clearActiveHighlights,
@@ -707,17 +709,103 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
   const [refetchStatus, setRefetchStatus] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null);
 
   const handleRefetchArticle = async () => {
-    const rawDoi = paper.doi ? normalizeDoi(paper.doi) : '';
+    setIsRefetching(true);
+    setRefetchStatus({ message: 'Resolving identifier for article...', type: 'info' });
+
+    let rawDoi = paper.doi ? normalizeDoi(paper.doi) : '';
+    if (!rawDoi || !rawDoi.startsWith('10.')) {
+      rawDoi = '';
+    }
+
+    // Step 2: Discover DOI from Data Grid rows linked to this paper
     if (!rawDoi) {
+      try {
+        const gridState = useGridStore.getState();
+        const pdfStoreState = usePdfStore.getState();
+        const candidateRows = gridState.rows.filter(
+          (r) =>
+            (r.pdfId && r.pdfId === paper.id) ||
+            (r.pdfTitle && (
+              r.pdfTitle.trim().toLowerCase() === (paper.name || '').trim().toLowerCase() ||
+              (paper.title && r.pdfTitle.trim().toLowerCase() === paper.title.trim().toLowerCase())
+            ))
+        );
+
+        for (const row of candidateRows) {
+          const fromRow = extractDoiFromRow(row, gridState.columns, pdfStoreState.pdfs);
+          if (fromRow && fromRow.startsWith('10.')) {
+            rawDoi = fromRow;
+            break;
+          }
+          // Also inspect cell values in columns containing DOI / PMID / PMC identifiers
+          for (const col of gridState.columns) {
+            const h = (col.headerName || col.field).toLowerCase();
+            if (h.includes('doi') || h.includes('pmid') || h.includes('pmc') || h.includes('accession')) {
+              const cellVal = row[col.field];
+              if (typeof cellVal === 'string' && cellVal.trim()) {
+                const resolved = await resolveIdentifierToDoi(cellVal.trim());
+                if (resolved) {
+                  rawDoi = resolved;
+                  break;
+                }
+              }
+            }
+          }
+          if (rawDoi) break;
+        }
+      } catch (e) {
+        console.warn('Grid DOI discovery failed:', e);
+      }
+    }
+
+    // Step 3: Discover DOI from paper filename or title (e.g. "36374021.pdf" or "PMC9657158")
+    if (!rawDoi) {
+      try {
+        const nameCandidate = (paper.name || '').trim();
+        if (nameCandidate) {
+          const resolved = await resolveIdentifierToDoi(nameCandidate);
+          if (resolved) {
+            rawDoi = resolved;
+          }
+        }
+        if (!rawDoi && paper.title && paper.title !== paper.name) {
+          const resolved = await resolveIdentifierToDoi(paper.title.trim());
+          if (resolved) {
+            rawDoi = resolved;
+          }
+        }
+      } catch (e) {
+        console.warn('Name/title identifier resolution failed:', e);
+      }
+    }
+
+    // Step 4: Prompt user if still not found
+    if (!rawDoi) {
+      const userInput = window.prompt(
+        `No DOI or PubMed ID was automatically found for "${paper.name}".\n\nPlease enter the DOI (e.g., 10.1038/...) or PMID (e.g., 36374021) to re-fetch this article:`
+      );
+      if (userInput && userInput.trim()) {
+        try {
+          const resolved = await resolveIdentifierToDoi(userInput.trim());
+          if (resolved) {
+            rawDoi = resolved;
+          }
+        } catch (e) {
+          console.warn('Manual identifier resolution failed:', e);
+        }
+      }
+    }
+
+    if (!rawDoi) {
+      setIsRefetching(false);
       setRefetchStatus({
-        message: 'No valid DOI associated with this paper to query academic registries.',
+        message: 'No valid DOI or PubMed ID found or provided to query academic registries.',
         type: 'error',
       });
       setTimeout(() => setRefetchStatus(null), 5000);
       return;
     }
 
-    setIsRefetching(true);
     setRefetchStatus({ message: `Querying academic registries for DOI: ${rawDoi}...`, type: 'info' });
 
     try {
@@ -725,10 +813,45 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
         setRefetchStatus({ message: p.message, type: 'info' });
       });
 
+      // Prompt user to rename the paper entry if official title is discovered and differs
+      let finalName = paper.name;
+      const resolvedTitle = resolved.title?.trim();
+      const currentNameClean = (paper.name || '').replace(/\.pdf$/i, '').trim();
+
+      if (
+        resolvedTitle &&
+        resolvedTitle.length > 0 &&
+        resolvedTitle.toLowerCase() !== (paper.name || '').trim().toLowerCase() &&
+        resolvedTitle.toLowerCase() !== currentNameClean.toLowerCase()
+      ) {
+        const shouldRename = window.confirm(
+          `Academic registry resolved the official title:\n\n"${resolvedTitle}"\n\nWould you like to rename the paper entry "${paper.name}" to this title across your workspace?`
+        );
+        if (shouldRename) {
+          finalName = resolvedTitle;
+          // Update matching rows in Data Grid
+          useGridStore.getState().updatePaperTitle(paper.id, paper.name, finalName);
+          // Update active agent paper title
+          useAgentStore.getState().setActivePdfId(paper.id, finalName);
+        }
+      }
+
+      // Preserve existing binary PDF if paper was uploaded or has local blob
+      const hasExistingPdf = Boolean(
+        paper.file ||
+        (paper.url && paper.sourceType === 'pdf_upload') ||
+        paper.sourceType === 'doi_full_pdf'
+      );
+
+      const targetSourceType = hasExistingPdf
+        ? (paper.sourceType || 'pdf_upload')
+        : (resolved.sections && resolved.sections.length > 0 ? 'doi_structured' : (paper.sourceType || 'doi_abstract_only'));
+
       const mergedUpdates: Partial<PaperDocumentInfo> = {
-        doi: resolved.doi || paper.doi,
+        name: finalName,
+        title: resolved.title || paper.title || finalName,
+        doi: resolved.doi || rawDoi || paper.doi,
         pmcid: resolved.pmcid || paper.pmcid,
-        title: resolved.title || paper.title,
         authors: resolved.authors && resolved.authors.length > 0 ? resolved.authors : paper.authors,
         journal: resolved.journal || paper.journal,
         year: resolved.year || paper.year,
@@ -740,7 +863,7 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
         figures: resolved.figures && resolved.figures.length > 0 ? resolved.figures : paper.figures,
         landingPageUrl: resolved.landingPageUrl || paper.landingPageUrl,
         pdfDownloadUrl: resolved.pdfDownloadUrl || paper.pdfDownloadUrl,
-        sourceType: resolved.sections && resolved.sections.length > 0 ? 'doi_structured' : (paper.sourceType || 'doi_abstract_only'),
+        sourceType: targetSourceType,
         textSource: resolved.textSource || paper.textSource,
         textSourceUrl: resolved.textSourceUrl || paper.textSourceUrl,
       };
@@ -756,7 +879,7 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
       const sectionCount = mergedUpdates.sections?.length || 0;
       const tableCount = mergedUpdates.tables?.length || 0;
       setRefetchStatus({
-        message: `Article refreshed! ${sectionCount > 0 ? `${sectionCount} structured sections` : 'Metadata updated'}, ${tableCount} tables retrieved.`,
+        message: `Article refreshed! ${sectionCount > 0 ? `${sectionCount} structured sections` : 'Metadata updated'}, ${tableCount} tables retrieved.${finalName !== paper.name ? ` Renamed to "${finalName}".` : ''}`,
         type: 'success',
       });
       setTimeout(() => setRefetchStatus(null), 5000);

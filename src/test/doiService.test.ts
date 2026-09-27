@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   normalizeDoi,
+  resolveIdentifierToDoi,
   reconstructAbstract,
   resolvePaperByDoi,
   findExistingPaperByDoi,
@@ -320,6 +321,90 @@ describe('DOI Resolution & Ingestion Service Suite', () => {
       expect(result.tables[0].headers).toEqual(['Phage', 'Genome (kb)', 'GC (%)']);
       expect(result.tables[0].rows).toHaveLength(2);
       expect(result.tables[0].rows[0]).toEqual(['vB_EcoM_fRPOT1', '170.5', '43.68']);
+    });
+  });
+
+  describe('8. resolveIdentifierToDoi', () => {
+    it('directly normalizes standard DOI strings and strips .pdf extension', async () => {
+      const doi1 = await resolveIdentifierToDoi('10.1038/s41598-022-23961-4');
+      expect(doi1).toBe('10.1038/s41598-022-23961-4');
+
+      const doi2 = await resolveIdentifierToDoi('10.1038/s41598-022-23961-4.pdf');
+      expect(doi2).toBe('10.1038/s41598-022-23961-4');
+
+      const doi3 = await resolveIdentifierToDoi('https://doi.org/10.1016/j.cell.2020.08.020');
+      expect(doi3).toBe('10.1016/j.cell.2020.08.020');
+
+      const doi4 = await resolveIdentifierToDoi('10.1038_s41598-022-23961-4.pdf');
+      expect(doi4).toBe('10.1038/s41598-022-23961-4');
+    });
+
+    it('resolves numeric PMID via Europe PMC', async () => {
+      const mockFetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('ext_id:36374021')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              resultList: {
+                result: [{ id: '36374021', doi: '10.1038/s41598-022-23961-4' }],
+              },
+            }),
+          });
+        }
+        return Promise.resolve({ ok: false });
+      });
+      global.fetch = mockFetch;
+
+      const res = await resolveIdentifierToDoi('36374021.pdf');
+      expect(res).toBe('10.1038/s41598-022-23961-4');
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('ext_id:36374021')
+      );
+    });
+
+    it('resolves PMCID via Europe PMC search', async () => {
+      const mockFetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('PMC9657158')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              resultList: {
+                result: [{ pmcid: 'PMC9657158', doi: '10.1038/s41598-022-23961-4' }],
+              },
+            }),
+          });
+        }
+        return Promise.resolve({ ok: false });
+      });
+      global.fetch = mockFetch;
+
+      const res = await resolveIdentifierToDoi('PMC9657158.pdf');
+      expect(res).toBe('10.1038/s41598-022-23961-4');
+    });
+
+    it('resolves PubMed URLs', async () => {
+      const mockFetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('ext_id:36374021')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              resultList: {
+                result: [{ id: '36374021', doi: '10.1038/s41598-022-23961-4' }],
+              },
+            }),
+          });
+        }
+        return Promise.resolve({ ok: false });
+      });
+      global.fetch = mockFetch;
+
+      const res = await resolveIdentifierToDoi('https://pubmed.ncbi.nlm.nih.gov/36374021/');
+      expect(res).toBe('10.1038/s41598-022-23961-4');
+    });
+
+    it('returns null when input is empty or invalid', async () => {
+      expect(await resolveIdentifierToDoi('')).toBeNull();
+      expect(await resolveIdentifierToDoi('completely-unrelated-random-text')).toBeNull();
     });
   });
 });

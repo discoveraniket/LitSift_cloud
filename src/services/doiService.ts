@@ -27,6 +27,91 @@ export function normalizeDoi(input: string): string {
 }
 
 /**
+ * Resolves an arbitrary identifier (DOI, PMID, PMCID, or URL) to a canonical DOI string.
+ * Supports numeric PMIDs (e.g. "36374021"), PMCIDs ("PMC9657158"), or DOIs.
+ */
+export async function resolveIdentifierToDoi(input: string): Promise<string | null> {
+  if (!input) return null;
+  let cleaned = input.trim().replace(/\.pdf$/i, '').trim();
+
+  // Handle PubMed or PMC URL patterns
+  const urlPmidMatch = cleaned.match(/pubmed\.ncbi\.nlm\.nih\.gov\/(\d{6,9})/i);
+  if (urlPmidMatch) {
+    cleaned = urlPmidMatch[1];
+  }
+  const urlPmcMatch = cleaned.match(/(?:ncbi\.nlm\.nih\.gov\/pmc\/articles\/|europepmc\.org\/article\/PMC\/)(PMC\d+)/i);
+  if (urlPmcMatch) {
+    cleaned = urlPmcMatch[1];
+  }
+
+  // Handle sanitised filename format with underscore instead of slash (e.g., "10.1038_s41598-022-23961-4")
+  if (/^10\.\d{4,9}_/.test(cleaned)) {
+    cleaned = cleaned.replace(/^(10\.\d{4,9})_/, '$1/');
+  }
+
+  // 1. Direct DOI check
+  const normalized = normalizeDoi(cleaned);
+  if (normalized && normalized.startsWith('10.')) {
+    return normalized;
+  }
+
+  // 2. Numeric PubMed ID (e.g. "36374021" or "pmid:36374021" or "36374021.pdf")
+  const pmidMatch = cleaned.replace(/^pmid:?\s*/i, '').match(/^\d{6,9}$/);
+  if (pmidMatch) {
+    const pmid = pmidMatch[0];
+    try {
+      // Strategy A: Query Europe PMC by PMID
+      const epmcUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=ext_id:${pmid}&format=json&resultType=lite`;
+      const res = await fetch(epmcUrl);
+      if (res.ok) {
+        const data = await res.json();
+        const hit = data.resultList?.result?.[0];
+        if (hit?.doi) {
+          return normalizeDoi(hit.doi);
+        }
+      }
+    } catch (e) {
+      console.warn('Europe PMC PMID lookup failed:', e);
+    }
+
+    try {
+      // Strategy B: Query OpenAlex by PMID
+      const openAlexUrl = `https://api.openalex.org/works/pmid:${pmid}?mailto=user@litsift.app`;
+      const res = await fetch(openAlexUrl);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.doi) {
+          return normalizeDoi(data.doi);
+        }
+      }
+    } catch (e) {
+      console.warn('OpenAlex PMID lookup failed:', e);
+    }
+  }
+
+  // 3. PMCID (e.g. "PMC9657158")
+  const pmcMatch = cleaned.match(/PMC\d+/i);
+  if (pmcMatch) {
+    const pmcid = pmcMatch[0].toUpperCase();
+    try {
+      const epmcUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(pmcid)}&format=json&resultType=lite`;
+      const res = await fetch(epmcUrl);
+      if (res.ok) {
+        const data = await res.json();
+        const hit = data.resultList?.result?.[0];
+        if (hit?.doi) {
+          return normalizeDoi(hit.doi);
+        }
+      }
+    } catch (e) {
+      console.warn('Europe PMC PMCID lookup failed:', e);
+    }
+  }
+
+  return null;
+}
+
+/**
  * Checks if a DOI matches any paper already loaded in the workspace.
  */
 export function findExistingPaperByDoi(

@@ -3,6 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { ArticleReaderView } from '../components/pdf-viewer/ArticleReaderView';
 import { CentralViewerPanel } from '../components/pdf-viewer/CentralViewerPanel';
 import { usePdfStore } from '../store/usePdfStore';
+import { useGridStore } from '../store/useGridStore';
+import * as doiService from '../services/doiService';
 import { PaperDocumentInfo } from '../types/paper';
 
 // Mock child heavy components to isolate fast DOM tests
@@ -250,5 +252,203 @@ describe('ArticleReaderView & CentralViewerPanel Merged Section Toolbar', () => 
     );
 
     expect(screen.getByText('OpenAlex')).toBeInTheDocument();
+  });
+
+  it('re-fetches article for PDF uploaded with PMID filename and prompts user to rename entry when accepted', async () => {
+    const pdfPaper: PaperDocumentInfo = {
+      id: 'pdf-pmid-upload',
+      name: '36374021.pdf',
+      title: '36374021.pdf',
+      status: 'Ready',
+      uploadedAt: Date.now(),
+      oaStatus: 'unknown',
+      sourceType: 'pdf_upload',
+      url: 'blob:http://localhost/test-blob',
+      file: new Blob(['%PDF-1.4 test binary'], { type: 'application/pdf' }),
+    };
+
+    usePdfStore.setState({
+      pdfs: [pdfPaper],
+      activePdfId: pdfPaper.id,
+    });
+
+    useGridStore.setState({
+      columns: [
+        { field: 'pdfTitle', headerName: 'Document', editable: false },
+        { field: 'keyFindings', headerName: 'Key Findings', editable: true },
+      ],
+      rows: [
+        {
+          id: 'row-1',
+          pdfId: pdfPaper.id,
+          pdfTitle: '36374021.pdf',
+          keyFindings: 'Initial extraction before re-fetch',
+          aiStatus: 'Confirmed',
+        },
+      ],
+    });
+
+    // Mock resolveIdentifierToDoi
+    vi.spyOn(doiService, 'resolveIdentifierToDoi').mockResolvedValue('10.1038/s41598-022-23961-4');
+
+    // Mock resolvePaperByDoi
+    vi.spyOn(doiService, 'resolvePaperByDoi').mockResolvedValue({
+      id: 'doi-10_1038_s41598-022-23961-4',
+      doi: '10.1038/s41598-022-23961-4',
+      pmcid: 'PMC9657158',
+      title: 'Characterization of novel bacteriophage vB_EcoM_fRPOT1',
+      name: 'Characterization of novel bacteriophage vB_EcoM_fRPOT1',
+      authors: [{ name: 'Dr. Smith', institution: 'Oxford', isCorresponding: true, email: 'smith@ox.ac.uk' }],
+      sections: [{ id: 'sec-1', title: '1. Introduction', content: 'Intro text' }],
+      tables: [],
+      figures: [],
+      sourceType: 'doi_structured',
+      status: 'Ready',
+      oaStatus: 'gold',
+      uploadedAt: Date.now(),
+    });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<ArticleReaderView paper={pdfPaper} />);
+
+    const refetchBtn = screen.getByRole('button', { name: /Re-fetch Article/i });
+    fireEvent.click(refetchBtn);
+
+    // Wait for async re-fetch and rename confirmation
+    await vi.waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Academic registry resolved the official title')
+      );
+    });
+
+    // Verify paper in usePdfStore was renamed to official title while preserving PDF upload sourceType
+    const updatedPdf = usePdfStore.getState().getPdf(pdfPaper.id);
+    expect(updatedPdf?.name).toBe('Characterization of novel bacteriophage vB_EcoM_fRPOT1');
+    expect(updatedPdf?.doi).toBe('10.1038/s41598-022-23961-4');
+    expect(updatedPdf?.sourceType).toBe('pdf_upload'); // Preserved binary PDF!
+
+    // Verify matching row in useGridStore had its pdfTitle updated to official title
+    const updatedRow = useGridStore.getState().rows.find((r) => r.id === 'row-1');
+    expect(updatedRow?.pdfTitle).toBe('Characterization of novel bacteriophage vB_EcoM_fRPOT1');
+  });
+
+  it('preserves original entry name when user declines rename prompt', async () => {
+    const pdfPaper: PaperDocumentInfo = {
+      id: 'pdf-decline-rename',
+      name: '36374021.pdf',
+      title: '36374021.pdf',
+      status: 'Ready',
+      uploadedAt: Date.now(),
+      oaStatus: 'unknown',
+      sourceType: 'pdf_upload',
+    };
+
+    usePdfStore.setState({
+      pdfs: [pdfPaper],
+      activePdfId: pdfPaper.id,
+    });
+
+    useGridStore.setState({
+      columns: [{ field: 'pdfTitle', headerName: 'Document', editable: false }],
+      rows: [{ id: 'row-2', pdfId: pdfPaper.id, pdfTitle: '36374021.pdf', aiStatus: 'Confirmed' }],
+    });
+
+    vi.spyOn(doiService, 'resolveIdentifierToDoi').mockResolvedValue('10.1038/s41598-022-23961-4');
+    vi.spyOn(doiService, 'resolvePaperByDoi').mockResolvedValue({
+      id: 'doi-10_1038_s41598-022-23961-4',
+      doi: '10.1038/s41598-022-23961-4',
+      title: 'Official Academic Title Here',
+      name: 'Official Academic Title Here',
+      authors: [],
+      sections: [{ id: 'sec-1', title: 'Intro', content: 'Content' }],
+      tables: [],
+      figures: [],
+      sourceType: 'doi_structured',
+      status: 'Ready',
+      oaStatus: 'gold',
+      uploadedAt: Date.now(),
+    });
+
+    // User clicks Cancel on confirmation dialog
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(<ArticleReaderView paper={pdfPaper} />);
+
+    const refetchBtn = screen.getByRole('button', { name: /Re-fetch Article/i });
+    fireEvent.click(refetchBtn);
+
+    await vi.waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalled();
+    });
+
+    // Verify paper name is NOT renamed, but metadata is enriched
+    const paperInStore = usePdfStore.getState().getPdf(pdfPaper.id);
+    expect(paperInStore?.name).toBe('36374021.pdf');
+    expect(paperInStore?.doi).toBe('10.1038/s41598-022-23961-4');
+
+    // Verify grid row title remains unchanged
+    const rowInStore = useGridStore.getState().rows.find((r) => r.id === 'row-2');
+    expect(rowInStore?.pdfTitle).toBe('36374021.pdf');
+  });
+
+  it('re-fetches article by discovering DOI from linked Data Grid row', async () => {
+    const unassociatedPaper: PaperDocumentInfo = {
+      id: 'paper-no-doi',
+      name: 'custom_experiment.pdf',
+      title: 'custom_experiment.pdf',
+      status: 'Ready',
+      uploadedAt: Date.now(),
+      oaStatus: 'unknown',
+      sourceType: 'pdf_upload',
+    };
+
+    usePdfStore.setState({
+      pdfs: [unassociatedPaper],
+      activePdfId: unassociatedPaper.id,
+    });
+
+    // Data grid row has DOI in a DOI column
+    useGridStore.setState({
+      columns: [
+        { field: 'pdfTitle', headerName: 'Document', editable: false },
+        { field: 'articleDoi', headerName: 'Article DOI', editable: true },
+      ],
+      rows: [
+        {
+          id: 'row-doi-1',
+          pdfId: unassociatedPaper.id,
+          pdfTitle: 'custom_experiment.pdf',
+          articleDoi: '10.1016/j.cell.2020.08.020',
+          aiStatus: 'Confirmed',
+        },
+      ],
+    });
+
+    const resolveSpy = vi.spyOn(doiService, 'resolvePaperByDoi').mockResolvedValue({
+      id: 'doi-10_1016_j_cell_2020_08_020',
+      doi: '10.1016/j.cell.2020.08.020',
+      title: 'Discovered Paper Title',
+      name: 'Discovered Paper Title',
+      authors: [],
+      sections: [],
+      tables: [],
+      figures: [],
+      sourceType: 'doi_abstract_only',
+      status: 'Ready',
+      oaStatus: 'gold',
+      uploadedAt: Date.now(),
+    });
+
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(<ArticleReaderView paper={unassociatedPaper} />);
+
+    const refetchBtn = screen.getByRole('button', { name: /Re-fetch Article/i });
+    fireEvent.click(refetchBtn);
+
+    await vi.waitFor(() => {
+      expect(resolveSpy).toHaveBeenCalledWith('10.1016/j.cell.2020.08.020', expect.any(Function));
+    });
   });
 });
