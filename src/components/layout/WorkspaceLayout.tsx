@@ -9,6 +9,7 @@ import { BottomGridPanel } from '../data-grid/BottomGridPanel';
 import { SettingsModal } from '../settings/SettingsModal';
 import { DebugLogsModal } from '../agent/DebugLogsModal';
 import { AboutModal } from './AboutModal';
+import { EnrichAuthorsModal } from '../explorer/EnrichAuthorsModal';
 import { EditorTab, SidebarViewMode } from '../../types/layout';
 
 import { usePdfStore } from '../../store/usePdfStore';
@@ -23,6 +24,7 @@ export const WorkspaceLayout: React.FC = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
+  const [showEnrichAuthorsModal, setShowEnrichAuthorsModal] = useState(false);
   const [activeSidebarView, setActiveSidebarView] = useState<SidebarViewMode>(() => {
     const saved = localStorage.getItem('litsift_layout_active_sidebar_view');
     return (saved as SidebarViewMode) || 'explorer';
@@ -470,6 +472,7 @@ export const WorkspaceLayout: React.FC = () => {
                       onOpenWorkspaceHub={handleOpenWorkspaceHub}
                       onOpenPaperDiscovery={handleOpenPaperDiscovery}
                       onResetWorkspace={handleResetWorkspace}
+                      onOpenEnrichAuthors={() => setShowEnrichAuthorsModal(true)}
                     />
                   </div>
                   <div
@@ -535,9 +538,10 @@ export const WorkspaceLayout: React.FC = () => {
         {/* Unified Control & Status Bar */}
         <StatusBar
           activePdfTitle={currentActiveTab?.title || 'LitSift Cloud'}
-          showBottomPanel={showBottomPanel}
+          showBottomPanel={showBottomPanel || currentActiveTab?.type === 'master_grid'}
           isGridMaximized={isGridMaximized}
           onToggleMaximizeGrid={() => setIsGridMaximized(!isGridMaximized)}
+          onOpenEnrichAuthors={() => setShowEnrichAuthorsModal(true)}
         />
       </div>
 
@@ -554,6 +558,11 @@ export const WorkspaceLayout: React.FC = () => {
       <AboutModal
         isOpen={showAboutModal}
         onClose={() => setShowAboutModal(false)}
+      />
+
+      <EnrichAuthorsModal
+        isOpen={showEnrichAuthorsModal}
+        onClose={() => setShowEnrichAuthorsModal(false)}
       />
     </div>
   );

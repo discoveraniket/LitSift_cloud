@@ -725,6 +725,16 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
             keywordText: keyword,
           });
           setActiveCitation(null);
+        } else if (keyword && keyword.length >= 2 && !['n/a', 'not reported', 'none', '-', 'unknown'].includes(keyword.toLowerCase())) {
+          // Dynamic fallback for programmatically enriched or manually edited cells:
+          // highlights and scrolls to the cell text content in PDF or Reader
+          setActiveEvidence({
+            pageNumber: 1,
+            snippetText: keyword,
+            keywordText: keyword,
+            sectionName: colHeader || 'Document',
+          });
+          setActiveCitation(null);
         } else {
           setActiveEvidence(null);
           setActiveCitation(null);

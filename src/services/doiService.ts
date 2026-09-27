@@ -145,6 +145,25 @@ export function parseJatsXml(xmlText: string): {
       });
     }
 
+    // Parse Author Notes / Correspondence (from Front Matter)
+    const authorNotesNode = xmlDoc.querySelector('front article-meta author-notes, author-notes');
+    if (authorNotesNode) {
+      const correspTexts: string[] = [];
+      authorNotesNode.querySelectorAll('corresp, p, fn').forEach((node) => {
+        const text = node.textContent?.trim().replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ');
+        if (text && text.length > 5 && !correspTexts.includes(text)) {
+          correspTexts.push(text);
+        }
+      });
+      if (correspTexts.length > 0) {
+        sections.unshift({
+          id: 'sec-author-notes',
+          title: 'Author Correspondence & Notes',
+          content: correspTexts.join('\n\n'),
+        });
+      }
+    }
+
     // Parse Tables
     const tableWraps = xmlDoc.querySelectorAll('table-wrap');
     tableWraps.forEach((tw, idx) => {
@@ -346,7 +365,8 @@ export async function resolvePaperByDoi(
       const name = auth.author?.display_name || 'Unknown Author';
       const institution = auth.institutions?.[0]?.display_name;
       const orcid = auth.author?.orcid;
-      authors.push({ name, institution, orcid });
+      const isCorresponding = Boolean(auth.is_corresponding);
+      authors.push({ name, institution, orcid, isCorresponding });
     }
   } else if (unpaywallData?.z_authors && Array.isArray(unpaywallData.z_authors)) {
     for (const auth of unpaywallData.z_authors) {

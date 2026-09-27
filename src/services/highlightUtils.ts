@@ -305,6 +305,30 @@ export function highlightArticleSnippet(
   // --------------------------------------------------------------------------
   if (sectionName) {
     const cleanTargetSec = sectionName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // Check header author block directly if targeting authors or correspondence
+    if (cleanTargetSec.includes('author') || cleanTargetSec.includes('correspond') || cleanTargetSec.includes('affil')) {
+      const authorBlock = container.querySelector<HTMLElement>('#sec-authors, .article-authors-header');
+      if (authorBlock) {
+        const rawText = authorBlock.textContent || '';
+        const normEl = normalizeSearchText(rawText);
+        const normElDehyphen = normalizeDehyphenatedText(rawText);
+        if (
+          normEl.includes(cleanSnippet) ||
+          normEl.includes(dehyphenatedSnippet) ||
+          normElDehyphen.includes(cleanSnippet) ||
+          normElDehyphen.includes(dehyphenatedSnippet)
+        ) {
+          const markedEl = highlightExactSnippetInHtmlElement(authorBlock, snippet, cleanSnippet);
+          if (markedEl) {
+            if (keyword && keyword.length >= 2) applyKeywordGlow(markedEl, keyword);
+            flashActiveHighlights(container);
+            return markedEl;
+          }
+        }
+      }
+    }
+
     const allSections = Array.from(container.querySelectorAll<HTMLElement>('section'));
 
     const matchingSections = allSections.filter((sec) => {

@@ -8,6 +8,8 @@ export interface PaperAuthor {
   name: string;
   institution?: string;
   orcid?: string;
+  isCorresponding?: boolean;
+  email?: string;
 }
 
 export interface PaperSection {

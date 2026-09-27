@@ -10,6 +10,7 @@ interface StatusBarProps {
   showBottomPanel?: boolean;
   isGridMaximized?: boolean;
   onToggleMaximizeGrid?: () => void;
+  onOpenEnrichAuthors?: () => void;
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
@@ -17,6 +18,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   showBottomPanel = true,
   isGridMaximized = false,
   onToggleMaximizeGrid,
+  onOpenEnrichAuthors,
 }) => {
   const mode = useAgentStore((state) => state.mode);
   const isThinking = useAgentStore((state) => state.isThinking);
@@ -173,6 +175,23 @@ export const StatusBar: React.FC<StatusBarProps> = ({
                 title={isGridMaximized ? 'Restore Grid Height' : 'Maximize Grid Height for 15–20 Columns'}
               >
                 {isGridMaximized ? '🗗 Restore' : '🗖 Maximize'}
+              </button>
+            )}
+
+            {onOpenEnrichAuthors && (
+              <button
+                className="grid-action-btn"
+                onClick={onOpenEnrichAuthors}
+                title="Enrich dataset with corresponding author details from DOIs"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: 'var(--accent-warning, #f9e2af)',
+                  borderColor: 'rgba(249, 226, 175, 0.3)',
+                }}
+              >
+                ✉ Enrich Authors
               </button>
             )}
 

@@ -36,6 +36,7 @@ interface LeftExplorerPanelProps {
   onOpenWorkspaceHub?: (section: 'export' | 'import') => void;
   onOpenPaperDiscovery?: () => void;
   onResetWorkspace?: () => void;
+  onOpenEnrichAuthors?: () => void;
 }
 
 export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
@@ -46,6 +47,7 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   onOpenWorkspaceHub,
   onOpenPaperDiscovery,
   onResetWorkspace,
+  onOpenEnrichAuthors,
 }) => {
   const { columns, rows, clearTable } = useGridStore();
   const { logs, clearLogs } = useLogStore();
@@ -671,9 +673,35 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                     onOpenMasterGrid();
                     setActiveItem('master-grid');
                   }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
                 >
-                  <Table size={13} color="var(--accent-primary)" />
-                  <span>Master Extraction Grid</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Table size={13} color="var(--accent-primary)" />
+                    <span>Master Extraction Grid</span>
+                  </span>
+                  {onOpenEnrichAuthors && rows.length > 0 && (
+                    <span
+                      title="Enrich dataset with corresponding authors from DOI"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenEnrichAuthors();
+                      }}
+                      style={{
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        fontSize: '9.5px',
+                        backgroundColor: 'rgba(249, 226, 175, 0.15)',
+                        color: 'var(--accent-warning, #f9e2af)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                      }}
+                    >
+                      <Sparkles size={10} />
+                      Enrich
+                    </span>
+                  )}
                 </div>
 
                 {onOpenPaperDiscovery && (
@@ -869,6 +897,29 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                     <Download size={12} />
                     <span>Export CSV Dataset</span>
                   </button>
+
+                  {onOpenEnrichAuthors && (
+                    <button
+                      className="vscode-tree-item"
+                      style={{
+                        background: 'rgba(249, 226, 175, 0.12)',
+                        border: '1px solid rgba(249, 226, 175, 0.3)',
+                        color: 'var(--accent-warning, #f9e2af)',
+                        borderRadius: '4px',
+                        padding: '6px 8px',
+                        justifyContent: 'center',
+                        fontWeight: 600,
+                        fontSize: '11px',
+                        gap: '6px',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => onOpenEnrichAuthors()}
+                      title="Enrich dataset with corresponding author details from DOI"
+                    >
+                      <Sparkles size={12} color="var(--accent-warning, #f9e2af)" />
+                      <span>Enrich Corresponding Authors</span>
+                    </button>
+                  )}
 
                   {/* Danger Zone: Clear Table */}
                   <button

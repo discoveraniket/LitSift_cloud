@@ -25,6 +25,7 @@ import {
   X,
   Layers,
   Database,
+  Mail,
 } from 'lucide-react';
 import { PaperDocumentInfo, PaperTable } from '../../types/paper';
 import { useGridStore } from '../../store/useGridStore';
@@ -605,7 +606,9 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
     // Dynamic Section Fallback: scroll to matching section heading if snippet couldn't be matched
     if (activeEvidence.sectionName) {
       const lowerSec = activeEvidence.sectionName.toLowerCase().trim();
-      if (lowerSec.includes('abstract')) {
+      if (lowerSec.includes('author') || lowerSec.includes('correspond') || lowerSec.includes('affil')) {
+        document.getElementById('sec-authors')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (lowerSec.includes('abstract')) {
         document.getElementById('sec-abstract')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (lowerSec.includes('table')) {
         document.getElementById('sec-tables')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1449,16 +1452,71 @@ export const ArticleReaderView = forwardRef<ArticleReaderViewRef, ArticleReaderV
 
           {/* Authors */}
           {paper.authors && paper.authors.length > 0 && (
-            <div style={{ fontSize: `${13 * fontSizeScale}px`, color: 'var(--text-secondary, #a6adc8)', marginBottom: '8px', lineHeight: 1.5 }}>
+            <div
+              id="sec-authors"
+              className="article-authors-header section-paragraph"
+              style={{ fontSize: `${13 * fontSizeScale}px`, color: 'var(--text-secondary, #a6adc8)', marginBottom: '8px', lineHeight: 1.5 }}
+            >
               <strong>Authors: </strong>
               {paper.authors.map((a, idx) => (
-                <span key={idx}>
+                <span key={idx} className="author-name-item">
                   {a.name}
+                  {a.isCorresponding && (
+                    <span
+                      title="Corresponding Author"
+                      style={{ color: 'var(--accent-warning, #f9e2af)', fontWeight: 700, marginLeft: '2px' }}
+                    >
+                      *
+                    </span>
+                  )}
+                  {a.institution ? ` (${a.institution})` : ''}
                   {idx < (paper.authors?.length || 0) - 1 ? ', ' : ''}
                 </span>
               ))}
             </div>
           )}
+
+          {/* Correspondence & Contact Notes Badge */}
+          {(() => {
+            const correspAuthor =
+              paper.authors?.find((a) => a.isCorresponding) ||
+              paper.authors?.find((a) => a.email);
+            if (!correspAuthor || (!correspAuthor.email && !correspAuthor.institution && !correspAuthor.isCorresponding)) {
+              return null;
+            }
+            return (
+              <div
+                id="sec-correspondence"
+                className="article-correspondence-box section-paragraph"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(249, 226, 175, 0.1)',
+                  border: '1px solid rgba(249, 226, 175, 0.25)',
+                  fontSize: `${11.5 * fontSizeScale}px`,
+                  color: 'var(--text-secondary, #bac2de)',
+                  marginBottom: '10px',
+                }}
+              >
+                <Mail size={13} color="var(--accent-warning, #f9e2af)" style={{ flexShrink: 0 }} />
+                <span>
+                  <strong style={{ color: 'var(--accent-warning, #f9e2af)' }}>*Correspondence: </strong>
+                  <span>{correspAuthor.name}</span>
+                  {correspAuthor.email && (
+                    <span style={{ color: 'var(--accent-primary, #89b4fa)', marginLeft: '4px' }}>
+                      &lt;{correspAuthor.email}&gt;
+                    </span>
+                  )}
+                  {correspAuthor.institution && (
+                    <span style={{ opacity: 0.85, marginLeft: '6px' }}>— {correspAuthor.institution}</span>
+                  )}
+                </span>
+              </div>
+            );
+          })()}
 
           {/* Journal & Year */}
           <div style={{ fontSize: `${12 * fontSizeScale}px`, color: 'var(--text-muted, #6c7086)', display: 'flex', alignItems: 'center', gap: '8px' }}>
