@@ -6,6 +6,8 @@ import { getGeminiApiKey, getSelectedGeminiModel } from './geminiService';
 import { getPdfBase64, buildPaperMarkdownContext, resolveEffectiveGroundingMode } from './pdfUtils';
 import { GoogleGenAI, Type } from '@google/genai';
 import { GridRow } from '../types/grid';
+import { getActiveProvider, getLmStudioModel } from './providerConfig';
+import { executeLmStudioStructuredGeneration, OpenAiMessage } from './lmStudioService';
 
 export type AgentExecutionMode = 'human_in_loop' | 'autonomous_autopilot';
 
@@ -1025,33 +1027,48 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
 
       contentsParts.push({ text: schemaPrompt });
 
-      logStore.setActiveStep(`[2/3] Transmitting request to Google Gemini (${selectedModel})...`);
       const genStartTime = performance.now();
+      const provider = getActiveProvider();
+      let text = '';
+      let elapsed = '0.00';
 
-      const ai = new GoogleGenAI({ apiKey });
-      let res: any;
-      try {
-        res = await ai.models.generateContent({
-          model: selectedModel,
-          contents: contentsParts,
-          config: {
-            temperature: 0.1,
-            responseMimeType: 'application/json',
-            responseSchema: extractionResponseSchema,
+      if (provider === 'lmstudio') {
+        const localModelName = getLmStudioModel() || 'Local Model';
+        logStore.setActiveStep(`[2/3] Transmitting request to LM Studio (${localModelName})...`);
+        const fullPromptText = contentsParts.map((p) => p.text || '').filter(Boolean).join('\n\n');
+        const openAiMessages: OpenAiMessage[] = [
+          {
+            role: 'system',
+            content: 'You are an autonomous scientific literature data extractor. Extract empirical observation rows adhering strictly to the requested schema. Return valid JSON only.',
           },
-        });
-      } catch (firstErr: any) {
-        const errMsg = String(firstErr?.message || '');
-        const isTransient =
-          errMsg.includes('503') ||
-          errMsg.includes('Deadline') ||
-          errMsg.includes('429') ||
-          errMsg.includes('UNAVAILABLE') ||
-          firstErr?.status === 'UNAVAILABLE';
+          {
+            role: 'user',
+            content: fullPromptText,
+          },
+        ];
 
-        if (isTransient) {
-          logStore.addLog('warn', `Transient error from Gemini API (${errMsg}). Retrying extraction in 2s...`);
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+        const lmsResult = await executeLmStudioStructuredGeneration({
+          schemaName: 'extractionResponse',
+          schema: extractionResponseSchema,
+          messages: openAiMessages,
+          temperature: 0.1,
+        });
+
+        elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
+        const usage = lmsResult.usage;
+        const promptTokens = usage?.prompt_tokens ?? 0;
+        const candidateTokens = usage?.completion_tokens ?? 0;
+        logStore.addLog(
+          'info',
+          `⏱️ extractPDFData: LM Studio responded in ${elapsed}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`,
+          { usageMetadata: usage, latencySec: Number(elapsed) }
+        );
+        text = lmsResult.rawText;
+      } else {
+        logStore.setActiveStep(`[2/3] Transmitting request to Google Gemini (${selectedModel})...`);
+        const ai = new GoogleGenAI({ apiKey });
+        let res: any;
+        try {
           res = await ai.models.generateContent({
             model: selectedModel,
             contents: contentsParts,
@@ -1061,29 +1078,52 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
               responseSchema: extractionResponseSchema,
             },
           });
-        } else {
-          throw firstErr;
-        }
-      }
+        } catch (firstErr: any) {
+          const errMsg = String(firstErr?.message || '');
+          const isTransient =
+            errMsg.includes('503') ||
+            errMsg.includes('Deadline') ||
+            errMsg.includes('429') ||
+            errMsg.includes('UNAVAILABLE') ||
+            firstErr?.status === 'UNAVAILABLE';
 
-      const elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
-      const usage = res.usageMetadata;
-      const promptTokens = usage?.promptTokenCount ?? 0;
-      const candidateTokens = usage?.candidatesTokenCount ?? 0;
-      const thinkingTokens = (usage as any)?.thinkingTokenCount ?? (usage as any)?.reasoningTokenCount;
-      const cachedTokens = usage?.cachedContentTokenCount;
+          if (isTransient) {
+            logStore.addLog('warn', `Transient error from Gemini API (${errMsg}). Retrying extraction in 2s...`);
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            res = await ai.models.generateContent({
+              model: selectedModel,
+              contents: contentsParts,
+              config: {
+                temperature: 0.1,
+                responseMimeType: 'application/json',
+                responseSchema: extractionResponseSchema,
+              },
+            });
+          } else {
+            throw firstErr;
+          }
+        }
+
+        elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
+        const usage = res.usageMetadata;
+        const promptTokens = usage?.promptTokenCount ?? 0;
+        const candidateTokens = usage?.candidatesTokenCount ?? 0;
+        const thinkingTokens = (usage as any)?.thinkingTokenCount ?? (usage as any)?.reasoningTokenCount;
+        const cachedTokens = usage?.cachedContentTokenCount;
 
         let logDetail = `⏱️ extractPDFData: LLM responded in ${elapsed}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`;
         if (thinkingTokens) logDetail += `, Thinking=${thinkingTokens.toLocaleString()}`;
         if (cachedTokens) logDetail += `, Cached=${cachedTokens.toLocaleString()}`;
         logStore.addLog('info', logDetail, { usageMetadata: usage, latencySec: Number(elapsed) });
 
-        const text = res.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) {
-          const err = 'Gemini API returned an empty extraction response.';
-          logStore.addLog('error', err);
-          throw new Error(err);
-        }
+        text = res.candidates?.[0]?.content?.parts?.[0]?.text;
+      }
+
+      if (!text) {
+        const err = 'LLM API returned an empty extraction response.';
+        logStore.addLog('error', err);
+        throw new Error(err);
+      }
 
         logStore.setActiveStep(`[3/3] Parsing JSON payload & populating table grid...`);
         const parsed = safeJsonParse(text);
@@ -1321,30 +1361,72 @@ Return your response in JSON format:
         contentsParts.push({ text: verifyPrompt });
 
         const genStartTime = performance.now();
-        const ai = new GoogleGenAI({ apiKey });
-        const res = await ai.models.generateContent({
-          model: selectedModel,
-          contents: contentsParts,
-          config: {
+        const provider = getActiveProvider();
+        let text: string | undefined = '';
+
+        if (provider === 'lmstudio') {
+          const localModelName = getLmStudioModel() || 'Local Model';
+          logStore.setActiveStep(`Auditing citation with LM Studio (${localModelName})...`);
+          const fullPromptText = contentsParts.map((p) => p.text || '').filter(Boolean).join('\n\n');
+          const openAiMessages: OpenAiMessage[] = [
+            {
+              role: 'system',
+              content: 'You are an expert scientific fact-checking agent. Return valid JSON only.',
+            },
+            {
+              role: 'user',
+              content: fullPromptText,
+            },
+          ];
+
+          const lmsResult = await executeLmStudioStructuredGeneration({
+            schemaName: 'verificationAudit',
+            schema: {
+              type: 'OBJECT',
+              properties: {
+                isSupported: { type: 'BOOLEAN' },
+                confidenceScore: { type: 'NUMBER' },
+                pageNumber: { type: 'INTEGER' },
+                sectionName: { type: 'STRING' },
+                exactSupportingQuote: { type: 'STRING' },
+                auditReasoning: { type: 'STRING' },
+              },
+              required: ['pageNumber', 'sectionName', 'exactSupportingQuote', 'auditReasoning'],
+            },
+            messages: openAiMessages,
             temperature: 0.1,
-            responseMimeType: 'application/json',
-          },
-        });
+          });
 
-        const elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
-        const usage = res.usageMetadata;
-        const promptTokens = usage?.promptTokenCount ?? 0;
-        const candidateTokens = usage?.candidatesTokenCount ?? 0;
-        const thinkingTokens = (usage as any)?.thinkingTokenCount ?? (usage as any)?.reasoningTokenCount;
-        const cachedTokens = usage?.cachedContentTokenCount;
+          const elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
+          logStore.addLog('info', `⏱️ verifyCitation: LM Studio responded in ${elapsed}s`, { latencySec: Number(elapsed) });
+          text = lmsResult.rawText;
+        } else {
+          const ai = new GoogleGenAI({ apiKey });
+          const res = await ai.models.generateContent({
+            model: selectedModel,
+            contents: contentsParts,
+            config: {
+              temperature: 0.1,
+              responseMimeType: 'application/json',
+            },
+          });
 
-        let logDetail = `⏱️ verifyCitation: LLM responded in ${elapsed}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`;
-        if (thinkingTokens) logDetail += `, Thinking=${thinkingTokens.toLocaleString()}`;
-        if (cachedTokens) logDetail += `, Cached=${cachedTokens.toLocaleString()}`;
-        logStore.addLog('info', logDetail, { usageMetadata: usage, latencySec: Number(elapsed) });
+          const elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
+          const usage = res.usageMetadata;
+          const promptTokens = usage?.promptTokenCount ?? 0;
+          const candidateTokens = usage?.candidatesTokenCount ?? 0;
+          const thinkingTokens = (usage as any)?.thinkingTokenCount ?? (usage as any)?.reasoningTokenCount;
+          const cachedTokens = usage?.cachedContentTokenCount;
 
-        const text = res.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) throw new Error('Empty verification response from Gemini.');
+          let logDetail = `⏱️ verifyCitation: LLM responded in ${elapsed}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`;
+          if (thinkingTokens) logDetail += `, Thinking=${thinkingTokens.toLocaleString()}`;
+          if (cachedTokens) logDetail += `, Cached=${cachedTokens.toLocaleString()}`;
+          logStore.addLog('info', logDetail, { usageMetadata: usage, latencySec: Number(elapsed) });
+
+          text = res.candidates?.[0]?.content?.parts?.[0]?.text;
+        }
+
+        if (!text) throw new Error('Empty verification response from LLM.');
 
         const audit = safeJsonParse(text);
 

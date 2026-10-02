@@ -13,7 +13,7 @@ import {
 import { useAgentStore } from '../../store/useAgentStore';
 import { useGridStore } from '../../store/useGridStore';
 import { renderSafeMarkdown } from '../../utils/markdownUtils';
-import { getSelectedGeminiModel } from '../../services/geminiService';
+import { getActiveModelLabel } from '../../services/providerConfig';
 import { ThoughtAccordion } from './ThoughtAccordion';
 import { AgentToolStepper } from './AgentToolStepper';
 import { AgentChatInput } from './AgentChatInput';
@@ -624,7 +624,7 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
         onClearAllSelection={() => resetActiveSelection()}
         activePdfTitle={activePdfTitle}
         gridColumnCount={columns.length}
-        selectedModel={getSelectedGeminiModel()}
+        selectedModel={getActiveModelLabel()}
         onOpenSettings={onOpenSettings}
       />
     </aside>

@@ -18,6 +18,15 @@ export default defineConfig({
       '@': fileURLToPath.fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  server: {
+    proxy: {
+      '/api/lmstudio': {
+        target: 'http://127.0.0.1:1234',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/lmstudio/, ''),
+      },
+    },
+  },
   test: {
     globals: true,
     environment: 'jsdom',

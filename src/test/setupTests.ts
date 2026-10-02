@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 
 // Polyfill URL.createObjectURL & URL.revokeObjectURL for JSDOM
 if (typeof window !== 'undefined') {

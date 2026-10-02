@@ -6,6 +6,9 @@ import { getToolsForMode, agentToolsRegistry, AgentExecutionMode } from './agent
 import { useAgentStore } from '../store/useAgentStore';
 import { useLogStore } from '../store/useLogStore';
 import { AgentExecutionResult, AgentToolExecution } from '../types/agent';
+import { getActiveProvider, getLmStudioModel } from './providerConfig';
+import { streamLmStudioChatTurn, OpenAiMessage } from './lmStudioService';
+import { convertToolsToOpenAiFormat } from './schemaConverter';
 
 // Retrieve API key from environment variable or localStorage
 export function getGeminiApiKey(): string {
@@ -35,8 +38,8 @@ export interface AgentPrerequisiteValidation {
 }
 
 /**
- * Pre-flight validation verifying all required prerequisites (API key, prompt, PDF binary, schema)
- * before invoking Google GenAI API.
+ * Pre-flight validation verifying all required prerequisites (API key / provider, prompt, PDF binary, schema)
+ * before invoking GenAI API.
  */
 export async function validateAgentPrerequisites(
   userPrompt: string,
@@ -52,14 +55,17 @@ export async function validateAgentPrerequisites(
     };
   }
 
-  // 2. Validate Gemini API Key
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    return {
-      valid: false,
-      error:
-        '⚠️ **GEMINI_API_KEY is not configured.**\n\nPlease set your Gemini API key in **Settings (⚙️)** or through the environment variable (`VITE_GEMINI_API_KEY`) to enable autonomous agent execution.',
-    };
+  // 2. Validate Provider Configuration
+  const provider = getActiveProvider();
+  if (provider === 'gemini') {
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) {
+      return {
+        valid: false,
+        error:
+          '⚠️ **GEMINI_API_KEY is not configured.**\n\nPlease set your Gemini API key in **Settings (⚙️)** or switch to **LM Studio (Local)** in Settings to use local open models.',
+      };
+    }
   }
 
   const pdfStore = usePdfStore.getState();
@@ -163,8 +169,10 @@ export async function processAgentInteraction(
     };
   }
 
-  const apiKey = getGeminiApiKey()!;
-  const selectedModel = getSelectedGeminiModel();
+  const provider = getActiveProvider();
+  const isLmStudio = provider === 'lmstudio';
+  const apiKey = getGeminiApiKey();
+  const selectedModel = isLmStudio ? (getLmStudioModel() || 'Local Model') : getSelectedGeminiModel();
   const agentMode: AgentExecutionMode = useAgentStore.getState().mode || 'human_in_loop';
 
   try {
@@ -410,7 +418,7 @@ ${userPrompt}`;
       });
     }
 
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = !isLmStudio && apiKey ? new GoogleGenAI({ apiKey }) : null;
 
     const systemInstruction = `You are LitSift Agent, an autonomous scientific literature synthesis assistant.
 You are interacting with research document "${activePdfTitle}" and managing a structured scientific data grid.
@@ -456,6 +464,48 @@ You have access to a rich declarative tool suite:
 - Schema management: addColumn (supports optional initialValues), renameColumn, deleteColumn
 Execute all required tool actions to fulfill the user's instructions and summarize your reasoning and findings clearly.`;
 
+    const openAiMessages: OpenAiMessage[] = [
+      { role: 'system', content: systemInstruction },
+    ];
+
+    let rootDocMarkdown = '';
+    if (validation.activePdf) {
+      const isAbstractOnly = effectiveGrounding === 'abstract_only';
+      rootDocMarkdown = buildPaperMarkdownContext(validation.activePdf, { abstractOnly: isAbstractOnly });
+    }
+
+    if (isFollowup) {
+      if (rootDocMarkdown) {
+        openAiMessages.push({
+          role: 'user',
+          content: `[ACTIVE RESEARCH DOCUMENT: "${activePdfTitle}"]\n${rootDocMarkdown}\n\nYou are analyzing research document "${activePdfTitle}". I will ask you questions and instructions to extract, verify, and edit data in our structured table grid.`,
+        });
+        openAiMessages.push({
+          role: 'assistant',
+          content: `Understood. I have full access to "${activePdfTitle}" and will synthesize findings, extract exact verbatim citations, and assist you with managing the structured data grid.`,
+        });
+      }
+      const historyTurns = pastNonWelcomeMessages.slice(0, -1);
+      for (const msg of historyTurns) {
+        openAiMessages.push({
+          role: msg.sender === 'user' ? 'user' : 'assistant',
+          content: msg.text,
+        });
+      }
+      openAiMessages.push({
+        role: 'user',
+        content: finalPromptText,
+      });
+    } else {
+      const combinedPrompt = rootDocMarkdown
+        ? `[ACTIVE RESEARCH DOCUMENT: "${activePdfTitle}"]\n${rootDocMarkdown}\n\n${finalPromptText}`
+        : finalPromptText;
+      openAiMessages.push({
+        role: 'user',
+        content: combinedPrompt,
+      });
+    }
+
     // Multi-Step ReAct Execution Loop (Expanded to 10 Turns)
     const MAX_STEPS = 10;
     let currentStep = 1;
@@ -484,6 +534,141 @@ Execute all required tool actions to fulfill the user's instructions and summari
 
       // Dynamically evaluate tool schemas on every step to reflect latest columns
       const currentTools = getToolsForMode(agentMode);
+
+      if (isLmStudio) {
+        logStore.setActiveStep(`[Step ${currentStep}/${MAX_STEPS}] Reasoning with LM Studio (${selectedModel})...`);
+        const genStartTime = performance.now();
+
+        let lmsResult: any;
+        try {
+          lmsResult = await streamLmStudioChatTurn({
+            messages: openAiMessages,
+            tools: convertToolsToOpenAiFormat(currentTools),
+            model: selectedModel,
+            temperature: 0.2,
+            signal: abortSignal,
+            onStream: (chunk) => {
+              if (chunk.thoughtChunk) {
+                const liveFullThought = accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n');
+                onStream?.({
+                  thoughtChunk: chunk.thoughtChunk,
+                  fullThoughtText: liveFullThought,
+                  fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                });
+              }
+              if (chunk.textChunk) {
+                const liveFullThought = accumulatedThoughts.length > 0
+                  ? (chunk.fullThoughtText ? accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n') : accumulatedThoughts.join('\n\n---\n\n'))
+                  : chunk.fullThoughtText;
+                onStream?.({
+                  textChunk: chunk.textChunk,
+                  fullThoughtText: liveFullThought,
+                  fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                });
+              }
+            },
+          });
+        } catch (lmsErr: any) {
+          logStore.addLog('error', `LM Studio error: ${lmsErr.message}`);
+          throw lmsErr;
+        }
+
+        if (lmsResult.thought) {
+          accumulatedThoughts.push(lmsResult.thought);
+        }
+        if (lmsResult.text) {
+          finalReplyText = finalReplyText ? `${finalReplyText}\n\n${lmsResult.text}` : lmsResult.text;
+        }
+
+        const genDurationSec = ((performance.now() - genStartTime) / 1000).toFixed(2);
+        const usage = lmsResult.usage;
+        const promptTokens = usage?.promptTokens ?? 0;
+        const candidateTokens = usage?.candidateTokens ?? 0;
+        totalPromptTokens += promptTokens;
+        totalCandidateTokens += candidateTokens;
+
+        logStore.addLog(
+          'info',
+          `⏱️ [Step ${currentStep}] LM Studio (${selectedModel}) responded in ${genDurationSec}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`,
+          { step: currentStep, latencySec: Number(genDurationSec), usageMetadata: usage }
+        );
+
+        if (!lmsResult.functionCalls || lmsResult.functionCalls.length === 0) {
+          logStore.setActiveStep(null);
+          logStore.addLog('info', `Agent completed reasoning at step ${currentStep} (${genDurationSec}s)`);
+          break;
+        }
+
+        openAiMessages.push({
+          role: 'assistant',
+          content: lmsResult.text || null,
+          tool_calls: lmsResult.functionCalls.map((fc: any, i: number) => ({
+            id: fc.id || `call_${currentStep}_${i}`,
+            type: 'function',
+            function: {
+              name: fc.name,
+              arguments: JSON.stringify(fc.args || {}),
+            },
+          })),
+        });
+
+        for (let i = 0; i < lmsResult.functionCalls.length; i++) {
+          if (abortSignal?.aborted) break;
+          const fc = lmsResult.functionCalls[i];
+          const toolSpec = agentToolsRegistry[fc.name || ''];
+          const callId = fc.id || `call_${currentStep}_${i}`;
+
+          if (toolSpec) {
+            logStore.addLog('info', `[Step ${currentStep}] Invoking tool: ${fc.name}`, fc.args);
+            logStore.setActiveStep(`[Step ${currentStep}] Executing ${fc.name}...`);
+            const toolStartTime = performance.now();
+            const toolResult = await toolSpec.execute(fc.args || {}, agentMode);
+            const toolDurationSec = ((performance.now() - toolStartTime) / 1000).toFixed(2);
+
+            logStore.addLog(
+              toolResult.success ? 'success' : 'error',
+              `⚡ [Step ${currentStep}] Tool "${fc.name}" ${toolResult.success ? 'finished' : 'failed'} in ${toolDurationSec}s`
+            );
+
+            executedTools.push({
+              id: `tool-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+              name: fc.name,
+              args: fc.args || {},
+              summary: toolResult.summary,
+              status: toolResult.success ? 'completed' : 'failed',
+              result: toolResult.resultData,
+              error: toolResult.error,
+            });
+
+            openAiMessages.push({
+              role: 'tool',
+              tool_call_id: callId,
+              content: JSON.stringify({
+                success: toolResult.success,
+                summary: toolResult.summary,
+                result: toolResult.resultData || {},
+                error: toolResult.error || undefined,
+              }),
+            });
+          } else {
+            openAiMessages.push({
+              role: 'tool',
+              tool_call_id: callId,
+              content: JSON.stringify({
+                success: false,
+                error: `Tool "${fc.name}" is not registered in the system.`,
+              }),
+            });
+          }
+        }
+
+        currentStep++;
+        continue;
+      }
+
+      if (!ai) {
+        throw new Error('Gemini API client is not initialized.');
+      }
 
       logStore.setActiveStep(`[Step ${currentStep}/${MAX_STEPS}] Reasoning with Gemini (${selectedModel})...`);
       const genStartTime = performance.now();

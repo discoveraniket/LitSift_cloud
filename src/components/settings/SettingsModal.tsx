@@ -1,7 +1,34 @@
 import React, { useState } from 'react';
-import { Settings, X, Key, Cpu, Check, ShieldCheck, Plus, Zap, ExternalLink } from 'lucide-react';
+import {
+  Settings,
+  X,
+  Key,
+  Cpu,
+  Check,
+  ShieldCheck,
+  Plus,
+  Zap,
+  ExternalLink,
+  Server,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2,
+} from 'lucide-react';
 import { getGeminiApiKey, getSelectedGeminiModel, setSelectedGeminiModel } from '../../services/geminiService';
 import { useAgentStore } from '../../store/useAgentStore';
+import {
+  getActiveProvider,
+  setActiveProvider,
+  getLmStudioBaseUrl,
+  setLmStudioBaseUrl,
+  getLmStudioModel,
+  setLmStudioModel,
+  getLmStudioReasoningEffort,
+  setLmStudioReasoningEffort,
+  LlmProvider,
+  ReasoningEffort,
+} from '../../services/providerConfig';
+import { checkLmStudioConnection, LmStudioModelInfo } from '../../services/lmStudioService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -80,11 +107,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const mode = useAgentStore((state) => state.mode);
   const setExecutionMode = useAgentStore((state) => state.setExecutionMode);
 
+  // Provider State
+  const [provider, setProvider] = useState<LlmProvider>(getActiveProvider());
+
+  // Gemini State
   const [currentModel, setCurrentModel] = useState<string>(getSelectedGeminiModel());
   const [apiKeyInput, setApiKeyInput] = useState<string>(getGeminiApiKey());
-  const [savedSuccess, setSavedSuccess] = useState(false);
   const [customModelInput, setCustomModelInput] = useState<string>('');
   const [showCustomInput, setShowCustomInput] = useState(false);
+
+  // LM Studio State
+  const [lmStudioUrl, setLmStudioUrlState] = useState<string>(getLmStudioBaseUrl());
+  const [lmStudioModel, setLmStudioModelState] = useState<string>(getLmStudioModel());
+  const [reasoningEffort, setReasoningEffortState] = useState<ReasoningEffort>(getLmStudioReasoningEffort());
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [connectionResult, setConnectionResult] = useState<{
+    tested: boolean;
+    ok: boolean;
+    models: LmStudioModelInfo[];
+    message: string;
+  } | null>(null);
+
+  const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Load custom models from localStorage
   const [customModels, setCustomModels] = useState<ModelOption[]>(() => {
@@ -99,6 +143,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   if (!isOpen) return null;
 
   const allModels: ModelOption[] = [...DEFAULT_MODELS, ...customModels];
+
+  const handleTestConnection = async () => {
+    setIsTestingConnection(true);
+    setConnectionResult(null);
+    try {
+      const res = await checkLmStudioConnection(lmStudioUrl);
+      if (res.ok) {
+        setConnectionResult({
+          tested: true,
+          ok: true,
+          models: res.models,
+          message: `Connected successfully! Found ${res.models.length} loaded model${res.models.length === 1 ? '' : 's'}.`,
+        });
+        if (res.models.length > 0 && !lmStudioModel) {
+          setLmStudioModelState(res.models[0].id);
+        }
+      } else {
+        setConnectionResult({
+          tested: true,
+          ok: false,
+          models: [],
+          message: res.error || 'Could not connect to LM Studio server.',
+        });
+      }
+    } catch (err: any) {
+      setConnectionResult({
+        tested: true,
+        ok: false,
+        models: [],
+        message: err.message || 'Connection failed.',
+      });
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
 
   const handleAddCustomModel = () => {
     const trimmed = customModelInput.trim();
@@ -139,17 +218,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   };
 
   const handleSave = () => {
-    setSelectedGeminiModel(currentModel);
-    if (apiKeyInput.trim()) {
-      localStorage.setItem('LITSIFT_GEMINI_API_KEY', apiKeyInput.trim());
+    setActiveProvider(provider);
+
+    if (provider === 'lmstudio') {
+      setLmStudioBaseUrl(lmStudioUrl);
+      setLmStudioModel(lmStudioModel);
+      setLmStudioReasoningEffort(reasoningEffort);
     } else {
-      localStorage.removeItem('LITSIFT_GEMINI_API_KEY');
+      setSelectedGeminiModel(currentModel);
+      if (apiKeyInput.trim()) {
+        localStorage.setItem('LITSIFT_GEMINI_API_KEY', apiKeyInput.trim());
+      } else {
+        localStorage.removeItem('LITSIFT_GEMINI_API_KEY');
+      }
     }
+
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);
       onClose();
-    }, 800);
+    }, 700);
   };
 
   return (
@@ -171,7 +259,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           background: 'var(--bg-secondary)',
           border: '1px solid var(--border-subtle)',
           borderRadius: '12px',
-          width: '500px',
+          width: '520px',
           maxWidth: '92vw',
           maxHeight: '90vh',
           display: 'flex',
@@ -211,150 +299,450 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           </button>
         </div>
 
+        {/* Provider Switcher Tabs */}
+        <div style={{ padding: '14px 20px 0 20px' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '6px',
+              background: 'var(--bg-tertiary)',
+              padding: '4px',
+              borderRadius: '8px',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setProvider('gemini')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                background: provider === 'gemini' ? 'var(--bg-secondary)' : 'transparent',
+                color: provider === 'gemini' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                fontWeight: provider === 'gemini' ? 600 : 500,
+                fontSize: '12px',
+                cursor: 'pointer',
+                boxShadow: provider === 'gemini' ? '0 2px 6px rgba(0,0,0,0.2)' : 'none',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Cpu size={14} />
+              <span>Google Gemini (Cloud)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setProvider('lmstudio');
+                if (!connectionResult?.tested) {
+                  handleTestConnection();
+                }
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                background: provider === 'lmstudio' ? 'var(--bg-secondary)' : 'transparent',
+                color: provider === 'lmstudio' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                fontWeight: provider === 'lmstudio' ? 600 : 500,
+                fontSize: '12px',
+                cursor: 'pointer',
+                boxShadow: provider === 'lmstudio' ? '0 2px 6px rgba(0,0,0,0.2)' : 'none',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Server size={14} />
+              <span>LM Studio (Local)</span>
+            </button>
+          </div>
+        </div>
+
         {/* Scrollable Body */}
-        <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
-          {/* Model Selection */}
-          <div style={{ marginBottom: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Cpu size={14} color="var(--accent-primary)" />
-                SELECT OR ENTER GEMINI MODEL
-              </label>
-              <button
-                onClick={() => setShowCustomInput(!showCustomInput)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--accent-primary)',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <Plus size={12} /> {showCustomInput ? 'Hide Input' : 'Enter Custom Model'}
-              </button>
-            </div>
-
-            {/* Custom Model Input Row */}
-            {showCustomInput && (
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '6px',
-                  marginBottom: '10px',
-                  padding: '8px',
-                  background: 'var(--bg-tertiary)',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-subtle)',
-                }}
-              >
-                <input
-                  type="text"
-                  placeholder="e.g. gemini-2.5-flash-lite, gemini-experimental..."
-                  value={customModelInput}
-                  onChange={(e) => setCustomModelInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddCustomModel()}
-                  style={{
-                    flex: 1,
-                    background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-subtle)',
-                    color: 'var(--text-primary)',
-                    borderRadius: '4px',
-                    padding: '5px 8px',
-                    fontSize: '11px',
-                    outline: 'none',
-                  }}
-                />
-                <button
-                  onClick={handleAddCustomModel}
-                  style={{
-                    background: 'var(--accent-primary)',
-                    color: 'var(--bg-secondary)',
-                    border: 'none',
-                    borderRadius: '4px',
-                    padding: '5px 12px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Add Model
-                </button>
-              </div>
-            )}
-
-            {/* Model Card Grid */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {allModels.map((model) => {
-                const isSelected = currentModel === model.id;
-                return (
-                  <div
-                    key={model.id}
-                    onClick={() => setCurrentModel(model.id)}
+        <div style={{ padding: '16px 20px 20px 20px', overflowY: 'auto', flex: 1 }}>
+          {provider === 'lmstudio' ? (
+            /* LM Studio Configuration Panel */
+            <div>
+              {/* Server Endpoint URL */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  <Server size={14} color="var(--accent-primary)" />
+                  LM STUDIO SERVER URL
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={lmStudioUrl}
+                    onChange={(e) => setLmStudioUrlState(e.target.value)}
+                    placeholder="http://localhost:1234/v1"
                     style={{
-                      border: isSelected ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
-                      background: isSelected ? 'rgba(137, 180, 250, 0.12)' : 'var(--bg-tertiary)',
-                      borderRadius: '8px',
-                      padding: '8px 12px',
+                      flex: 1,
+                      background: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-primary)',
+                      borderRadius: '6px',
+                      padding: '8px 10px',
+                      fontSize: '12px',
+                      outline: 'none',
+                      fontFamily: 'monospace',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleTestConnection}
+                    disabled={isTestingConnection}
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--accent-primary)',
+                      borderRadius: '6px',
+                      padding: '8px 14px',
+                      fontSize: '11px',
+                      fontWeight: 600,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
-                      transition: 'all 0.15s ease',
+                      gap: '6px',
+                      whiteSpace: 'nowrap',
                     }}
                   >
-                    <div>
-                      <div style={{ fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {model.name}
-                        {model.badge && (
-                          <span
-                            style={{
-                              fontSize: '9px',
-                              padding: '1px 6px',
-                              borderRadius: '10px',
-                              background: isSelected ? 'var(--accent-primary)' : 'var(--bg-secondary)',
-                              color: isSelected ? 'var(--bg-secondary)' : 'var(--text-secondary)',
-                              fontWeight: 700,
-                            }}
-                          >
-                            {model.badge}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                        ⚡ {model.speed} • {model.reasoning}
-                      </div>
-                    </div>
+                    <RefreshCw size={12} className={isTestingConnection ? 'spin' : ''} />
+                    {isTestingConnection ? 'Testing...' : 'Test Connection'}
+                  </button>
+                </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {model.isCustom && (
-                        <button
-                          onClick={(e) => handleRemoveCustomModel(model.id, e)}
-                          title="Remove custom model"
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--text-muted)',
-                            cursor: 'pointer',
-                            fontSize: '11px',
-                          }}
-                        >
-                          ✕
-                        </button>
-                      )}
-                      {isSelected && <Check size={16} color="var(--accent-primary)" />}
-                    </div>
+                {/* Connection Status Feedback Banner */}
+                {connectionResult && (
+                  <div
+                    style={{
+                      marginTop: '8px',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      background: connectionResult.ok ? 'rgba(166, 227, 161, 0.12)' : 'rgba(243, 139, 168, 0.12)',
+                      border: connectionResult.ok ? '1px solid var(--accent-success)' : '1px solid var(--accent-danger, #f38ba8)',
+                      color: connectionResult.ok ? 'var(--accent-success)' : 'var(--accent-danger, #f38ba8)',
+                    }}
+                  >
+                    {connectionResult.ok ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+                    <span>{connectionResult.message}</span>
                   </div>
-                );
-              })}
+                )}
+              </div>
+
+              {/* Local Model Selection */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  <Cpu size={14} color="var(--accent-primary)" />
+                  LOCAL MODEL IDENTIFIER
+                </label>
+                {connectionResult?.models && connectionResult.models.length > 0 ? (
+                  <select
+                    value={lmStudioModel}
+                    onChange={(e) => setLmStudioModelState(e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-primary)',
+                      borderRadius: '6px',
+                      padding: '8px 10px',
+                      fontSize: '12px',
+                      outline: 'none',
+                    }}
+                  >
+                    {connectionResult.models.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.id}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={lmStudioModel}
+                    onChange={(e) => setLmStudioModelState(e.target.value)}
+                    placeholder="e.g. qwen2.5-14b-instruct, mistral-small-24b, or leave empty for auto"
+                    style={{
+                      width: '100%',
+                      background: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-primary)',
+                      borderRadius: '6px',
+                      padding: '8px 10px',
+                      fontSize: '12px',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                )}
+                <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Select the model loaded in LM Studio. Leave empty to use whichever model is actively running.
+                </div>
+              </div>
+
+              {/* Reasoning Effort (For Qwen 3.8 / DeepSeek reasoning models) */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  <Zap size={14} color="var(--accent-primary)" />
+                  REASONING EFFORT (THINKING MODELS)
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
+                  {(['low', 'medium', 'high'] as ReasoningEffort[]).map((effort) => (
+                    <button
+                      key={effort}
+                      type="button"
+                      onClick={() => setReasoningEffortState(effort)}
+                      style={{
+                        padding: '6px 8px',
+                        borderRadius: '6px',
+                        border: reasoningEffort === effort ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+                        background: reasoningEffort === effort ? 'rgba(137, 180, 250, 0.12)' : 'var(--bg-tertiary)',
+                        color: reasoningEffort === effort ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                        fontSize: '11px',
+                        fontWeight: reasoningEffort === effort ? 600 : 500,
+                        cursor: 'pointer',
+                        textTransform: 'capitalize',
+                      }}
+                    >
+                      {effort}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Use <strong>Low</strong> for faster multi-turn agent extractions to prevent long internal monologues.
+                </div>
+              </div>
+
+              {/* Informational Card */}
+              <div
+                style={{
+                  background: 'var(--bg-tertiary)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  marginBottom: '16px',
+                  fontSize: '11px',
+                  color: 'var(--text-secondary)',
+                  lineHeight: '1.4',
+                }}
+              >
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  💡 Local Inference Setup:
+                </div>
+                1. Open LM Studio and start the local server via the <strong>Developer</strong> tab (<code style={{ color: 'var(--accent-primary)' }}>&lt;/&gt;</code>) or run <code style={{ color: 'var(--accent-primary)' }}>lms server start</code>.<br />
+                2. Load a tool-compatible model (e.g. <strong>Qwen 2.5 14B</strong> or <strong>Mistral Small 24B</strong>).<br />
+                3. LitSift will automatically format documents as structured text and send OpenAI tool calls directly to your GPU.
+              </div>
             </div>
-          </div>
+          ) : (
+            /* Gemini Cloud Configuration Panel */
+            <div>
+              {/* Model Selection */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Cpu size={14} color="var(--accent-primary)" />
+                    SELECT OR ENTER GEMINI MODEL
+                  </label>
+                  <button
+                    onClick={() => setShowCustomInput(!showCustomInput)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent-primary)',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <Plus size={12} /> {showCustomInput ? 'Hide Input' : 'Enter Custom Model'}
+                  </button>
+                </div>
+
+                {/* Custom Model Input Row */}
+                {showCustomInput && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '6px',
+                      marginBottom: '10px',
+                      padding: '8px',
+                      background: 'var(--bg-tertiary)',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <input
+                      type="text"
+                      placeholder="e.g. gemini-2.5-flash-lite, gemini-experimental..."
+                      value={customModelInput}
+                      onChange={(e) => setCustomModelInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddCustomModel()}
+                      style={{
+                        flex: 1,
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-subtle)',
+                        color: 'var(--text-primary)',
+                        borderRadius: '4px',
+                        padding: '5px 8px',
+                        fontSize: '11px',
+                        outline: 'none',
+                      }}
+                    />
+                    <button
+                      onClick={handleAddCustomModel}
+                      style={{
+                        background: 'var(--accent-primary)',
+                        color: 'var(--bg-secondary)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '5px 12px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Add Model
+                    </button>
+                  </div>
+                )}
+
+                {/* Model Card Grid */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {allModels.map((model) => {
+                    const isSelected = currentModel === model.id;
+                    return (
+                      <div
+                        key={model.id}
+                        onClick={() => setCurrentModel(model.id)}
+                        style={{
+                          border: isSelected ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+                          background: isSelected ? 'rgba(137, 180, 250, 0.12)' : 'var(--bg-tertiary)',
+                          borderRadius: '8px',
+                          padding: '8px 12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 600, color: isSelected ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
+                              {model.name}
+                            </span>
+                            {model.badge && (
+                              <span
+                                style={{
+                                  fontSize: '9px',
+                                  padding: '1px 5px',
+                                  borderRadius: '4px',
+                                  background: isSelected ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.08)',
+                                  color: isSelected ? 'var(--bg-secondary)' : 'var(--text-secondary)',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {model.badge}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+                            {model.speed} • {model.reasoning}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {model.isCustom && (
+                            <button
+                              onClick={(e) => handleRemoveCustomModel(model.id, e)}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--text-muted)',
+                                cursor: 'pointer',
+                                padding: '2px',
+                                display: 'flex',
+                              }}
+                              title="Delete custom model"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                          {isSelected && <Check size={14} color="var(--accent-primary)" />}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Gemini API Key Input */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  <Key size={14} color="var(--accent-primary)" />
+                  GEMINI API KEY (ENV / LOCAL)
+                </label>
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder="Paste your GEMINI_API_KEY here..."
+                  style={{
+                    width: '100%',
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-primary)',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    fontSize: '12px',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <ShieldCheck size={12} color="var(--accent-success)" />
+                    <span>Stored securely in local browser storage (BYOK).</span>
+                  </div>
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: 'var(--accent-primary, #89b4fa)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      textDecoration: 'none',
+                      fontSize: '10px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Get a free key <ExternalLink size={10} />
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Agent Execution Mode (HITL vs Autopilot) */}
-          <div style={{ marginBottom: '20px' }}>
+          <div style={{ marginTop: '8px', marginBottom: '10px' }}>
             <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
               <ShieldCheck size={14} color="var(--accent-primary)" />
               AGENT EXECUTION MODE
@@ -399,53 +787,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               </div>
             </div>
           </div>
-
-          {/* API Key Input */}
-          <div style={{ marginBottom: '10px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-              <Key size={14} color="var(--accent-primary)" />
-              GEMINI API KEY (ENV / LOCAL)
-            </label>
-            <input
-              type="password"
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-              placeholder="Paste your GEMINI_API_KEY here..."
-              style={{
-                width: '100%',
-                background: 'var(--bg-tertiary)',
-                border: '1px solid var(--border-subtle)',
-                color: 'var(--text-primary)',
-                borderRadius: '6px',
-                padding: '8px 10px',
-                fontSize: '12px',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <ShieldCheck size={12} color="var(--accent-success)" />
-                <span>Stored securely in local browser storage (BYOK).</span>
-              </div>
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  color: 'var(--accent-primary, #89b4fa)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '3px',
-                  textDecoration: 'none',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                }}
-              >
-                Get a free key <ExternalLink size={10} />
-              </a>
-            </div>
-          </div>
         </div>
 
         {/* Footer Buttons */}
@@ -460,7 +801,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           }}
         >
           <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            Active: <strong style={{ color: 'var(--accent-primary)' }}>{currentModel}</strong>
+            Active Provider:{' '}
+            <strong style={{ color: 'var(--accent-primary)' }}>
+              {provider === 'lmstudio' ? `LM Studio (${lmStudioModel || 'Local Model'})` : `Gemini (${currentModel})`}
+            </strong>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button

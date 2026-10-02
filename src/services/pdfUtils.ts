@@ -1,4 +1,5 @@
 import { PdfDocumentInfo, usePdfStore, GroundingMode } from '../store/usePdfStore';
+import { getActiveProvider } from './providerConfig';
 
 export async function getPdfBase64(pdfInfo: PdfDocumentInfo): Promise<string> {
   if (pdfInfo.base64) {
@@ -52,9 +53,20 @@ export function resolveEffectiveGroundingMode(paper: any): GroundingMode {
   const preference: GroundingMode = paper.groundingMode || 'auto';
   if (preference === 'none') return 'none';
 
+  const provider = getActiveProvider();
+  const isLocalLmStudio = provider === 'lmstudio';
+
   const hasPdf = Boolean(paper.base64 || paper.file || paper.url);
-  const hasSections = Boolean(paper.sections && paper.sections.length > 0);
+  const hasSections = Boolean((paper.sections && paper.sections.length > 0) || paper.extractedText);
   const hasAbstract = Boolean(paper.abstractText && paper.abstractText.trim().length > 0);
+
+  // When using local LM Studio models, binary PDF streaming is not supported over OpenAI /v1/chat/completions
+  if (isLocalLmStudio) {
+    if (hasSections) return 'structured_text';
+    if (hasAbstract) return 'abstract_only';
+    if (hasPdf) return 'structured_text';
+    return 'none';
+  }
 
   if (preference === 'pdf') {
     if (hasPdf) return 'pdf';
@@ -134,6 +146,8 @@ export function buildPaperMarkdownContext(paper: any, options?: { abstractOnly?:
         parts.push(`\n${headingLevel} ${title}\n${cleanContent}`);
       }
     });
+  } else if (paper.extractedText && paper.extractedText.trim().length > 0) {
+    parts.push(`\n## Document Full Text\n${paper.extractedText.trim()}`);
   }
 
   // 4. Tables (Compact formatting)
