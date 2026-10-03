@@ -104,8 +104,11 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
 
         {/* Settings Button */}
         <button
-          className="activity-item"
-          onClick={onOpenSettings}
+          className={`activity-item ${showLeftPanel && activeSidebarView === 'settings' ? 'active' : ''}`}
+          onClick={() => {
+            onSelectSidebarView('settings');
+            onOpenSettings();
+          }}
           title={`AI Settings & Model Selection (Active: ${currentModel})`}
         >
           <Settings size={18} />

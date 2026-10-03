@@ -6,7 +6,6 @@ import { LeftExplorerPanel } from '../explorer/LeftExplorerPanel';
 import { CentralViewerPanel } from '../pdf-viewer/CentralViewerPanel';
 import { RightAgentPanel } from '../agent/RightAgentPanel';
 import { BottomGridPanel } from '../data-grid/BottomGridPanel';
-import { SettingsModal } from '../settings/SettingsModal';
 import { DebugLogsModal } from '../agent/DebugLogsModal';
 import { AboutModal } from './AboutModal';
 import { EnrichAuthorsModal } from '../explorer/EnrichAuthorsModal';
@@ -21,7 +20,6 @@ export const WorkspaceLayout: React.FC = () => {
   const activePdfId = activePdf?.id || '';
   const activePdfTitle = activePdf?.name || 'No Paper Selected';
 
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showEnrichAuthorsModal, setShowEnrichAuthorsModal] = useState(false);
@@ -197,6 +195,13 @@ export const WorkspaceLayout: React.FC = () => {
     setActiveTabId(tabId);
     const targetTab = tabs.find((t) => t.id === tabId);
 
+    if (targetTab?.type === 'settings') {
+      setActiveSidebarView('settings');
+      setShowLeftPanel(true);
+    } else if (activeSidebarView === 'settings') {
+      setActiveSidebarView('explorer');
+    }
+
     if (targetTab?.type === 'pdf' && targetTab.pdfId) {
       useGridStore.getState().resetActiveSelection();
       usePdfStore.getState().setActivePdf(targetTab.pdfId);
@@ -211,6 +216,10 @@ export const WorkspaceLayout: React.FC = () => {
   const handleCloseTab = (tabId: string) => {
     const remainingTabs = tabs.filter((t) => t.id !== tabId);
     setTabs(remainingTabs);
+
+    if (tabId === 'settings' && activeSidebarView === 'settings') {
+      setActiveSidebarView('explorer');
+    }
 
     if (remainingTabs.length === 0) {
       setActiveTabId('');
@@ -328,6 +337,38 @@ export const WorkspaceLayout: React.FC = () => {
 
     setActiveTabId('paper-discovery');
   };
+
+  const handleOpenSettings = () => {
+    setTabs((prev) => {
+      if (prev.some((t) => t.id === 'settings')) {
+        return prev;
+      }
+      return [
+        ...prev,
+        {
+          id: 'settings',
+          type: 'settings',
+          title: 'Settings',
+          closable: true,
+        },
+      ];
+    });
+
+    setActiveTabId('settings');
+    setActiveSidebarView('settings');
+    setShowLeftPanel(true);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        handleOpenSettings();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleToggleZenMode = () => {
     if (showLeftPanel || showBottomPanel || showRightPanel) {
@@ -450,7 +491,7 @@ export const WorkspaceLayout: React.FC = () => {
         activeSidebarView={activeSidebarView}
         onSelectSidebarView={handleSelectSidebarView}
         onToggleZenMode={handleToggleZenMode}
-        onOpenSettings={() => setShowSettingsModal(true)}
+        onOpenSettings={handleOpenSettings}
         onOpenAbout={() => setShowAboutModal(true)}
       />
 
@@ -486,6 +527,7 @@ export const WorkspaceLayout: React.FC = () => {
                       onOpenPaperDiscovery={handleOpenPaperDiscovery}
                       onResetWorkspace={handleResetWorkspace}
                       onOpenEnrichAuthors={() => setShowEnrichAuthorsModal(true)}
+                      onOpenSettings={handleOpenSettings}
                     />
                   </div>
                   <div
@@ -506,6 +548,7 @@ export const WorkspaceLayout: React.FC = () => {
                   onNavigateToPdf={handleSelectPdf}
                   onOpenWorkspaceHub={handleOpenWorkspaceHub}
                   onOpenPaperDiscovery={handleOpenPaperDiscovery}
+                  onCloseSettings={() => handleCloseTab('settings')}
                 />
               </div>
 
@@ -518,7 +561,7 @@ export const WorkspaceLayout: React.FC = () => {
                   <div className="layout-col-right" style={{ width: `${rightWidth}px` }}>
                     <RightAgentPanel
                       activePdfTitle={currentActiveTab?.type === 'pdf' ? activePdfTitle : (currentActiveTab?.title || 'Workspace')}
-                      onOpenSettings={() => setShowSettingsModal(true)}
+                      onOpenSettings={handleOpenSettings}
                     />
                   </div>
                 </>
@@ -526,8 +569,8 @@ export const WorkspaceLayout: React.FC = () => {
             </div>
           )}
 
-          {/* 100% Full-Width Bottom Data Grid Panel (Hidden on Workspace Hub for clean distraction-free onboarding) */}
-          {showBottomPanel && currentActiveTab?.type !== 'master_grid' && currentActiveTab?.type !== 'workspace_hub' && (
+          {/* 100% Full-Width Bottom Data Grid Panel (Hidden on Workspace Hub and Settings for clean distraction-free layout) */}
+          {showBottomPanel && currentActiveTab?.type !== 'master_grid' && currentActiveTab?.type !== 'workspace_hub' && currentActiveTab?.type !== 'settings' && (
             <>
               {!isGridMaximized && (
                 <div
@@ -557,11 +600,6 @@ export const WorkspaceLayout: React.FC = () => {
           onOpenEnrichAuthors={() => setShowEnrichAuthorsModal(true)}
         />
       </div>
-
-      <SettingsModal
-        isOpen={showSettingsModal}
-        onClose={() => setShowSettingsModal(false)}
-      />
 
       <DebugLogsModal
         isOpen={showLogsModal}

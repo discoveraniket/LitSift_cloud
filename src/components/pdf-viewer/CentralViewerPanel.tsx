@@ -19,6 +19,7 @@ import { PdfReader, PdfReaderRef } from './PdfReader';
 import { ArticleReaderView, ArticleReaderViewRef } from './ArticleReaderView';
 import { WorkspaceHubView } from '../workspace/WorkspaceHubView';
 import { PaperDiscoveryView } from '../workspace/PaperDiscoveryView';
+import { SettingsView } from '../settings/SettingsView';
 import { usePdfStore } from '../../store/usePdfStore';
 import { downloadPdfFile } from '../../services/workspaceService';
 import { EditorTab } from '../../types/layout';
@@ -33,6 +34,7 @@ interface CentralViewerPanelProps {
   onNavigateToPdf?: (pdfId: string) => void;
   onOpenWorkspaceHub?: (section?: 'export' | 'import') => void;
   onOpenPaperDiscovery?: () => void;
+  onCloseSettings?: () => void;
 }
 
 export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
@@ -45,6 +47,7 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
   onNavigateToPdf,
   onOpenWorkspaceHub,
   onOpenPaperDiscovery,
+  onCloseSettings,
 }) => {
   const [zoomScale, setZoomScale] = useState<number>(1.2);
   const [readerFontSizeScale, setReaderFontSizeScale] = useState<number>(1.0);
@@ -334,6 +337,15 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
             </div>
           </div>
         </div>
+      </main>
+    );
+  }
+
+  // 0. Settings Central Tab Mode (VS Code Style)
+  if (activeTab.type === 'settings') {
+    return (
+      <main className="panel central-viewer settings-mode" style={{ height: '100%', padding: 0 }}>
+        <SettingsView onClose={onCloseSettings} />
       </main>
     );
   }

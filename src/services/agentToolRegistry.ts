@@ -6,8 +6,14 @@ import { getGeminiApiKey, getSelectedGeminiModel } from './geminiService';
 import { getPdfBase64, buildPaperMarkdownContext, resolveEffectiveGroundingMode } from './pdfUtils';
 import { GoogleGenAI, Type } from '@google/genai';
 import { GridRow } from '../types/grid';
-import { getActiveProvider, getLmStudioModel } from './providerConfig';
+import {
+  getActiveProvider,
+  getLmStudioModel,
+  getOpenRouterModel,
+  DEFAULT_OPENROUTER_MODEL,
+} from './providerConfig';
 import { executeLmStudioStructuredGeneration, OpenAiMessage } from './lmStudioService';
+import { executeOpenRouterStructuredGeneration } from './openRouterService';
 
 export type AgentExecutionMode = 'human_in_loop' | 'autonomous_autopilot';
 
@@ -1032,7 +1038,39 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
       let text = '';
       let elapsed = '0.00';
 
-      if (provider === 'lmstudio') {
+      if (provider === 'openrouter') {
+        const orModelName = getOpenRouterModel() || DEFAULT_OPENROUTER_MODEL;
+        logStore.setActiveStep(`[2/3] Transmitting request to OpenRouter (${orModelName})...`);
+        const fullPromptText = contentsParts.map((p) => p.text || '').filter(Boolean).join('\n\n');
+        const openAiMessages: OpenAiMessage[] = [
+          {
+            role: 'system',
+            content: 'You are an autonomous scientific literature data extractor. Extract empirical observation rows adhering strictly to the requested schema. Return valid JSON only.',
+          },
+          {
+            role: 'user',
+            content: fullPromptText,
+          },
+        ];
+
+        const orResult = await executeOpenRouterStructuredGeneration({
+          schemaName: 'extractionResponse',
+          schema: extractionResponseSchema,
+          messages: openAiMessages,
+          temperature: 0.1,
+        });
+
+        elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
+        const usage = orResult.usage;
+        const promptTokens = usage?.prompt_tokens ?? usage?.promptTokens ?? 0;
+        const candidateTokens = usage?.completion_tokens ?? usage?.candidateTokens ?? 0;
+        logStore.addLog(
+          'info',
+          `⏱️ extractPDFData: OpenRouter responded in ${elapsed}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`,
+          { usageMetadata: usage, latencySec: Number(elapsed) }
+        );
+        text = orResult.rawText;
+      } else if (provider === 'lmstudio') {
         const localModelName = getLmStudioModel() || 'Local Model';
         logStore.setActiveStep(`[2/3] Transmitting request to LM Studio (${localModelName})...`);
         const fullPromptText = contentsParts.map((p) => p.text || '').filter(Boolean).join('\n\n');
@@ -1056,8 +1094,8 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
 
         elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
         const usage = lmsResult.usage;
-        const promptTokens = usage?.prompt_tokens ?? 0;
-        const candidateTokens = usage?.completion_tokens ?? 0;
+        const promptTokens = usage?.prompt_tokens ?? usage?.promptTokens ?? 0;
+        const candidateTokens = usage?.completion_tokens ?? usage?.candidateTokens ?? 0;
         logStore.addLog(
           'info',
           `⏱️ extractPDFData: LM Studio responded in ${elapsed}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`,
@@ -1364,7 +1402,43 @@ Return your response in JSON format:
         const provider = getActiveProvider();
         let text: string | undefined = '';
 
-        if (provider === 'lmstudio') {
+        if (provider === 'openrouter') {
+          const orModelName = getOpenRouterModel() || DEFAULT_OPENROUTER_MODEL;
+          logStore.setActiveStep(`Auditing citation with OpenRouter (${orModelName})...`);
+          const fullPromptText = contentsParts.map((p) => p.text || '').filter(Boolean).join('\n\n');
+          const openAiMessages: OpenAiMessage[] = [
+            {
+              role: 'system',
+              content: 'You are an expert scientific fact-checking agent. Return valid JSON only.',
+            },
+            {
+              role: 'user',
+              content: fullPromptText,
+            },
+          ];
+
+          const orResult = await executeOpenRouterStructuredGeneration({
+            schemaName: 'verificationAudit',
+            schema: {
+              type: 'OBJECT',
+              properties: {
+                isSupported: { type: 'BOOLEAN' },
+                confidenceScore: { type: 'NUMBER' },
+                pageNumber: { type: 'INTEGER' },
+                sectionName: { type: 'STRING' },
+                exactSupportingQuote: { type: 'STRING' },
+                auditReasoning: { type: 'STRING' },
+              },
+              required: ['pageNumber', 'sectionName', 'exactSupportingQuote', 'auditReasoning'],
+            },
+            messages: openAiMessages,
+            temperature: 0.1,
+          });
+
+          const elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
+          logStore.addLog('info', `⏱️ verifyCitation: OpenRouter responded in ${elapsed}s`, { latencySec: Number(elapsed) });
+          text = orResult.rawText;
+        } else if (provider === 'lmstudio') {
           const localModelName = getLmStudioModel() || 'Local Model';
           logStore.setActiveStep(`Auditing citation with LM Studio (${localModelName})...`);
           const fullPromptText = contentsParts.map((p) => p.text || '').filter(Boolean).join('\n\n');

@@ -237,5 +237,30 @@ describe('VS Code-style Left Panel & Activity Bar UX', () => {
     fireEvent.click(closeBtn);
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
+
+  it('renders Settings sidebar mode with categories and coordinates with onOpenSettings', () => {
+    const handleOpenSettings = vi.fn();
+    render(
+      <LeftExplorerPanel
+        activeSidebarView="settings"
+        onSelectPdf={vi.fn()}
+        onOpenMasterGrid={vi.fn()}
+        onOpenSettings={handleOpenSettings}
+      />
+    );
+
+    expect(screen.getByText('Settings')).toBeInTheDocument();
+    expect(screen.getByText(/CATEGORIES/i)).toBeInTheDocument();
+    expect(screen.getByText('AI Providers & Models')).toBeInTheDocument();
+    expect(screen.getByText('Agent Execution Mode')).toBeInTheDocument();
+    expect(screen.getByText('Grounding & Documents')).toBeInTheDocument();
+    expect(screen.getByText('Telemetry & BYOK')).toBeInTheDocument();
+
+    // Clicking a category invokes onOpenSettings
+    const agentModeBtn = screen.getByText('Agent Execution Mode');
+    fireEvent.click(agentModeBtn);
+    expect(handleOpenSettings).toHaveBeenCalled();
+  });
 });
+
 

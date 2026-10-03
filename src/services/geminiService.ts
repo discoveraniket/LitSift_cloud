@@ -6,8 +6,15 @@ import { getToolsForMode, agentToolsRegistry, AgentExecutionMode } from './agent
 import { useAgentStore } from '../store/useAgentStore';
 import { useLogStore } from '../store/useLogStore';
 import { AgentExecutionResult, AgentToolExecution } from '../types/agent';
-import { getActiveProvider, getLmStudioModel } from './providerConfig';
+import {
+  getActiveProvider,
+  getLmStudioModel,
+  getOpenRouterApiKey,
+  getOpenRouterModel,
+  DEFAULT_OPENROUTER_MODEL,
+} from './providerConfig';
 import { streamLmStudioChatTurn, OpenAiMessage } from './lmStudioService';
+import { streamOpenRouterChatTurn } from './openRouterService';
 import { convertToolsToOpenAiFormat } from './schemaConverter';
 
 // Retrieve API key from environment variable or localStorage
@@ -63,7 +70,16 @@ export async function validateAgentPrerequisites(
       return {
         valid: false,
         error:
-          '⚠️ **GEMINI_API_KEY is not configured.**\n\nPlease set your Gemini API key in **Settings (⚙️)** or switch to **LM Studio (Local)** in Settings to use local open models.',
+          '⚠️ **GEMINI_API_KEY is not configured.**\n\nPlease set your Gemini API key in **Settings (⚙️)** or switch to **LM Studio (Local)** or **OpenRouter** in Settings.',
+      };
+    }
+  } else if (provider === 'openrouter') {
+    const apiKey = getOpenRouterApiKey();
+    if (!apiKey) {
+      return {
+        valid: false,
+        error:
+          '⚠️ **OpenRouter API Key is not configured.**\n\nPlease enter your OpenRouter API key in **Settings (⚙️)** to synthesize with OpenRouter models.',
       };
     }
   }
@@ -171,8 +187,14 @@ export async function processAgentInteraction(
 
   const provider = getActiveProvider();
   const isLmStudio = provider === 'lmstudio';
+  const isOpenRouter = provider === 'openrouter';
+  const isOpenAiCompatible = isLmStudio || isOpenRouter;
   const apiKey = getGeminiApiKey();
-  const selectedModel = isLmStudio ? (getLmStudioModel() || 'Local Model') : getSelectedGeminiModel();
+  const selectedModel = isLmStudio
+    ? (getLmStudioModel() || 'Local Model')
+    : isOpenRouter
+    ? (getOpenRouterModel() || DEFAULT_OPENROUTER_MODEL)
+    : getSelectedGeminiModel();
   const agentMode: AgentExecutionMode = useAgentStore.getState().mode || 'human_in_loop';
 
   try {
@@ -418,7 +440,7 @@ ${userPrompt}`;
       });
     }
 
-    const ai = !isLmStudio && apiKey ? new GoogleGenAI({ apiKey }) : null;
+    const ai = !isOpenAiCompatible && apiKey ? new GoogleGenAI({ apiKey }) : null;
 
     const systemInstruction = `You are LitSift Agent, an autonomous scientific literature synthesis assistant.
 You are interacting with research document "${activePdfTitle}" and managing a structured scientific data grid.
@@ -535,41 +557,72 @@ Execute all required tool actions to fulfill the user's instructions and summari
       // Dynamically evaluate tool schemas on every step to reflect latest columns
       const currentTools = getToolsForMode(agentMode);
 
-      if (isLmStudio) {
-        logStore.setActiveStep(`[Step ${currentStep}/${MAX_STEPS}] Reasoning with LM Studio (${selectedModel})...`);
+      if (isOpenAiCompatible) {
+        const providerName = isOpenRouter ? 'OpenRouter' : 'LM Studio';
+        logStore.setActiveStep(`[Step ${currentStep}/${MAX_STEPS}] Reasoning with ${providerName} (${selectedModel})...`);
         const genStartTime = performance.now();
 
         let lmsResult: any;
         try {
-          lmsResult = await streamLmStudioChatTurn({
-            messages: openAiMessages,
-            tools: convertToolsToOpenAiFormat(currentTools),
-            model: selectedModel,
-            temperature: 0.2,
-            signal: abortSignal,
-            onStream: (chunk) => {
-              if (chunk.thoughtChunk) {
-                const liveFullThought = accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n');
-                onStream?.({
-                  thoughtChunk: chunk.thoughtChunk,
-                  fullThoughtText: liveFullThought,
-                  fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
-                });
-              }
-              if (chunk.textChunk) {
-                const liveFullThought = accumulatedThoughts.length > 0
-                  ? (chunk.fullThoughtText ? accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n') : accumulatedThoughts.join('\n\n---\n\n'))
-                  : chunk.fullThoughtText;
-                onStream?.({
-                  textChunk: chunk.textChunk,
-                  fullThoughtText: liveFullThought,
-                  fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
-                });
-              }
-            },
-          });
+          if (isOpenRouter) {
+            lmsResult = await streamOpenRouterChatTurn({
+              messages: openAiMessages,
+              tools: convertToolsToOpenAiFormat(currentTools),
+              model: selectedModel,
+              temperature: 0.2,
+              signal: abortSignal,
+              onStream: (chunk) => {
+                if (chunk.thoughtChunk) {
+                  const liveFullThought = accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n');
+                  onStream?.({
+                    thoughtChunk: chunk.thoughtChunk,
+                    fullThoughtText: liveFullThought,
+                    fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                  });
+                }
+                if (chunk.textChunk) {
+                  const liveFullThought = accumulatedThoughts.length > 0
+                    ? (chunk.fullThoughtText ? accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n') : accumulatedThoughts.join('\n\n---\n\n'))
+                    : chunk.fullThoughtText;
+                  onStream?.({
+                    textChunk: chunk.textChunk,
+                    fullThoughtText: liveFullThought,
+                    fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                  });
+                }
+              },
+            });
+          } else {
+            lmsResult = await streamLmStudioChatTurn({
+              messages: openAiMessages,
+              tools: convertToolsToOpenAiFormat(currentTools),
+              model: selectedModel,
+              temperature: 0.2,
+              signal: abortSignal,
+              onStream: (chunk) => {
+                if (chunk.thoughtChunk) {
+                  const liveFullThought = accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n');
+                  onStream?.({
+                    thoughtChunk: chunk.thoughtChunk,
+                    fullThoughtText: liveFullThought,
+                    fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                  });
+                }
+                if (chunk.textChunk) {
+                  const liveFullThought = accumulatedThoughts.length > 0
+                    ? (chunk.fullThoughtText ? accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n') : accumulatedThoughts.join('\n\n---\n\n'))
+                    : chunk.fullThoughtText;
+                  onStream?.({
+                    textChunk: chunk.textChunk,
+                    fullThoughtText: liveFullThought,
+                    fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                  });
+                }
+              },
+            });
+          }
         } catch (lmsErr: any) {
-          logStore.addLog('error', `LM Studio error: ${lmsErr.message}`);
+          logStore.addLog('error', `${providerName} error: ${lmsErr.message}`);
           throw lmsErr;
         }
 
@@ -582,14 +635,14 @@ Execute all required tool actions to fulfill the user's instructions and summari
 
         const genDurationSec = ((performance.now() - genStartTime) / 1000).toFixed(2);
         const usage = lmsResult.usage;
-        const promptTokens = usage?.promptTokens ?? 0;
-        const candidateTokens = usage?.candidateTokens ?? 0;
+        const promptTokens = usage?.promptTokens ?? usage?.prompt_tokens ?? 0;
+        const candidateTokens = usage?.candidateTokens ?? usage?.completion_tokens ?? 0;
         totalPromptTokens += promptTokens;
         totalCandidateTokens += candidateTokens;
 
         logStore.addLog(
           'info',
-          `⏱️ [Step ${currentStep}] LM Studio (${selectedModel}) responded in ${genDurationSec}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`,
+          `⏱️ [Step ${currentStep}] ${providerName} (${selectedModel}) responded in ${genDurationSec}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`,
           { step: currentStep, latencySec: Number(genDurationSec), usageMetadata: usage }
         );
 
@@ -915,10 +968,19 @@ Execute all required tool actions to fulfill the user's instructions and summari
     };
   } catch (err: any) {
     logStore.setActiveStep(null);
-    logStore.addLog('error', `Gemini API Error: ${err.message}`);
+    const providerName = isOpenRouter ? 'OpenRouter' : isLmStudio ? 'LM Studio' : 'Gemini';
+    const rawError = err.message || `Failed to communicate with ${providerName} API.`;
+
+    let hint = '';
+    if (isOpenRouter && (rawError.includes('429') || rawError.toLowerCase().includes('rate-limit'))) {
+      hint = '\n\n💡 **Tip**: The public shared pool for this free model is temporarily busy. You can:\n1. Switch to another free model in **Settings** (e.g. `meta-llama/llama-3.3-70b-instruct:free` or `deepseek/deepseek-r1:free`).\n2. Wait a few moments and retry.';
+    }
+
+    logStore.addLog('error', `${providerName} API Error: ${rawError}`);
     return {
-      replyText: `⚠️ Gemini API Error: ${err.message || 'Failed to communicate with Gemini API.'}`,
+      replyText: `⚠️ ${providerName} API Error: ${rawError}${hint}`,
       toolsExecuted: [],
     };
   }
 }
+

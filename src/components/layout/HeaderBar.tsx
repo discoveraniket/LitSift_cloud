@@ -1,5 +1,5 @@
 import React from 'react';
-import { PanelLeft, PanelBottom, PanelRight, FileText, Table, FileArchive, X } from 'lucide-react';
+import { PanelLeft, PanelBottom, PanelRight, FileText, Table, FileArchive, X, Settings } from 'lucide-react';
 import { EditorTab } from '../../types/layout';
 
 interface HeaderBarProps {
@@ -91,6 +91,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 )}
                 {tab.type === 'workspace_hub' && (
                   <FileArchive size={12} color="var(--accent-primary, #89b4fa)" style={{ flexShrink: 0 }} />
+                )}
+                {tab.type === 'settings' && (
+                  <Settings size={12} color="var(--accent-warning, #f9e2af)" style={{ flexShrink: 0 }} />
                 )}
 
                 {/* Tab Title */}

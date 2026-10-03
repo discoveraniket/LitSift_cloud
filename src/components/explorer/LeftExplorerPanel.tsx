@@ -26,7 +26,13 @@ import {
   RotateCcw,
   Sparkles,
   History,
+  Cpu,
+  ShieldCheck,
+  FileText,
+  Shield,
 } from 'lucide-react';
+import { useSettingsUiStore } from '../../store/useSettingsUiStore';
+import { getActiveProvider } from '../../services/providerConfig';
 
 interface LeftExplorerPanelProps {
   activeSidebarView?: SidebarViewMode;
@@ -37,6 +43,7 @@ interface LeftExplorerPanelProps {
   onOpenPaperDiscovery?: () => void;
   onResetWorkspace?: () => void;
   onOpenEnrichAuthors?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
@@ -48,10 +55,13 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   onOpenPaperDiscovery,
   onResetWorkspace,
   onOpenEnrichAuthors,
+  onOpenSettings,
 }) => {
   const { columns, rows, clearTable } = useGridStore();
   const { logs, clearLogs } = useLogStore();
   const { pdfs, activePdfId, addPdfFile, setActivePdf } = usePdfStore();
+  const { activeSection, setActiveSection } = useSettingsUiStore();
+  const currentProvider = getActiveProvider();
 
   // Collapsible section state for Explorer view
   const [papersOpen, setPapersOpen] = useState(true);
@@ -494,6 +504,7 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
           {activeSidebarView === 'explorer' && 'Explorer'}
           {activeSidebarView === 'workspace' && 'Workspace'}
           {activeSidebarView === 'debug' && 'Debug & Telemetry'}
+          {activeSidebarView === 'settings' && 'Settings'}
         </span>
 
         {activeSidebarView === 'explorer' && (
@@ -508,6 +519,22 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
             }}
           >
             {pdfs.length} papers
+          </span>
+        )}
+
+        {activeSidebarView === 'settings' && (
+          <span
+            style={{
+              fontSize: '9.5px',
+              padding: '1px 6px',
+              borderRadius: '8px',
+              background: 'rgba(137, 180, 250, 0.15)',
+              color: 'var(--accent-primary)',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+            }}
+          >
+            {currentProvider}
           </span>
         )}
       </div>
@@ -1111,6 +1138,187 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* 4. SETTINGS MODE (VS Code-style Settings Categories in Left Side Panel)   */}
+        {/* ========================================================================= */}
+        {activeSidebarView === 'settings' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '300px' }}>
+            <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <div
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                  padding: '4px 8px',
+                  letterSpacing: '0.6px',
+                }}
+              >
+                Categories
+              </div>
+
+              {/* AI Providers & Models */}
+              <button
+                className={`vscode-tree-item ${activeSection === 'providers' ? 'active-tree-item' : ''}`}
+                onClick={() => {
+                  setActiveSection('providers');
+                  onOpenSettings?.();
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  background: activeSection === 'providers' ? 'rgba(137, 180, 250, 0.15)' : 'transparent',
+                  color: activeSection === 'providers' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  fontWeight: activeSection === 'providers' ? 600 : 500,
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  width: '100%',
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Cpu size={15} color={activeSection === 'providers' ? 'var(--accent-primary)' : undefined} />
+                  <span>AI Providers & Models</span>
+                </span>
+                <span
+                  style={{
+                    fontSize: '9px',
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--accent-primary)',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {currentProvider}
+                </span>
+              </button>
+
+              {/* Agent Execution Mode */}
+              <button
+                className={`vscode-tree-item ${activeSection === 'execution' ? 'active-tree-item' : ''}`}
+                onClick={() => {
+                  setActiveSection('execution');
+                  onOpenSettings?.();
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  background: activeSection === 'execution' ? 'rgba(137, 180, 250, 0.15)' : 'transparent',
+                  color: activeSection === 'execution' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  fontWeight: activeSection === 'execution' ? 600 : 500,
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  width: '100%',
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ShieldCheck size={15} color={activeSection === 'execution' ? 'var(--accent-primary)' : undefined} />
+                  <span>Agent Execution Mode</span>
+                </span>
+                <span
+                  style={{
+                    fontSize: '9px',
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-muted)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {useAgentStore.getState().mode === 'human_in_loop' ? 'HITL' : 'Auto'}
+                </span>
+              </button>
+
+              {/* Grounding & Documents */}
+              <button
+                className={`vscode-tree-item ${activeSection === 'grounding' ? 'active-tree-item' : ''}`}
+                onClick={() => {
+                  setActiveSection('grounding');
+                  onOpenSettings?.();
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  background: activeSection === 'grounding' ? 'rgba(137, 180, 250, 0.15)' : 'transparent',
+                  color: activeSection === 'grounding' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  fontWeight: activeSection === 'grounding' ? 600 : 500,
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  width: '100%',
+                }}
+              >
+                <FileText size={15} color={activeSection === 'grounding' ? 'var(--accent-primary)' : undefined} />
+                <span>Grounding & Documents</span>
+              </button>
+
+              {/* Telemetry & BYOK */}
+              <button
+                className={`vscode-tree-item ${activeSection === 'privacy' ? 'active-tree-item' : ''}`}
+                onClick={() => {
+                  setActiveSection('privacy');
+                  onOpenSettings?.();
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  background: activeSection === 'privacy' ? 'rgba(137, 180, 250, 0.15)' : 'transparent',
+                  color: activeSection === 'privacy' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  fontWeight: activeSection === 'privacy' ? 600 : 500,
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  width: '100%',
+                }}
+              >
+                <Shield size={15} color={activeSection === 'privacy' ? 'var(--accent-primary)' : undefined} />
+                <span>Telemetry & BYOK</span>
+              </button>
+            </div>
+
+            {/* Quick shortcuts & platform info footer */}
+            <div
+              style={{
+                marginTop: 'auto',
+                padding: '12px 14px',
+                borderTop: '1px solid var(--border-subtle, #313244)',
+                background: 'var(--bg-secondary)',
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>LitSift Platform</span>
+                <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>v1.0.0</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>Shortcut</span>
+                <kbd style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)', borderRadius: '3px', padding: '1px 5px', fontSize: '10px' }}>
+                  Ctrl+,
+                </kbd>
+              </div>
+            </div>
           </div>
         )}
       </div>
