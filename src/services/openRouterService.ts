@@ -440,18 +440,34 @@ export async function executeOpenRouterStructuredGeneration<T = any>(options: {
 
   const endpoint = `${baseUrl}/chat/completions`;
 
-  let res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'HTTP-Referer': 'https://litsift.local',
-      'X-Title': 'LitSift Literature Synthesis',
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-    signal: options.signal,
-  });
+  let res: Response | null = null;
+  const MAX_RETRIES = 2;
+  const DELAYS = [3000, 6000];
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://litsift.local',
+        'X-Title': 'LitSift Literature Synthesis',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      signal: options.signal,
+    });
+
+    if (res.status === 429 && attempt < MAX_RETRIES && !options.signal?.aborted) {
+      await new Promise((r) => setTimeout(r, DELAYS[attempt]));
+      continue;
+    }
+    break;
+  }
+
+  if (!res) {
+    throw new Error('OpenRouter structured generation failed to receive response.');
+  }
 
   // Fallback: If provider rejects "json_schema" response_format, retry with standard "json_object"
   if (!res.ok && res.status === 400) {

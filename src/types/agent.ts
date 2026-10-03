@@ -30,6 +30,20 @@ export interface AgentMessage {
   executionTime?: number; // Total duration of agent execution in seconds
 }
 
+export interface AgentCheckpoint {
+  userPrompt: string;
+  activePdfTitle: string;
+  currentStep: number;
+  maxSteps: number;
+  openAiMessages: Array<{ role: 'user' | 'system' | 'assistant' | 'tool'; content?: string | null; tool_calls?: any[]; tool_call_id?: string; name?: string }>;
+  accumulatedThoughts: string[];
+  executedTools: AgentToolExecution[];
+  finalReplyText: string;
+  totalPromptTokens: number;
+  totalCandidateTokens: number;
+  timestamp: number;
+}
+
 export interface AgentExecutionResult {
   replyText: string;
   thought?: string;
@@ -40,6 +54,8 @@ export interface AgentExecutionResult {
   modelUsed?: string;
   toolsExecuted: AgentToolExecution[];
   executionTime?: number;
+  options?: string[];
+  checkpoint?: AgentCheckpoint;
 }
 
 export interface AgentState {
@@ -51,6 +67,7 @@ export interface AgentState {
   mode: 'human_in_loop' | 'autonomous_autopilot';
   abortController?: AbortController | null;
   lastInteractionId?: string;
+  checkpoint?: AgentCheckpoint | null;
 
   // Actions
   hydrateFromDb: () => Promise<void>;
@@ -62,4 +79,7 @@ export interface AgentState {
   clearMessages: () => void;
   deleteMessage: (id: string) => void;
   setExecutionMode: (mode: 'human_in_loop' | 'autonomous_autopilot') => void;
+  setCheckpoint: (checkpoint: AgentCheckpoint | null) => void;
+  resumeCheckpoint: () => Promise<void>;
 }
+

@@ -244,5 +244,60 @@ describe('Agent Multi-Step Execution Store & Tools', () => {
     expect(markdown).toContain('| Target Gene | On-Target % | Off-Target % |');
     expect(markdown).toContain('| EMX1 | 94.2% | 0.1% |');
   });
+
+  it('manages AgentCheckpoint state and supports interactive recovery options', async () => {
+    const { getActiveProvider } = await import('../services/providerConfig');
+
+    const sampleCheckpoint = {
+      userPrompt: 'Extract burst size',
+      activePdfTitle: 'Phage Paper',
+      currentStep: 2,
+      maxSteps: 10,
+      openAiMessages: [
+        { role: 'user' as const, content: 'Extract burst size' },
+        { role: 'assistant' as const, content: 'Executing step 1' },
+      ],
+      accumulatedThoughts: ['Thought 1'],
+      executedTools: [
+        {
+          id: 'tool-exec-1',
+          name: 'extractPDFData',
+          summary: 'Extracted phage data',
+          args: {},
+          result: { success: true },
+          status: 'completed' as const,
+        },
+      ],
+      finalReplyText: '',
+      totalPromptTokens: 500,
+      totalCandidateTokens: 100,
+      timestamp: Date.now(),
+    };
+
+    useAgentStore.getState().setCheckpoint(sampleCheckpoint);
+    expect(useAgentStore.getState().checkpoint).toEqual(sampleCheckpoint);
+
+    // Test selectOption with "Switch to Gemini & Resume"
+    let resumed = false;
+    useAgentStore.setState({
+      resumeCheckpoint: async () => {
+        resumed = true;
+      },
+    });
+
+    useAgentStore.getState().selectOption('⚡ Switch to Gemini & Resume');
+    expect(getActiveProvider()).toBe('gemini');
+    expect(resumed).toBe(true);
+
+    // Test selectOption with "🔄 Resume Step 2"
+    resumed = false;
+    useAgentStore.getState().selectOption('🔄 Resume Step 2');
+    expect(resumed).toBe(true);
+
+    // Clear checkpoint
+    useAgentStore.getState().setCheckpoint(null);
+    expect(useAgentStore.getState().checkpoint).toBeNull();
+  });
 });
+
 

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { produce } from 'immer';
 import { AgentState, AgentMessage } from '../types/agent';
 import { processAgentInteraction } from '../services/geminiService';
+import { setActiveProvider } from '../services/providerConfig';
 import { useGridStore } from './useGridStore';
 import { db } from '../db/litsiftDb';
 
@@ -14,6 +15,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   mode: 'human_in_loop',
   abortController: null,
   lastInteractionId: undefined,
+  checkpoint: null,
 
   hydrateFromDb: async () => {
     try {
@@ -133,6 +135,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           toolsExecuted: result.toolsExecuted,
           executionTime: durationSec,
+          options: result.options,
           toolCall:
             result.toolsExecuted.length > 0
               ? {
@@ -152,6 +155,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             state.streamingThought = '';
             state.streamingText = '';
             state.abortController = null;
+            if (!result.checkpoint) {
+              state.checkpoint = null;
+            }
           })
         );
 
@@ -189,6 +195,17 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 
   selectOption: (optionText: string) => {
+    if (optionText.toLowerCase().includes('resume step') && get().checkpoint) {
+      get().resumeCheckpoint();
+      return;
+    }
+
+    if (optionText.toLowerCase().includes('switch to gemini') && get().checkpoint) {
+      setActiveProvider('gemini');
+      get().resumeCheckpoint();
+      return;
+    }
+
     const pendingCsv = (window as any).__pendingCsvImport;
     const currentPdfId = get().activePdfId || 'master-grid';
 
@@ -259,6 +276,102 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       }
     } catch (err) {
       console.warn('Failed to clear chat messages in IndexedDB:', err);
+    }
+  },
+
+  setCheckpoint: (checkpoint) => set({ checkpoint }),
+
+  resumeCheckpoint: async () => {
+    const cp = get().checkpoint;
+    if (!cp) return;
+
+    const currentPdfId = get().activePdfId || 'master-grid';
+    const controller = new AbortController();
+    const startTime = Date.now();
+
+    set(
+      produce((state: AgentState) => {
+        state.isThinking = true;
+        state.streamingThought = '';
+        state.streamingText = '';
+        state.abortController = controller;
+      })
+    );
+
+    try {
+      const result = await processAgentInteraction(
+        cp.userPrompt,
+        cp.activePdfTitle,
+        controller.signal,
+        (stream) => {
+          set({
+            streamingThought: stream.fullThoughtText || '',
+            streamingText: stream.fullText || '',
+          });
+        },
+        cp
+      );
+
+      const durationSec = Number(((Date.now() - startTime) / 1000).toFixed(1));
+      const agentMsg: AgentMessage = {
+        id: `msg-${Date.now() + 1}`,
+        pdfId: currentPdfId,
+        sender: 'agent',
+        text: result.replyText,
+        thought: result.thought,
+        thinkingTokens: result.thinkingTokens,
+        promptTokens: result.promptTokens,
+        candidateTokens: result.candidateTokens,
+        cachedTokens: result.cachedTokens,
+        modelUsed: result.modelUsed,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        toolsExecuted: result.toolsExecuted,
+        executionTime: durationSec,
+        options: result.options,
+        toolCall:
+          result.toolsExecuted.length > 0
+            ? {
+                name: result.toolsExecuted.map((t) => t.name).join(', '),
+                description: result.toolsExecuted.map((t) => t.summary).join(' | '),
+                status: result.toolsExecuted.every((t) => t.status === 'completed') ? 'completed' : 'failed',
+              }
+            : undefined,
+      };
+
+      set(
+        produce((state: AgentState) => {
+          state.messages.push(agentMsg);
+          state.isThinking = false;
+          state.streamingThought = '';
+          state.streamingText = '';
+          state.abortController = null;
+          if (!result.checkpoint) {
+            state.checkpoint = null;
+          }
+        })
+      );
+
+      db.chatMessages.put(agentMsg).catch(console.warn);
+    } catch (err: any) {
+      const errMsg: AgentMessage = {
+        id: `msg-${Date.now() + 1}`,
+        pdfId: currentPdfId,
+        sender: 'agent',
+        text: `⚠️ Agent Error: ${err.message || 'Execution failed.'}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      set(
+        produce((state: AgentState) => {
+          state.messages.push(errMsg);
+          state.isThinking = false;
+          state.streamingThought = '';
+          state.streamingText = '';
+          state.abortController = null;
+        })
+      );
+
+      db.chatMessages.put(errMsg).catch(console.warn);
     }
   },
 }));

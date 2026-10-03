@@ -5,7 +5,7 @@ import { getPdfBase64, buildPaperMarkdownContext, resolveEffectiveGroundingMode 
 import { getToolsForMode, agentToolsRegistry, AgentExecutionMode } from './agentToolRegistry';
 import { useAgentStore } from '../store/useAgentStore';
 import { useLogStore } from '../store/useLogStore';
-import { AgentExecutionResult, AgentToolExecution } from '../types/agent';
+import { AgentExecutionResult, AgentToolExecution, AgentCheckpoint } from '../types/agent';
 import {
   getActiveProvider,
   getLmStudioModel,
@@ -172,7 +172,8 @@ export async function processAgentInteraction(
   userPrompt: string,
   activePdfTitle: string = 'Active Paper',
   abortSignal?: AbortSignal,
-  onStream?: AgentStreamCallback
+  onStream?: AgentStreamCallback,
+  resumeCheckpoint?: AgentCheckpoint
 ): Promise<AgentExecutionResult> {
   const logStore = useLogStore.getState();
 
@@ -486,7 +487,7 @@ You have access to a rich declarative tool suite:
 - Schema management: addColumn (supports optional initialValues), renameColumn, deleteColumn
 Execute all required tool actions to fulfill the user's instructions and summarize your reasoning and findings clearly.`;
 
-    const openAiMessages: OpenAiMessage[] = [
+    let openAiMessages: OpenAiMessage[] = [
       { role: 'system', content: systemInstruction },
     ];
 
@@ -530,14 +531,22 @@ Execute all required tool actions to fulfill the user's instructions and summari
 
     // Multi-Step ReAct Execution Loop (Expanded to 10 Turns)
     const MAX_STEPS = 10;
-    let currentStep = 1;
-    const executedTools: AgentToolExecution[] = [];
-    let finalReplyText = '';
-    const accumulatedThoughts: string[] = [];
+    let currentStep = resumeCheckpoint ? resumeCheckpoint.currentStep : 1;
+    const executedTools: AgentToolExecution[] = resumeCheckpoint ? [...resumeCheckpoint.executedTools] : [];
+    let finalReplyText = resumeCheckpoint ? resumeCheckpoint.finalReplyText : '';
+    const accumulatedThoughts: string[] = resumeCheckpoint ? [...resumeCheckpoint.accumulatedThoughts] : [];
     let totalThinkingTokens = 0;
-    let totalPromptTokens = 0;
-    let totalCandidateTokens = 0;
+    let totalPromptTokens = resumeCheckpoint ? resumeCheckpoint.totalPromptTokens : 0;
+    let totalCandidateTokens = resumeCheckpoint ? resumeCheckpoint.totalCandidateTokens : 0;
     let totalCachedTokens = 0;
+
+    if (resumeCheckpoint) {
+      openAiMessages = [...resumeCheckpoint.openAiMessages];
+      logStore.addLog(
+        'info',
+        `🔄 Resuming agent interaction from Step ${currentStep}/${MAX_STEPS} with ${openAiMessages.length} preserved context messages.`
+      );
+    }
 
     while (currentStep <= MAX_STEPS) {
       if (abortSignal?.aborted) {
@@ -563,67 +572,140 @@ Execute all required tool actions to fulfill the user's instructions and summari
         const genStartTime = performance.now();
 
         let lmsResult: any;
-        try {
-          if (isOpenRouter) {
-            lmsResult = await streamOpenRouterChatTurn({
-              messages: openAiMessages,
-              tools: convertToolsToOpenAiFormat(currentTools),
-              model: selectedModel,
-              temperature: 0.2,
-              signal: abortSignal,
-              onStream: (chunk) => {
-                if (chunk.thoughtChunk) {
-                  const liveFullThought = accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n');
-                  onStream?.({
-                    thoughtChunk: chunk.thoughtChunk,
-                    fullThoughtText: liveFullThought,
-                    fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
-                  });
-                }
-                if (chunk.textChunk) {
-                  const liveFullThought = accumulatedThoughts.length > 0
-                    ? (chunk.fullThoughtText ? accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n') : accumulatedThoughts.join('\n\n---\n\n'))
-                    : chunk.fullThoughtText;
-                  onStream?.({
-                    textChunk: chunk.textChunk,
-                    fullThoughtText: liveFullThought,
-                    fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
-                  });
-                }
-              },
-            });
-          } else {
-            lmsResult = await streamLmStudioChatTurn({
-              messages: openAiMessages,
-              tools: convertToolsToOpenAiFormat(currentTools),
-              model: selectedModel,
-              temperature: 0.2,
-              signal: abortSignal,
-              onStream: (chunk) => {
-                if (chunk.thoughtChunk) {
-                  const liveFullThought = accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n');
-                  onStream?.({
-                    thoughtChunk: chunk.thoughtChunk,
-                    fullThoughtText: liveFullThought,
-                    fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
-                  });
-                }
-                if (chunk.textChunk) {
-                  const liveFullThought = accumulatedThoughts.length > 0
-                    ? (chunk.fullThoughtText ? accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n') : accumulatedThoughts.join('\n\n---\n\n'))
-                    : chunk.fullThoughtText;
-                  onStream?.({
-                    textChunk: chunk.textChunk,
-                    fullThoughtText: liveFullThought,
-                    fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
-                  });
-                }
-              },
-            });
+        let retryAttempt = 0;
+        const MAX_STEP_RETRIES = 3;
+        const RETRY_DELAYS = [4000, 8000, 15000];
+
+        while (true) {
+          try {
+            if (isOpenRouter) {
+              lmsResult = await streamOpenRouterChatTurn({
+                messages: openAiMessages,
+                tools: convertToolsToOpenAiFormat(currentTools),
+                model: selectedModel,
+                temperature: 0.2,
+                signal: abortSignal,
+                onStream: (chunk) => {
+                  if (chunk.thoughtChunk) {
+                    const liveFullThought = accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n');
+                    onStream?.({
+                      thoughtChunk: chunk.thoughtChunk,
+                      fullThoughtText: liveFullThought,
+                      fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                    });
+                  }
+                  if (chunk.textChunk) {
+                    const liveFullThought = accumulatedThoughts.length > 0
+                      ? (chunk.fullThoughtText ? accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n') : accumulatedThoughts.join('\n\n---\n\n'))
+                      : chunk.fullThoughtText;
+                    onStream?.({
+                      textChunk: chunk.textChunk,
+                      fullThoughtText: liveFullThought,
+                      fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                    });
+                  }
+                },
+              });
+            } else {
+              lmsResult = await streamLmStudioChatTurn({
+                messages: openAiMessages,
+                tools: convertToolsToOpenAiFormat(currentTools),
+                model: selectedModel,
+                temperature: 0.2,
+                signal: abortSignal,
+                onStream: (chunk) => {
+                  if (chunk.thoughtChunk) {
+                    const liveFullThought = accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n');
+                    onStream?.({
+                      thoughtChunk: chunk.thoughtChunk,
+                      fullThoughtText: liveFullThought,
+                      fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                    });
+                  }
+                  if (chunk.textChunk) {
+                    const liveFullThought = accumulatedThoughts.length > 0
+                      ? (chunk.fullThoughtText ? accumulatedThoughts.concat(chunk.fullThoughtText).join('\n\n---\n\n') : accumulatedThoughts.join('\n\n---\n\n'))
+                      : chunk.fullThoughtText;
+                    onStream?.({
+                      textChunk: chunk.textChunk,
+                      fullThoughtText: liveFullThought,
+                      fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                    });
+                  }
+                },
+              });
+            }
+            break; // Succeeded! Break out of retry loop.
+          } catch (lmsErr: any) {
+            const isRateLimit =
+              lmsErr.message?.includes('429') ||
+              lmsErr.message?.toLowerCase().includes('rate-limit') ||
+              lmsErr.message?.toLowerCase().includes('rate_limit');
+
+            if (isRateLimit && retryAttempt < MAX_STEP_RETRIES && !abortSignal?.aborted) {
+              retryAttempt++;
+              const waitMs = RETRY_DELAYS[retryAttempt - 1] || 10000;
+              const waitSec = Math.round(waitMs / 1000);
+              logStore.addLog(
+                'warn',
+                `⚠️ [Step ${currentStep}] ${providerName} rate limited (429). Retrying in ${waitSec}s (Attempt ${retryAttempt}/${MAX_STEP_RETRIES})...`
+              );
+
+              for (let s = waitSec; s > 0; s--) {
+                if (abortSignal?.aborted) break;
+                logStore.setActiveStep(
+                  `⏳ ${providerName} busy (429). Retrying step ${currentStep}/${MAX_STEPS} in ${s}s... (Attempt ${retryAttempt}/${MAX_STEP_RETRIES})`
+                );
+                await new Promise((r) => setTimeout(r, 1000));
+              }
+
+              if (abortSignal?.aborted) throw lmsErr;
+
+              logStore.setActiveStep(
+                `[Step ${currentStep}/${MAX_STEPS}] Retrying reasoning with ${providerName} (${selectedModel})...`
+              );
+              continue;
+            }
+
+            if (isRateLimit) {
+              logStore.addLog(
+                'error',
+                `${providerName} rate limit persisted after ${MAX_STEP_RETRIES} attempts. Checkpointing task state at step ${currentStep}.`
+              );
+
+              const checkpoint: AgentCheckpoint = {
+                userPrompt,
+                activePdfTitle,
+                currentStep,
+                maxSteps: MAX_STEPS,
+                openAiMessages: [...openAiMessages],
+                accumulatedThoughts: [...accumulatedThoughts],
+                executedTools: [...executedTools],
+                finalReplyText,
+                totalPromptTokens,
+                totalCandidateTokens,
+                timestamp: Date.now(),
+              };
+
+              useAgentStore.getState().setCheckpoint(checkpoint);
+
+              const summarySuccess =
+                executedTools.length > 0
+                  ? `\n\n*(Preserved ${executedTools.length} completed operations: ${executedTools.map((t) => t.summary).join(', ')})*`
+                  : '';
+
+              return {
+                replyText: `⚠️ **${providerName} Rate Limit Reached (HTTP 429)**\n\nThe upstream free model pool is temporarily busy. Your work has been **safely checkpointed at Step ${currentStep} of ${MAX_STEPS}** without losing previous operations.${summarySuccess}\n\nClick an option below to resume from this step:`,
+                thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join('\n\n---\n\n') : undefined,
+                toolsExecuted: executedTools,
+                options: [`🔄 Resume Step ${currentStep}`, `⚡ Switch to Gemini & Resume`],
+                checkpoint,
+              };
+            }
+
+            logStore.addLog('error', `${providerName} error: ${lmsErr.message}`);
+            throw lmsErr;
           }
-        } catch (lmsErr: any) {
-          logStore.addLog('error', `${providerName} error: ${lmsErr.message}`);
-          throw lmsErr;
         }
 
         if (lmsResult.thought) {

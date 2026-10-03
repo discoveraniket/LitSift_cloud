@@ -15,6 +15,7 @@ import {
   checkOpenRouterConnection,
   streamOpenRouterChatTurn,
   executeOpenRouterStructuredGeneration,
+  extractOpenRouterErrorMessage,
   CURATED_OPENROUTER_PRESETS,
 } from '../services/openRouterService';
 
@@ -185,4 +186,54 @@ describe('OpenRouter HTTP and Streaming Service', () => {
     expect(result.parsed.rows[0].finding).toBe('Significant result at p<0.01');
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
+
+  it('extracts human-readable message from OpenRouter nested error JSON', () => {
+    const rawPayload = JSON.stringify({
+      error: {
+        message: 'Provider returned error',
+        code: 429,
+        metadata: {
+          raw: 'qwen/qwen3.8-27b:free is temporarily rate-limited upstream. Please retry shortly.',
+        },
+      },
+    });
+
+    const msg = extractOpenRouterErrorMessage(429, rawPayload, 'Too Many Requests');
+    expect(msg).toContain('OpenRouter API call failed (HTTP 429)');
+    expect(msg).toContain('qwen/qwen3.8-27b:free is temporarily rate-limited upstream');
+  });
+
+  it('retries executeOpenRouterStructuredGeneration on 429 before succeeding', async () => {
+    const jsonOutput = JSON.stringify({ summary: 'Success after retry' });
+
+    // Mock 1st call 429, 2nd call 200
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => 'Rate limited',
+      } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { content: jsonOutput } }],
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+        }),
+      } as any);
+
+    // Fast timer mock or small delay
+    const result = await executeOpenRouterStructuredGeneration({
+      apiKey: 'sk-or-v1-testkey',
+      model: 'qwen/qwen3.8-27b:free',
+      schemaName: 'testRetry',
+      schema: { type: 'OBJECT', properties: { summary: { type: 'STRING' } } },
+      messages: [{ role: 'user', content: 'Summarize' }],
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(result.parsed.summary).toBe('Success after retry');
+  });
 });
+
