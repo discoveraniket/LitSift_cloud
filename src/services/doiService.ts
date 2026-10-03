@@ -174,14 +174,54 @@ export function parseJatsXml(xmlText: string): {
   sections: PaperSection[];
   tables: PaperTable[];
   figures: PaperFigure[];
+  xmlAuthors?: PaperAuthor[];
+  extractedEmails?: Array<{ email: string; rawText: string }>;
 } {
   const sections: PaperSection[] = [];
   const tables: PaperTable[] = [];
   const figures: PaperFigure[] = [];
+  const xmlAuthors: PaperAuthor[] = [];
+  const extractedEmails: Array<{ email: string; rawText: string }> = [];
 
   try {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlText, 'application/xml');
+
+    // Parse Affiliations Map (aff id -> affiliation string)
+    const affMap = new Map<string, string>();
+    xmlDoc.querySelectorAll('aff').forEach((aff) => {
+      const id = aff.getAttribute('id');
+      const clone = aff.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll('label').forEach((lbl) => lbl.remove());
+      const affText = clone.textContent?.trim().replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ');
+      if (id && affText) {
+        affMap.set(id, affText);
+      }
+    });
+
+    // Parse Authors from Contrib Group
+    xmlDoc.querySelectorAll('contrib-group contrib[contrib-type="author"], contrib-group contrib:not([contrib-type])').forEach((contrib) => {
+      const surname = contrib.querySelector('name > surname')?.textContent?.trim() || '';
+      const givenNames = contrib.querySelector('name > given-names')?.textContent?.trim() || '';
+      const name = [givenNames, surname].filter(Boolean).join(' ') || contrib.querySelector('name')?.textContent?.trim() || '';
+      if (!name) return;
+
+      const email = contrib.querySelector('email')?.textContent?.trim() || '';
+      const isCorresponding = contrib.getAttribute('corresp') === 'yes' || Boolean(contrib.querySelector('xref[ref-type="corresp"]'));
+
+      const affRids = Array.from(contrib.querySelectorAll('xref[ref-type="aff"]'))
+        .map((xr) => xr.getAttribute('rid'))
+        .filter(Boolean);
+      const institutions = affRids.map((rid) => affMap.get(rid!)).filter(Boolean) as string[];
+      const institution = institutions.join('; ') || undefined;
+
+      xmlAuthors.push({
+        name,
+        institution,
+        isCorresponding,
+        email: email || undefined,
+      });
+    });
 
     // Parse Body Sections
     const body = xmlDoc.querySelector('body');
@@ -247,6 +287,17 @@ export function parseJatsXml(xmlText: string): {
           content: correspTexts.join('\n\n'),
         });
       }
+
+      // Extract emails in author notes
+      authorNotesNode.querySelectorAll('email').forEach((em) => {
+        const emailStr = em.textContent?.trim();
+        if (emailStr && emailStr.includes('@')) {
+          extractedEmails.push({
+            email: emailStr,
+            rawText: em.parentElement?.textContent?.trim() || em.textContent?.trim() || '',
+          });
+        }
+      });
     }
 
     // Parse Tables
@@ -298,7 +349,7 @@ export function parseJatsXml(xmlText: string): {
     console.warn('Failed to parse JATS XML:', err);
   }
 
-  return { sections, tables, figures };
+  return { sections, tables, figures, xmlAuthors, extractedEmails };
 }
 
 /**
@@ -313,11 +364,17 @@ export function parseBioCJson(bioCData: any): {
   const tables: PaperTable[] = [];
   let abstractText = '';
 
-  if (!bioCData || !Array.isArray(bioCData.documents) || bioCData.documents.length === 0) {
+  if (!bioCData) {
     return { sections, tables };
   }
 
-  const doc = bioCData.documents[0];
+  // Handle both single document object and array of document wrappers: [{ documents: [...] }]
+  const docWrapper = Array.isArray(bioCData) ? bioCData[0] : bioCData;
+  if (!docWrapper || !Array.isArray(docWrapper.documents) || docWrapper.documents.length === 0) {
+    return { sections, tables };
+  }
+
+  const doc = docWrapper.documents[0];
   const passages = Array.isArray(doc.passages) ? doc.passages : [];
 
   let currentSectionTitle = 'Introduction';
@@ -546,6 +603,40 @@ export async function resolvePaperByDoi(
         sections = parsed.sections;
         tables = parsed.tables;
         figures = parsed.figures;
+
+        // Enrich authors with emails, correspondence flags, and affiliations from JATS XML
+        if (parsed.xmlAuthors && parsed.xmlAuthors.length > 0) {
+          if (authors.length === 0) {
+            authors.push(...parsed.xmlAuthors);
+          } else {
+            for (const auth of authors) {
+              const match = parsed.xmlAuthors.find((xa) => {
+                const aName = auth.name.toLowerCase().replace(/[^a-z]/g, '');
+                const xaName = xa.name.toLowerCase().replace(/[^a-z]/g, '');
+                return aName.includes(xaName) || xaName.includes(aName);
+              });
+              if (match) {
+                if (!auth.email && match.email) auth.email = match.email;
+                if (!auth.institution && match.institution) auth.institution = match.institution;
+                if (match.isCorresponding) auth.isCorresponding = true;
+              }
+            }
+          }
+        }
+
+        if (parsed.extractedEmails && parsed.extractedEmails.length > 0) {
+          for (const item of parsed.extractedEmails) {
+            const rawLower = item.rawText.toLowerCase();
+            for (const auth of authors) {
+              const aName = auth.name.toLowerCase();
+              const surname = auth.name.split(' ').pop()?.toLowerCase();
+              if (rawLower.includes(aName) || (surname && surname.length > 2 && rawLower.includes(surname))) {
+                auth.email = item.email;
+                auth.isCorresponding = true;
+              }
+            }
+          }
+        }
       }
     } catch (e) {
       console.warn('Could not fetch structured JATS XML from Europe PMC:', e);

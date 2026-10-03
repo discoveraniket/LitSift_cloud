@@ -109,7 +109,15 @@ export function buildPaperMarkdownContext(paper: any, options?: { abstractOnly?:
   if (paper.doi) parts.push(`- **DOI**: ${paper.doi}`);
   if (paper.journal) parts.push(`- **Journal**: ${paper.journal}${paper.year ? ` (${paper.year})` : ''}`);
   if (paper.authors && paper.authors.length > 0) {
-    const authorStr = paper.authors.map((a: any) => (typeof a === 'string' ? a : a.name + (a.affiliation ? ` (${a.affiliation})` : ''))).join(', ');
+    const authorStr = paper.authors
+      .map((a: any) => {
+        if (typeof a === 'string') return a;
+        const inst = a.institution || a.affiliation;
+        const corresp = a.isCorresponding ? ' (Corresponding Author)' : '';
+        const email = a.email ? ` <${a.email}>` : '';
+        return `${a.name}${corresp}${inst ? ` (${inst})` : ''}${email}`;
+      })
+      .join(', ');
     parts.push(`- **Authors**: ${authorStr}`);
   }
   if (paper.oaStatus) parts.push(`- **Open Access Status**: ${String(paper.oaStatus).toUpperCase()}`);
@@ -134,7 +142,8 @@ export function buildPaperMarkdownContext(paper: any, options?: { abstractOnly?:
 
       // Check if this section is administrative / non-scientific boilerplate
       const cleanTitleForCheck = title.split('>').pop()?.trim() || title;
-      if (BOILERPLATE_SECTION_REGEX.test(cleanTitleForCheck.replace(/^[^a-zA-Z0-9]+/, ''))) {
+      const isContactOrCorrespondence = /(corresp|contact|email|affiliat|address|author\s*note)/i.test(cleanTitleForCheck);
+      if (!isContactOrCorrespondence && BOILERPLATE_SECTION_REGEX.test(cleanTitleForCheck.replace(/^[^a-zA-Z0-9]+/, ''))) {
         return; // Skip non-scientific boilerplate to save 1,500-3,500 prompt tokens
       }
 

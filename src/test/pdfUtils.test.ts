@@ -133,4 +133,42 @@ describe('pdfUtils - LLM Markdown Context Builder Suite', () => {
     expect(markdown).toContain('## Figures & Captions');
     expect(markdown).toContain('### Figure 1');
   });
+
+  it('renders author institutions, emails, corresponding status, and preserves correspondence sections', () => {
+    const paperWithDetails = {
+      title: 'A Novel N4-Like Bacteriophage',
+      doi: '10.1128/mSphere.01215-20',
+      authors: [
+        {
+          name: 'Nitasha D. Menon',
+          institution: 'Amrita Vishwa Vidyapeetham',
+        },
+        {
+          name: 'Geetha B. Kumar',
+          institution: 'Institute for Stem Cell Biology and Regenerative Medicine',
+          isCorresponding: true,
+          email: 'gkumar@am.amrita.edu',
+        },
+      ],
+      sections: [
+        {
+          id: 'sec-author-notes',
+          title: 'Author Correspondence & Notes',
+          content: 'Address correspondence to Geetha B. Kumar, gkumar@am.amrita.edu.',
+        },
+        {
+          id: 'sec-intro',
+          title: 'Introduction',
+          content: 'Bacteriophages are effective agents against multidrug-resistant pathogens.',
+        },
+      ],
+    };
+
+    const md = buildPaperMarkdownContext(paperWithDetails);
+    expect(md).toContain('Geetha B. Kumar (Corresponding Author) (Institute for Stem Cell Biology and Regenerative Medicine) <gkumar@am.amrita.edu>');
+    expect(md).toContain('Nitasha D. Menon (Amrita Vishwa Vidyapeetham)');
+    expect(md).toContain('## Author Correspondence & Notes');
+    expect(md).toContain('Address correspondence to Geetha B. Kumar, gkumar@am.amrita.edu.');
+  });
 });
+

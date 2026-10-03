@@ -407,4 +407,92 @@ describe('DOI Resolution & Ingestion Service Suite', () => {
       expect(await resolveIdentifierToDoi('completely-unrelated-random-text')).toBeNull();
     });
   });
+
+  describe('6. parseBioCJson with array wrapper format', () => {
+    it('parses BioC JSON wrapped in top-level array', () => {
+      const bioCArrayPayload = [
+        {
+          documents: [
+            {
+              passages: [
+                {
+                  infons: { section_type: 'ABSTRACT', type: 'abstract' },
+                  text: 'This is the abstract paragraph of the paper describing novel phages.',
+                },
+                {
+                  infons: { type: 'title' },
+                  text: 'Methods & Phage Isolation',
+                },
+                {
+                  infons: { type: 'paragraph' },
+                  text: 'Phages were isolated from environmental wastewater samples in South India.',
+                },
+              ],
+            },
+          ],
+        },
+      ];
+
+      const parsed = parseBioCJson(bioCArrayPayload);
+      expect(parsed.abstractText).toContain('This is the abstract paragraph');
+      expect(parsed.sections).toHaveLength(1);
+      expect(parsed.sections[0].title).toBe('Methods & Phage Isolation');
+      expect(parsed.sections[0].content).toContain('Phages were isolated from environmental wastewater');
+    });
+  });
+
+  describe('7. parseJatsXml author, affiliation, and email extraction', () => {
+    it('extracts affiliations, xmlAuthors, and correspondence notes with emails', () => {
+      const mockXml = `
+        <article>
+          <front>
+            <article-meta>
+              <contrib-group>
+                <contrib contrib-type="author">
+                  <name><surname>Menon</surname><given-names>Nitasha D.</given-names></name>
+                  <xref ref-type="aff" rid="aff1"/>
+                </contrib>
+                <contrib contrib-type="author" corresp="yes">
+                  <name><surname>Kumar</surname><given-names>Geetha B.</given-names></name>
+                  <email>gkumar@am.amrita.edu</email>
+                  <xref ref-type="aff" rid="aff2"/>
+                </contrib>
+              </contrib-group>
+              <aff id="aff1"><label>1</label>School of Biotechnology, Amrita Vishwa Vidyapeetham</aff>
+              <aff id="aff2"><label>2</label>Institute for Stem Cell Biology and Regenerative Medicine</aff>
+              <author-notes>
+                <fn id="cor1">
+                  <label>✉</label>
+                  <p>Address correspondence to Geetha B. Kumar, <email>gkumar@am.amrita.edu</email>.</p>
+                </fn>
+              </author-notes>
+            </article-meta>
+          </front>
+          <body>
+            <sec id="s1">
+              <title>Results</title>
+              <p>Phage AM.P2 exhibited strong lytic activity.</p>
+            </sec>
+          </body>
+        </article>
+      `;
+
+      const parsed = parseJatsXml(mockXml);
+      expect(parsed.sections).toHaveLength(2);
+      expect(parsed.sections[0].title).toBe('Author Correspondence & Notes');
+      expect(parsed.sections[0].content).toContain('gkumar@am.amrita.edu');
+
+      expect(parsed.xmlAuthors).toBeDefined();
+      expect(parsed.xmlAuthors).toHaveLength(2);
+      expect(parsed.xmlAuthors![1].name).toBe('Geetha B. Kumar');
+      expect(parsed.xmlAuthors![1].institution).toContain('Institute for Stem Cell Biology');
+      expect(parsed.xmlAuthors![1].email).toBe('gkumar@am.amrita.edu');
+      expect(parsed.xmlAuthors![1].isCorresponding).toBe(true);
+
+      expect(parsed.extractedEmails).toBeDefined();
+      expect(parsed.extractedEmails![0].email).toBe('gkumar@am.amrita.edu');
+      expect(parsed.extractedEmails![0].rawText).toContain('Address correspondence to Geetha B. Kumar');
+    });
+  });
 });
+
