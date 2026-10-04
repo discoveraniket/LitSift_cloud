@@ -20,6 +20,7 @@ import {
   streamOpenRouterChatTurn,
   executeOpenRouterStructuredGeneration,
   extractOpenRouterErrorMessage,
+  fetchOpenRouterGenerationStats,
   CURATED_OPENROUTER_PRESETS,
 } from '../services/openRouterService';
 
@@ -330,6 +331,84 @@ describe('OpenRouter HTTP and Streaming Service', () => {
       messages: [{ role: 'user', content: 'Hello' }],
     });
     expect(capturedBody.reasoning).toBeUndefined();
+  });
+
+  it('captures performance metrics (TTFT, throughput, cost, provider, generationId)', async () => {
+    const sseChunks = [
+      'data: {"id":"gen-test-999","choices":[{"delta":{"content":"First chunk"}}],"openrouter_metadata":{"provider_name":"DeepInfra"}}\n\n',
+      'data: {"choices":[{"delta":{"content":" and second chunk"}}]}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":150,"completion_tokens":25,"total_tokens":175,"cost":0.00045,"prompt_tokens_details":{"cached_tokens":50},"completion_tokens_details":{"reasoning_tokens":10}}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        for (const chunk of sseChunks) {
+          controller.enqueue(encoder.encode(chunk));
+        }
+        controller.close();
+      },
+    });
+
+    let capturedHeaders: any = null;
+    global.fetch = vi.fn().mockImplementation((_url, init) => {
+      capturedHeaders = init.headers;
+      return Promise.resolve({
+        ok: true,
+        headers: new Headers({ 'x-generation-id': 'gen-test-999' }),
+        body: stream,
+      });
+    });
+
+    const result = await streamOpenRouterChatTurn({
+      apiKey: 'sk-or-v1-testkey',
+      model: 'qwen/qwen3.8-27b:free',
+      messages: [{ role: 'user', content: 'Test metrics' }],
+    });
+
+    expect(capturedHeaders['X-Title']).toBe('LitSift Literature Synthesis');
+    expect(capturedHeaders['X-OpenRouter-Metadata']).toBeUndefined();
+    expect(result.text).toBe('First chunk and second chunk');
+    expect(result.generationId).toBe('gen-test-999');
+    expect(result.upstreamProvider).toBe('DeepInfra');
+    expect(result.cost).toBe(0.00045);
+    expect(result.timeToFirstToken).toBeDefined();
+    expect(result.tokensPerSecond).toBeDefined();
+    expect(result.usage?.cachedTokens).toBe(50);
+    expect(result.usage?.thinkingTokens).toBe(10);
+  });
+
+  it('fetches OpenRouter generation statistics from /generation endpoint', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: {
+          id: 'gen-abc-123',
+          provider_name: 'Together AI',
+          total_cost: 0.0012,
+          latency: 450,
+          generation_time: 320,
+          tokens_prompt: 500,
+          tokens_completion: 45,
+          native_tokens_reasoning: 15,
+          native_tokens_cached: 100,
+        },
+      }),
+    } as any);
+
+    const stats = await fetchOpenRouterGenerationStats({
+      generationId: 'gen-abc-123',
+      apiKey: 'sk-or-v1-testkey',
+    });
+
+    expect(stats).not.toBeNull();
+    expect(stats?.id).toBe('gen-abc-123');
+    expect(stats?.providerName).toBe('Together AI');
+    expect(stats?.cost).toBe(0.0012);
+    expect(stats?.latencyMs).toBe(450);
+    expect(stats?.tokensPrompt).toBe(500);
+    expect(stats?.tokensCompletion).toBe(45);
   });
 });
 

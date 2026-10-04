@@ -506,7 +506,8 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '8px',
+                        flexWrap: 'wrap',
+                        gap: '6px',
                         marginTop: '8px',
                         paddingTop: '6px',
                         borderTop: '1px solid rgba(255, 255, 255, 0.04)',
@@ -514,47 +515,133 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
                         color: 'var(--text-muted)',
                         userSelect: 'none',
                       }}
+                      title={[
+                        msg.modelUsed ? `Model: ${msg.modelUsed}` : '',
+                        msg.upstreamProvider ? `Upstream Provider: ${msg.upstreamProvider}` : '',
+                        msg.generationId ? `Generation ID: ${msg.generationId}` : '',
+                        msg.executionTime !== undefined ? `Total Duration: ${msg.executionTime.toFixed(1)}s` : '',
+                        msg.timeToFirstToken !== undefined ? `Time to First Token (TTFT): ${msg.timeToFirstToken.toFixed(1)}s` : '',
+                        msg.tokensPerSecond !== undefined ? `Throughput: ${msg.tokensPerSecond} tokens/sec` : '',
+                        msg.promptTokens !== undefined
+                          ? `Context Window: ${msg.promptTokens.toLocaleString()} tokens${
+                              msg.cachedTokens
+                                ? ` (${msg.cachedTokens.toLocaleString()} cached, ${Math.max(0, msg.promptTokens - msg.cachedTokens).toLocaleString()} newly evaluated)`
+                                : ''
+                            }`
+                          : '',
+                        msg.candidateTokens !== undefined ? `Output Tokens: ${msg.candidateTokens.toLocaleString()}` : '',
+                        msg.thinkingTokens ? `Reasoning Tokens: ${msg.thinkingTokens.toLocaleString()}` : '',
+                        msg.cost !== undefined ? `Cost: $${msg.cost.toFixed(6)}` : '',
+                      ]
+                        .filter(Boolean)
+                        .join('\n')}
                     >
+                      {/* 1. Total Duration */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                         <Zap size={10} color="var(--accent-primary)" />
                         <span>{msg.executionTime !== undefined ? `${msg.executionTime.toFixed(1)}s` : 'Instant'}</span>
                       </div>
 
-                      {(msg.promptTokens !== undefined || msg.candidateTokens !== undefined) && (
-                        <span>•</span>
+                      {/* 2. TTFT */}
+                      {msg.timeToFirstToken !== undefined && (
+                        <>
+                          <span style={{ opacity: 0.35 }}>|</span>
+                          <span>TTFT {msg.timeToFirstToken.toFixed(1)}s</span>
+                        </>
                       )}
 
+                      {/* 3. Input Tokens (e.g. 23,000 + 200 in or 23,200 in) */}
                       {msg.promptTokens !== undefined && (
-                        <span title={`Input Prompt Tokens: ${msg.promptTokens.toLocaleString()} (Cached: ${(msg.cachedTokens || 0).toLocaleString()})`}>
-                          {Math.max(0, msg.promptTokens - (msg.cachedTokens || 0)).toLocaleString()} in
-                        </span>
+                        <>
+                          <span style={{ opacity: 0.35 }}>|</span>
+                          <span title={`Context Window: ${msg.promptTokens.toLocaleString()} tokens${msg.cachedTokens ? ` (${msg.cachedTokens.toLocaleString()} cached, ${Math.max(0, msg.promptTokens - msg.cachedTokens).toLocaleString()} newly evaluated)` : ''}`}>
+                            {msg.cachedTokens !== undefined && msg.cachedTokens > 0
+                              ? `${msg.cachedTokens.toLocaleString()} + ${Math.max(0, msg.promptTokens - msg.cachedTokens).toLocaleString()} in`
+                              : `${msg.promptTokens.toLocaleString()} in`}
+                          </span>
+                        </>
                       )}
 
+                      {/* 4. Output Tokens */}
                       {msg.candidateTokens !== undefined && (
-                        <span title={`Output Candidate Tokens: ${msg.candidateTokens.toLocaleString()}`}>
-                          / {msg.candidateTokens.toLocaleString()} out
-                        </span>
+                        <>
+                          <span style={{ opacity: 0.35 }}>|</span>
+                          <span title={`Output Candidate Tokens: ${msg.candidateTokens.toLocaleString()}`}>
+                            {msg.candidateTokens.toLocaleString()} out
+                          </span>
+                        </>
                       )}
 
+                      {/* 5. Speed (tok/s) */}
+                      {msg.tokensPerSecond !== undefined && msg.tokensPerSecond > 0 && (
+                        <>
+                          <span style={{ opacity: 0.35 }}>|</span>
+                          <span
+                            style={{ color: 'var(--accent-primary)', fontWeight: 500 }}
+                            title={`Generation Throughput: ${msg.tokensPerSecond} tokens per second`}
+                          >
+                            {msg.tokensPerSecond} tok/s
+                          </span>
+                        </>
+                      )}
+
+                      {/* 6. Reasoning / Thinking Tokens */}
                       {msg.thinkingTokens !== undefined && msg.thinkingTokens > 0 && (
-                        <span title={`Reasoning / Thinking Tokens: ${msg.thinkingTokens.toLocaleString()}`}>
-                          • {msg.thinkingTokens.toLocaleString()} thought
-                        </span>
+                        <>
+                          <span style={{ opacity: 0.35 }}>|</span>
+                          <span title={`Reasoning / Thinking Tokens: ${msg.thinkingTokens.toLocaleString()}`}>
+                            {msg.thinkingTokens.toLocaleString()} thought
+                          </span>
+                        </>
                       )}
 
-                      {msg.modelUsed && (
-                        <span
-                          style={{
-                            marginLeft: 'auto',
-                            fontSize: '9px',
-                            fontFamily: 'var(--font-mono, monospace)',
-                            color: 'var(--text-muted)',
-                            opacity: 0.8,
-                          }}
-                        >
-                          {msg.modelUsed}
-                        </span>
+                      {/* 7. Cost */}
+                      {msg.cost !== undefined && (
+                        <>
+                          <span style={{ opacity: 0.35 }}>|</span>
+                          <span
+                            style={{
+                              color: msg.cost === 0 ? 'var(--text-muted)' : '#a6e3a1',
+                              fontWeight: 500,
+                            }}
+                            title={`Inference Cost: ${msg.cost === 0 ? 'Free tier ($0.00)' : `$${msg.cost.toFixed(6)}`}`}
+                          >
+                            {msg.cost === 0 ? '$0.00 (free)' : `$${msg.cost < 0.01 ? msg.cost.toFixed(4) : msg.cost.toFixed(3)}`}
+                          </span>
+                        </>
                       )}
+
+                      {/* 8. Model & Upstream Provider */}
+                      {msg.modelUsed && (() => {
+                        const displayModel = msg.modelUsed.includes('/')
+                          ? msg.modelUsed.split('/').slice(1).join('/')
+                          : msg.modelUsed;
+                        return (
+                          <div
+                            style={{
+                              marginLeft: 'auto',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '9px',
+                              fontFamily: 'var(--font-mono, monospace)',
+                              color: 'var(--text-muted)',
+                              opacity: 0.85,
+                            }}
+                            title={`Model: ${msg.modelUsed}${msg.upstreamProvider ? ` (via ${msg.upstreamProvider})` : ''}`}
+                          >
+                            <span style={{ opacity: 0.35 }}>|</span>
+                            <span>
+                              {displayModel}
+                              {msg.upstreamProvider && (
+                                <span style={{ opacity: 0.75, marginLeft: '4px' }}>
+                                  ({msg.upstreamProvider})
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>

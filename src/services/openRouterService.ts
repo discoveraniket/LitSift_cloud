@@ -168,6 +168,69 @@ export async function checkOpenRouterConnection(
   }
 }
 
+export interface OpenRouterGenerationStats {
+  id: string;
+  providerName?: string;
+  cost?: number;
+  latencyMs?: number;
+  generationTimeMs?: number;
+  tokensPrompt?: number;
+  tokensCompletion?: number;
+  nativeTokensReasoning?: number;
+  nativeTokensCached?: number;
+}
+
+/**
+ * Fetch detailed metrics for a specific generation from OpenRouter GET /api/v1/generation?id=...
+ */
+export async function fetchOpenRouterGenerationStats(options: {
+  generationId: string;
+  apiKey?: string;
+  baseUrl?: string;
+  timeoutMs?: number;
+}): Promise<OpenRouterGenerationStats | null> {
+  const apiKey = options.apiKey ?? getOpenRouterApiKey();
+  const baseUrl = (options.baseUrl ?? getOpenRouterBaseUrl()).trim().replace(/\/+$/, '');
+  if (!apiKey || !options.generationId) return null;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 2000);
+
+    const res = await fetch(`${baseUrl}/generation?id=${encodeURIComponent(options.generationId)}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://litsift.local',
+        'X-Title': 'LitSift Literature Synthesis',
+        'Accept': 'application/json',
+      },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) return null;
+    const json = await res.json();
+    const data = json?.data;
+    if (!data) return null;
+
+    return {
+      id: data.id || options.generationId,
+      providerName: data.provider_name || undefined,
+      cost: typeof data.total_cost === 'number' ? data.total_cost : undefined,
+      latencyMs: data.latency,
+      generationTimeMs: data.generation_time,
+      tokensPrompt: data.tokens_prompt,
+      tokensCompletion: data.tokens_completion,
+      nativeTokensReasoning: data.native_tokens_reasoning,
+      nativeTokensCached: data.native_tokens_cached,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Streaming Chat Completion with OpenRouter supporting tool deltas and reasoning content.
  */
@@ -223,6 +286,7 @@ export async function streamOpenRouterChatTurn(options: {
   }
 
   const endpoint = `${baseUrl}/chat/completions`;
+  const turnStartTime = performance.now();
 
   const res = await fetch(endpoint, {
     method: 'POST',
@@ -257,6 +321,10 @@ export async function streamOpenRouterChatTurn(options: {
 
   let sseBuffer = '';
   let finalUsage: any = null;
+  let firstByteTime: number | null = null;
+  let firstTokenTime: number | null = null;
+  let generationId: string | undefined = res.headers?.get ? (res.headers.get('x-generation-id') || undefined) : undefined;
+  let upstreamProvider: string | undefined = res.headers?.get ? (res.headers.get('x-provider-name') || undefined) : undefined;
 
   while (true) {
     if (options.signal?.aborted) {
@@ -266,6 +334,10 @@ export async function streamOpenRouterChatTurn(options: {
 
     const { done, value } = await reader.read();
     if (done) break;
+
+    if (firstByteTime === null) {
+      firstByteTime = performance.now();
+    }
 
     sseBuffer += decoder.decode(value, { stream: true });
     const lines = sseBuffer.split('\n');
@@ -286,6 +358,16 @@ export async function streamOpenRouterChatTurn(options: {
         continue;
       }
 
+      if (!generationId && chunkJson.id) {
+        generationId = chunkJson.id;
+      }
+
+      if (chunkJson.openrouter_metadata?.provider_name) {
+        upstreamProvider = chunkJson.openrouter_metadata.provider_name;
+      } else if (chunkJson.provider_name) {
+        upstreamProvider = chunkJson.provider_name;
+      }
+
       if (chunkJson.usage) {
         finalUsage = chunkJson.usage;
       }
@@ -295,6 +377,13 @@ export async function streamOpenRouterChatTurn(options: {
 
       const delta = choice.delta;
       if (!delta) continue;
+
+      if (
+        firstTokenTime === null &&
+        (delta.content || delta.reasoning_content || delta.reasoning || (delta.tool_calls && delta.tool_calls.length > 0))
+      ) {
+        firstTokenTime = performance.now();
+      }
 
       // 1. Capture dedicated reasoning content (DeepSeek / Qwen OpenRouter reasoning tokens)
       if (delta.reasoning_content || delta.reasoning) {
@@ -421,11 +510,57 @@ export async function streamOpenRouterChatTurn(options: {
     });
   }
 
+  const totalDurationSec = (performance.now() - turnStartTime) / 1000;
+  const effectiveFirstTokenTime = firstTokenTime ?? firstByteTime;
+  const ttftSec =
+    effectiveFirstTokenTime !== null
+      ? Number(((effectiveFirstTokenTime - turnStartTime) / 1000).toFixed(1))
+      : undefined;
+  const genDurationSec = ttftSec !== undefined ? Math.max(0.01, totalDurationSec - ttftSec) : totalDurationSec;
+  const candidateTokens = finalUsage?.completion_tokens ?? 0;
+  const tokensPerSecond =
+    candidateTokens > 0 && genDurationSec > 0
+      ? Number((candidateTokens / genDurationSec).toFixed(1))
+      : undefined;
+
+  let cachedTokens: number | undefined = finalUsage?.prompt_tokens_details?.cached_tokens;
+  let cost: number | undefined = typeof finalUsage?.cost === 'number' ? finalUsage.cost : undefined;
+
+  // If provider, cost, or cachedTokens is still missing, attempt a fast query to /generation?id=... (non-blocking 1.5s timeout)
+  if ((!upstreamProvider || cost === undefined || cachedTokens === undefined) && generationId) {
+    try {
+      const stats = await fetchOpenRouterGenerationStats({
+        generationId,
+        apiKey,
+        baseUrl,
+        timeoutMs: 1500,
+      });
+      if (stats) {
+        if (!upstreamProvider && stats.providerName) {
+          upstreamProvider = stats.providerName;
+        }
+        if (cost === undefined && stats.cost !== undefined) {
+          cost = stats.cost;
+        }
+        if (cachedTokens === undefined && stats.nativeTokensCached !== undefined) {
+          cachedTokens = stats.nativeTokensCached;
+        }
+      }
+    } catch {
+      // Best-effort
+    }
+  }
+
   return {
     text: fullAnswerText.trim(),
     thought: fullThoughtText.trim() || undefined,
     functionCalls: parsedFunctionCalls,
     toolCalls: parsedFunctionCalls,
+    generationId,
+    timeToFirstToken: ttftSec,
+    tokensPerSecond,
+    upstreamProvider,
+    cost,
     usage: finalUsage
       ? {
           promptTokens: finalUsage.prompt_tokens,
@@ -434,8 +569,10 @@ export async function streamOpenRouterChatTurn(options: {
           prompt_tokens: finalUsage.prompt_tokens,
           completion_tokens: finalUsage.completion_tokens,
           total_tokens: finalUsage.total_tokens,
+          cachedTokens: cachedTokens ?? finalUsage.prompt_tokens_details?.cached_tokens,
+          thinkingTokens: finalUsage.completion_tokens_details?.reasoning_tokens,
         }
-      : undefined,
+      : (cachedTokens !== undefined ? { cachedTokens } : undefined),
   };
 }
 
@@ -466,6 +603,7 @@ export async function executeOpenRouterStructuredGeneration<T = any>(options: {
     model: targetModel,
     messages: options.messages,
     temperature: options.temperature ?? 0.1,
+    max_tokens: 8192,
     response_format: formatPayload,
     stream: false,
   };

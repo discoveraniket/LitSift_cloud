@@ -218,17 +218,6 @@ export async function processAgentInteraction(
     );
     const isFollowup = pastNonWelcomeMessages.length > 1;
 
-    // Calculate baseline token count from previous turns to subtract it from this turn's prompt/cached tokens
-    let historyBaselineTokens = 0;
-    if (isFollowup) {
-      const lastAgentMsg = [...pastNonWelcomeMessages]
-        .reverse()
-        .find((m) => m.sender === 'agent' && m.promptTokens !== undefined);
-      if (lastAgentMsg) {
-        historyBaselineTokens = (lastAgentMsg.promptTokens ?? 0) + (lastAgentMsg.candidateTokens ?? 0);
-      }
-    }
-
     // Multi-Level Context Injection: Multi-Cell -> Single Cell -> Row -> Column -> Entire Table
     const gridStore = useGridStore.getState();
     const focusedCell = gridStore.focusedCell;
@@ -409,8 +398,8 @@ ${userPrompt}`;
       }
     }
 
-    if (isFollowup) {
-      // Turn 0: Root anchor with document context
+    if (rootUserParts.length > 0) {
+      // Turn 0: Root anchor with document context (consistent across Turn 1 and follow-ups for KV cache reuse)
       contents.push({
         role: 'user',
         parts: [
@@ -422,7 +411,9 @@ ${userPrompt}`;
         role: 'model',
         parts: [{ text: `Understood. I have full access to "${activePdfTitle}" and will synthesize findings, extract exact verbatim citations, and assist you with managing the structured data grid.` }],
       });
+    }
 
+    if (isFollowup) {
       // Historical turns: Clean user prompts and assistant replies without redundant table duplicates
       const historyTurns = pastNonWelcomeMessages.slice(0, -1);
       for (const msg of historyTurns) {
@@ -438,13 +429,10 @@ ${userPrompt}`;
         parts: [{ text: finalPromptText }],
       });
     } else {
-      // First turn: Anchors PDF with live data grid state and user prompt
+      // First turn: Injects live data grid state and user prompt
       contents.push({
         role: 'user',
-        parts: [
-          ...rootUserParts,
-          { text: finalPromptText },
-        ],
+        parts: [{ text: finalPromptText }],
       });
     }
 
@@ -504,17 +492,18 @@ Execute all required tool actions to fulfill the user's instructions and summari
       rootDocMarkdown = buildPaperMarkdownContext(validation.activePdf, { abstractOnly: isAbstractOnly });
     }
 
+    if (rootDocMarkdown) {
+      openAiMessages.push({
+        role: 'user',
+        content: `[ACTIVE RESEARCH DOCUMENT: "${activePdfTitle}"]\n${rootDocMarkdown}\n\nYou are analyzing research document "${activePdfTitle}". I will ask you questions and instructions to extract, verify, and edit data in our structured table grid.`,
+      });
+      openAiMessages.push({
+        role: 'assistant',
+        content: `Understood. I have full access to "${activePdfTitle}" and will synthesize findings, extract exact verbatim citations, and assist you with managing the structured data grid.`,
+      });
+    }
+
     if (isFollowup) {
-      if (rootDocMarkdown) {
-        openAiMessages.push({
-          role: 'user',
-          content: `[ACTIVE RESEARCH DOCUMENT: "${activePdfTitle}"]\n${rootDocMarkdown}\n\nYou are analyzing research document "${activePdfTitle}". I will ask you questions and instructions to extract, verify, and edit data in our structured table grid.`,
-        });
-        openAiMessages.push({
-          role: 'assistant',
-          content: `Understood. I have full access to "${activePdfTitle}" and will synthesize findings, extract exact verbatim citations, and assist you with managing the structured data grid.`,
-        });
-      }
       const historyTurns = pastNonWelcomeMessages.slice(0, -1);
       for (const msg of historyTurns) {
         openAiMessages.push({
@@ -522,19 +511,12 @@ Execute all required tool actions to fulfill the user's instructions and summari
           content: msg.text,
         });
       }
-      openAiMessages.push({
-        role: 'user',
-        content: finalPromptText,
-      });
-    } else {
-      const combinedPrompt = rootDocMarkdown
-        ? `[ACTIVE RESEARCH DOCUMENT: "${activePdfTitle}"]\n${rootDocMarkdown}\n\n${finalPromptText}`
-        : finalPromptText;
-      openAiMessages.push({
-        role: 'user',
-        content: combinedPrompt,
-      });
     }
+
+    openAiMessages.push({
+      role: 'user',
+      content: finalPromptText,
+    });
 
     // Multi-Step ReAct Execution Loop (Expanded to 10 Turns)
     const MAX_STEPS = 10;
@@ -543,9 +525,15 @@ Execute all required tool actions to fulfill the user's instructions and summari
     let finalReplyText = resumeCheckpoint ? resumeCheckpoint.finalReplyText : '';
     const accumulatedThoughts: string[] = resumeCheckpoint ? [...resumeCheckpoint.accumulatedThoughts] : [];
     let totalThinkingTokens = 0;
-    let totalPromptTokens = resumeCheckpoint ? resumeCheckpoint.totalPromptTokens : 0;
+    let maxPromptTokens = resumeCheckpoint ? resumeCheckpoint.totalPromptTokens : 0;
     let totalCandidateTokens = resumeCheckpoint ? resumeCheckpoint.totalCandidateTokens : 0;
-    let totalCachedTokens = 0;
+    let maxCachedTokens = 0;
+    let initialTimeToFirstToken: number | undefined;
+    let latestTimeToFirstToken: number | undefined;
+    let latestTokensPerSecond: number | undefined;
+    let latestUpstreamProvider: string | undefined;
+    let latestCost: number | undefined;
+    let latestGenerationId: string | undefined;
 
     if (resumeCheckpoint) {
       openAiMessages = [...resumeCheckpoint.openAiMessages];
@@ -562,9 +550,9 @@ Execute all required tool actions to fulfill the user's instructions and summari
           replyText: 'Agent execution was stopped by user.',
           thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join('\n\n---\n\n') : undefined,
           thinkingTokens: totalThinkingTokens > 0 ? totalThinkingTokens : undefined,
-          promptTokens: totalPromptTokens > 0 ? totalPromptTokens : undefined,
+          promptTokens: maxPromptTokens > 0 ? maxPromptTokens : undefined,
           candidateTokens: totalCandidateTokens > 0 ? totalCandidateTokens : undefined,
-          cachedTokens: totalCachedTokens > 0 ? totalCachedTokens : undefined,
+          cachedTokens: maxCachedTokens > 0 ? maxCachedTokens : undefined,
           modelUsed: selectedModel,
           toolsExecuted: executedTools,
         };
@@ -725,7 +713,7 @@ Execute all required tool actions to fulfill the user's instructions and summari
                 accumulatedThoughts: [...accumulatedThoughts],
                 executedTools: [...executedTools],
                 finalReplyText,
-                totalPromptTokens,
+                totalPromptTokens: maxPromptTokens,
                 totalCandidateTokens,
                 timestamp: Date.now(),
               };
@@ -762,12 +750,30 @@ Execute all required tool actions to fulfill the user's instructions and summari
         const usage = lmsResult.usage;
         const promptTokens = usage?.promptTokens ?? usage?.prompt_tokens ?? 0;
         const candidateTokens = usage?.candidateTokens ?? usage?.completion_tokens ?? 0;
-        totalPromptTokens += promptTokens;
+        const stepCachedTokens = lmsResult.usage?.cachedTokens ?? 0;
+        maxPromptTokens = Math.max(maxPromptTokens, promptTokens);
+        maxCachedTokens = Math.max(maxCachedTokens, stepCachedTokens);
         totalCandidateTokens += candidateTokens;
+
+        if (lmsResult.timeToFirstToken !== undefined) {
+          if (initialTimeToFirstToken === undefined) {
+            initialTimeToFirstToken = lmsResult.timeToFirstToken;
+          }
+          latestTimeToFirstToken = lmsResult.timeToFirstToken;
+        }
+        if (lmsResult.tokensPerSecond !== undefined) latestTokensPerSecond = lmsResult.tokensPerSecond;
+        if (lmsResult.upstreamProvider) latestUpstreamProvider = lmsResult.upstreamProvider;
+        if (lmsResult.cost !== undefined) latestCost = (latestCost || 0) + lmsResult.cost;
+        if (lmsResult.generationId) latestGenerationId = lmsResult.generationId;
+        if (lmsResult.usage?.thinkingTokens) totalThinkingTokens += lmsResult.usage.thinkingTokens;
+
+        const speedText = lmsResult.tokensPerSecond ? ` | Speed=${lmsResult.tokensPerSecond} tok/s` : '';
+        const ttftText = lmsResult.timeToFirstToken ? ` | TTFT=${lmsResult.timeToFirstToken}s` : '';
+        const providerText = lmsResult.upstreamProvider ? ` [via ${lmsResult.upstreamProvider}]` : '';
 
         logStore.addLog(
           'info',
-          `⏱️ [Step ${currentStep}] ${providerName} (${selectedModel}) responded in ${genDurationSec}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`,
+          `⏱️ [Step ${currentStep}] ${providerName}${providerText} (${selectedModel}) responded in ${genDurationSec}s${ttftText}${speedText} | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`,
           { step: currentStep, latencySec: Number(genDurationSec), usageMetadata: usage }
         );
 
@@ -885,6 +891,7 @@ Execute all required tool actions to fulfill the user's instructions and summari
         activityDetail: `Evaluating prompt with Gemini (${selectedModel})...`,
       });
 
+      let firstTokenTime: number | null = null;
       const executeStreamTurn = async () => {
         const stream = await ai.models.generateContentStream({
           model: selectedModel,
@@ -904,6 +911,10 @@ Execute all required tool actions to fulfill the user's instructions and summari
 
           for (const part of parts) {
             allModelParts.push(part);
+
+            if (firstTokenTime === null && (part.thought || part.text || part.functionCall)) {
+              firstTokenTime = performance.now();
+            }
 
             const getLiveThought = () =>
               accumulatedThoughts.length > 0
@@ -990,17 +1001,34 @@ Execute all required tool actions to fulfill the user's instructions and summari
 
       const genDurationSec = ((performance.now() - genStartTime) / 1000).toFixed(2);
       const usage = lastUsage;
-      const promptTokens = Math.max(0, (usage?.promptTokenCount ?? 0) - historyBaselineTokens);
+      const promptTokens = usage?.promptTokenCount ?? 0;
       const candidateTokens = usage?.candidatesTokenCount ?? 0;
       const stepThinkingTokens = usage?.thinkingTokenCount ?? usage?.reasoningTokenCount ?? 0;
-      const cachedTokens = Math.max(0, (usage?.cachedContentTokenCount ?? 0) - historyBaselineTokens);
+      const cachedTokens = usage?.cachedContentTokenCount ?? 0;
+
+      if (firstTokenTime !== null) {
+        latestTimeToFirstToken = Number(((firstTokenTime - genStartTime) / 1000).toFixed(1));
+        if (initialTimeToFirstToken === undefined) {
+          initialTimeToFirstToken = latestTimeToFirstToken;
+        }
+        const activeGenSec = Math.max(0.01, Number(genDurationSec) - latestTimeToFirstToken);
+        if (candidateTokens > 0 && activeGenSec > 0) {
+          latestTokensPerSecond = Number((candidateTokens / activeGenSec).toFixed(1));
+        }
+      }
 
       totalThinkingTokens += stepThinkingTokens;
-      totalPromptTokens += promptTokens;
+      maxPromptTokens = Math.max(maxPromptTokens, promptTokens);
+      maxCachedTokens = Math.max(maxCachedTokens, cachedTokens ?? 0);
       totalCandidateTokens += candidateTokens;
-      totalCachedTokens += cachedTokens ?? 0;
 
       let telemetryMsg = `⏱️ [Step ${currentStep}] Gemini ${selectedModel} responded in ${genDurationSec}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`;
+      if (latestTimeToFirstToken !== undefined) {
+        telemetryMsg += `, TTFT=${latestTimeToFirstToken}s`;
+      }
+      if (latestTokensPerSecond !== undefined) {
+        telemetryMsg += `, Speed=${latestTokensPerSecond} tok/s`;
+      }
       if (stepThinkingTokens) {
         telemetryMsg += `, Thinking=${stepThinkingTokens.toLocaleString()}`;
       }
@@ -1114,9 +1142,14 @@ Execute all required tool actions to fulfill the user's instructions and summari
       replyText: finalReplyText,
       thought: finalThoughtText,
       thinkingTokens: totalThinkingTokens > 0 ? totalThinkingTokens : undefined,
-      promptTokens: totalPromptTokens > 0 ? totalPromptTokens : undefined,
+      promptTokens: maxPromptTokens > 0 ? maxPromptTokens : undefined,
       candidateTokens: totalCandidateTokens > 0 ? totalCandidateTokens : undefined,
-      cachedTokens: totalCachedTokens > 0 ? totalCachedTokens : undefined,
+      cachedTokens: maxCachedTokens > 0 ? maxCachedTokens : undefined,
+      timeToFirstToken: initialTimeToFirstToken ?? latestTimeToFirstToken,
+      tokensPerSecond: latestTokensPerSecond,
+      cost: latestCost,
+      upstreamProvider: latestUpstreamProvider,
+      generationId: latestGenerationId,
       modelUsed: selectedModel,
       toolsExecuted: executedTools,
     };

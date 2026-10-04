@@ -262,4 +262,21 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     store.updateCell('row-1', 'methodology', 'Manual override text');
     expect(useGridStore.getState().rows.find((r) => r.id === 'row-1')?.pendingReviewFields).toHaveLength(0);
   });
+
+  it('repairs truncated JSON with unclosed strings and unclosed brackets in safeJsonParse', async () => {
+    const { safeJsonParse } = await import('../services/agentToolRegistry');
+
+    // Case 1: Truncated inside a string
+    const truncated1 = '{"rows": [{"fields": {"article_doi": "10.1128/mSphere.01215-20", "phage_name": "vB_Pae_AM';
+    const parsed1 = safeJsonParse(truncated1);
+    expect(parsed1).toBeDefined();
+    expect(parsed1.rows).toHaveLength(1);
+    expect(parsed1.rows[0].fields.article_doi).toBe('10.1128/mSphere.01215-20');
+    expect(parsed1.rows[0].fields.phage_name).toBe('vB_Pae_AM');
+
+    // Case 2: Markdown fence with trailing comma
+    const fencedWithTrailingComma = '```json\n{"rows": [{"id": 1, "name": "Test",}],}\n```';
+    const parsed2 = safeJsonParse(fencedWithTrailingComma);
+    expect(parsed2.rows[0].name).toBe('Test');
+  });
 });

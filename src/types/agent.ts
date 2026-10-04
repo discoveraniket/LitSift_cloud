@@ -20,6 +20,11 @@ export interface AgentMessage {
   candidateTokens?: number;
   cachedTokens?: number;
   modelUsed?: string;
+  timeToFirstToken?: number; // TTFT in seconds
+  tokensPerSecond?: number;  // Generation throughput in tok/s
+  cost?: number;             // Request cost in USD
+  upstreamProvider?: string; // Upstream inference provider (e.g. DeepInfra, Together)
+  generationId?: string;     // Provider request/generation ID
   toolsExecuted?: AgentToolExecution[];
   toolCall?: {
     name: string;
@@ -52,6 +57,11 @@ export interface AgentExecutionResult {
   candidateTokens?: number;
   cachedTokens?: number;
   modelUsed?: string;
+  timeToFirstToken?: number;
+  tokensPerSecond?: number;
+  cost?: number;
+  upstreamProvider?: string;
+  generationId?: string;
   toolsExecuted: AgentToolExecution[];
   executionTime?: number;
   options?: string[];

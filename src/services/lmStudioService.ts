@@ -62,7 +62,14 @@ export interface StreamTurnResult {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    cachedTokens?: number;
+    thinkingTokens?: number;
   };
+  generationId?: string;
+  timeToFirstToken?: number;
+  tokensPerSecond?: number;
+  upstreamProvider?: string;
+  cost?: number;
 }
 
 /**
@@ -163,6 +170,7 @@ export async function streamLmStudioChatTurn(options: {
   }
 
   const endpoint = `${effectiveBase}/chat/completions`;
+  const turnStartTime = performance.now();
 
   const res = await fetch(endpoint, {
     method: 'POST',
@@ -200,6 +208,9 @@ export async function streamLmStudioChatTurn(options: {
 
   let sseBuffer = '';
   let finalUsage: any = null;
+  let firstByteTime: number | null = null;
+  let firstTokenTime: number | null = null;
+  let generationId: string | undefined;
 
   while (true) {
     if (options.signal?.aborted) {
@@ -209,6 +220,10 @@ export async function streamLmStudioChatTurn(options: {
 
     const { done, value } = await reader.read();
     if (done) break;
+
+    if (firstByteTime === null) {
+      firstByteTime = performance.now();
+    }
 
     sseBuffer += decoder.decode(value, { stream: true });
     const lines = sseBuffer.split('\n');
@@ -229,6 +244,10 @@ export async function streamLmStudioChatTurn(options: {
         continue;
       }
 
+      if (!generationId && chunkJson.id) {
+        generationId = chunkJson.id;
+      }
+
       if (chunkJson.usage) {
         finalUsage = chunkJson.usage;
       }
@@ -238,6 +257,13 @@ export async function streamLmStudioChatTurn(options: {
 
       const delta = choice.delta;
       if (!delta) continue;
+
+      if (
+        firstTokenTime === null &&
+        (delta.content || delta.reasoning_content || (delta.tool_calls && delta.tool_calls.length > 0))
+      ) {
+        firstTokenTime = performance.now();
+      }
 
       // 1. Check for dedicated reasoning_content delta (DeepSeek / Qwen reasoning format)
       if (delta.reasoning_content) {
@@ -365,11 +391,27 @@ export async function streamLmStudioChatTurn(options: {
     });
   }
 
+  const totalDurationSec = (performance.now() - turnStartTime) / 1000;
+  const effectiveFirstTokenTime = firstTokenTime ?? firstByteTime;
+  const ttftSec =
+    effectiveFirstTokenTime !== null
+      ? Number(((effectiveFirstTokenTime - turnStartTime) / 1000).toFixed(1))
+      : undefined;
+  const genDurationSec = ttftSec !== undefined ? Math.max(0.01, totalDurationSec - ttftSec) : totalDurationSec;
+  const candidateTokens = finalUsage?.completion_tokens ?? 0;
+  const tokensPerSecond =
+    candidateTokens > 0 && genDurationSec > 0
+      ? Number((candidateTokens / genDurationSec).toFixed(1))
+      : undefined;
+
   return {
     text: fullAnswerText.trim(),
     thought: fullThoughtText.trim() || undefined,
     functionCalls: parsedFunctionCalls,
     toolCalls: parsedFunctionCalls,
+    generationId,
+    timeToFirstToken: ttftSec,
+    tokensPerSecond,
     usage: finalUsage
       ? {
           promptTokens: finalUsage.prompt_tokens,
@@ -378,6 +420,8 @@ export async function streamLmStudioChatTurn(options: {
           prompt_tokens: finalUsage.prompt_tokens,
           completion_tokens: finalUsage.completion_tokens,
           total_tokens: finalUsage.total_tokens,
+          cachedTokens: finalUsage.prompt_tokens_details?.cached_tokens,
+          thinkingTokens: finalUsage.completion_tokens_details?.reasoning_tokens,
         }
       : undefined,
   };

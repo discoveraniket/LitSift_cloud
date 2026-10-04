@@ -11,6 +11,7 @@ import {
   getActiveProvider,
   getLmStudioModel,
   getOpenRouterModel,
+  getOpenRouterApiKey,
   DEFAULT_OPENROUTER_MODEL,
 } from './providerConfig';
 import { executeLmStudioStructuredGeneration, OpenAiMessage } from './lmStudioService';
@@ -35,6 +36,62 @@ export interface AgentToolSpec {
     required?: string[];
   };
   execute: (args: any, mode: AgentExecutionMode) => Promise<ToolExecutionResult>;
+}
+
+/**
+ * Repairs truncated JSON responses by closing unterminated strings,
+ * stripping dangling colons/commas, and balancing unclosed brackets and braces.
+ */
+export function repairTruncatedJson(str: string): string {
+  let inString = false;
+  let isEscaped = false;
+  const stack: string[] = [];
+
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    if (inString) {
+      if (char === '\\' && !isEscaped) {
+        isEscaped = true;
+      } else {
+        if (char === '"' && !isEscaped) {
+          inString = false;
+        }
+        isEscaped = false;
+      }
+    } else {
+      if (char === '"') {
+        inString = true;
+      } else if (char === '{' || char === '[') {
+        stack.push(char);
+      } else if (char === '}' || char === ']') {
+        const last = stack[stack.length - 1];
+        if ((char === '}' && last === '{') || (char === ']' && last === '[')) {
+          stack.pop();
+        }
+      }
+    }
+  }
+
+  let repaired = str;
+  // If terminated inside a string, close the string quote
+  if (inString) {
+    repaired += '"';
+  }
+
+  // Remove any dangling colon or comma at end of line/content
+  repaired = repaired.replace(/,\s*$/, '').replace(/:\s*$/, ': null');
+
+  // Close unclosed structures in reverse order
+  while (stack.length > 0) {
+    const openChar = stack.pop();
+    if (openChar === '{') {
+      repaired = repaired.replace(/,\s*$/, '') + '}';
+    } else if (openChar === '[') {
+      repaired = repaired.replace(/,\s*$/, '') + ']';
+    }
+  }
+
+  return repaired;
 }
 
 /**
@@ -63,14 +120,20 @@ export const safeJsonParse = <T = any>(rawText: string, fallback?: T): T => {
       return JSON.parse(withoutTrailingCommas);
     } catch {
       // 4. Fallback: repair unescaped raw newlines or control characters
+      let sanitized = cleaned
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, (c) => (c === '\n' || c === '\r' || c === '\t' ? c : ''))
+        .replace(/,\s*([}\]])/g, '$1');
       try {
-        const sanitized = cleaned
-          .replace(/[\u0000-\u001F\u007F-\u009F]/g, (c) => (c === '\n' || c === '\r' || c === '\t' ? c : ''))
-          .replace(/,\s*([}\]])/g, '$1');
         return JSON.parse(sanitized);
       } catch {
-        if (fallback !== undefined) return fallback;
-        throw firstErr;
+        // 5. Fallback: repair truncated JSON structures (unterminated strings, unclosed brackets/braces)
+        try {
+          const repaired = repairTruncatedJson(sanitized);
+          return JSON.parse(repaired);
+        } catch {
+          if (fallback !== undefined) return fallback;
+          throw firstErr;
+        }
       }
     }
   }
@@ -898,16 +961,27 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         const gridStore = useGridStore.getState();
         const logStore = useLogStore.getState();
       const targetPdfTitle = args.pdfId || 'Active Research Paper';
-      const apiKey = getGeminiApiKey();
-      const selectedModel = getSelectedGeminiModel();
+      const provider = getActiveProvider();
+      const isOpenRouter = provider === 'openrouter';
+      const isLmStudio = provider === 'lmstudio';
+      const isGemini = provider === 'gemini';
 
-      if (!apiKey) {
+      if (isGemini && !getGeminiApiKey()) {
         throw new Error('GEMINI_API_KEY is not configured in settings or environment.');
       }
+      if (isOpenRouter && !getOpenRouterApiKey()) {
+        throw new Error('OpenRouter API key is not configured in settings.');
+      }
+
+      const modelDisplayName = isOpenRouter
+        ? `OpenRouter (${getOpenRouterModel() || DEFAULT_OPENROUTER_MODEL})`
+        : isLmStudio
+        ? `LM Studio (${getLmStudioModel() || 'Local Model'})`
+        : `Gemini (${getSelectedGeminiModel()})`;
 
       logStore.setActiveStep(`[1/3] Reading PDF document & schema columns...`);
       useAgentStore.getState().setActivityStatus('executing_tool', `[1/3] Reading PDF document & schema columns...`, 'extractPDFData');
-      logStore.addLog('info', `Starting extraction for "${targetPdfTitle}" using ${selectedModel}`);
+      logStore.addLog('info', `Starting extraction for "${targetPdfTitle}" using ${modelDisplayName}`);
 
       const pdfStore = usePdfStore.getState();
       const pdfInfo = pdfStore.pdfs.find((p) => p.id === targetPdfTitle || p.name === targetPdfTitle) || pdfStore.getActivePdf();
@@ -1036,7 +1110,6 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
       contentsParts.push({ text: schemaPrompt });
 
       const genStartTime = performance.now();
-      const provider = getActiveProvider();
       let text = '';
       let elapsed = '0.00';
 
@@ -1107,6 +1180,8 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
         );
         text = lmsResult.rawText;
       } else {
+        const apiKey = getGeminiApiKey();
+        const selectedModel = getSelectedGeminiModel();
         logStore.setActiveStep(`[2/3] Transmitting request to Google Gemini (${selectedModel})...`);
         useAgentStore.getState().setActivityStatus('executing_tool', `[2/3] Extracting schema findings via Gemini (${selectedModel})...`, 'extractPDFData');
         const ai = new GoogleGenAI({ apiKey });
