@@ -28,8 +28,8 @@ export const ThoughtAccordion: React.FC<ThoughtAccordionProps> = ({
     }
   }, [thought, isActive, isExpanded]);
 
-  // If there's no thought text and it's not currently active, nothing to render
-  if (!thought && !isActive) return null;
+  // Only render when thought content actually exists
+  if (!thought) return null;
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -125,21 +125,14 @@ export const ThoughtAccordion: React.FC<ThoughtAccordionProps> = ({
             overflowY: 'auto',
           }}
         >
-          {thought ? (
-            <div className="vscode-thought-markdown">
-              <div dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(thought) }} />
-              {isActive && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                  <span className="pulsing-dot" />
-                </div>
-              )}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-              <span className="pulsing-dot" />
-              Deliberating research context and planning agent actions...
-            </div>
-          )}
+          <div className="vscode-thought-markdown">
+            <div dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(thought) }} />
+            {isActive && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                <span className="pulsing-dot" />
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

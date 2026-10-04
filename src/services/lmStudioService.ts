@@ -132,6 +132,7 @@ export async function streamLmStudioChatTurn(options: {
     thoughtChunk?: string;
     fullText: string;
     fullThoughtText: string;
+    toolCallChunk?: { name?: string; argumentsChunk?: string };
   }) => void;
 }): Promise<StreamTurnResult> {
   const effectiveBase = getEffectiveLmStudioUrl(options.baseUrl);
@@ -320,6 +321,14 @@ export async function streamLmStudioChatTurn(options: {
             if (tc.function?.name) accumulatedToolCalls[idx].name += tc.function.name;
             if (tc.function?.arguments) accumulatedToolCalls[idx].arguments += tc.function.arguments;
           }
+          options.onStream?.({
+            fullText: fullAnswerText,
+            fullThoughtText,
+            toolCallChunk: {
+              name: accumulatedToolCalls[idx].name,
+              argumentsChunk: tc.function?.arguments,
+            },
+          });
         }
       }
     }

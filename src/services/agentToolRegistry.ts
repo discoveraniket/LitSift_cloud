@@ -2,6 +2,7 @@ import { produce } from 'immer';
 import { useGridStore } from '../store/useGridStore';
 import { usePdfStore } from '../store/usePdfStore';
 import { useLogStore } from '../store/useLogStore';
+import { useAgentStore } from '../store/useAgentStore';
 import { getGeminiApiKey, getSelectedGeminiModel } from './geminiService';
 import { getPdfBase64, buildPaperMarkdownContext, resolveEffectiveGroundingMode } from './pdfUtils';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -905,6 +906,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
       }
 
       logStore.setActiveStep(`[1/3] Reading PDF document & schema columns...`);
+      useAgentStore.getState().setActivityStatus('executing_tool', `[1/3] Reading PDF document & schema columns...`, 'extractPDFData');
       logStore.addLog('info', `Starting extraction for "${targetPdfTitle}" using ${selectedModel}`);
 
       const pdfStore = usePdfStore.getState();
@@ -1041,6 +1043,7 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
       if (provider === 'openrouter') {
         const orModelName = getOpenRouterModel() || DEFAULT_OPENROUTER_MODEL;
         logStore.setActiveStep(`[2/3] Transmitting request to OpenRouter (${orModelName})...`);
+        useAgentStore.getState().setActivityStatus('executing_tool', `[2/3] Extracting schema findings via OpenRouter (${orModelName})...`, 'extractPDFData');
         const fullPromptText = contentsParts.map((p) => p.text || '').filter(Boolean).join('\n\n');
         const openAiMessages: OpenAiMessage[] = [
           {
@@ -1073,6 +1076,7 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
       } else if (provider === 'lmstudio') {
         const localModelName = getLmStudioModel() || 'Local Model';
         logStore.setActiveStep(`[2/3] Transmitting request to LM Studio (${localModelName})...`);
+        useAgentStore.getState().setActivityStatus('executing_tool', `[2/3] Extracting schema findings via LM Studio (${localModelName})...`, 'extractPDFData');
         const fullPromptText = contentsParts.map((p) => p.text || '').filter(Boolean).join('\n\n');
         const openAiMessages: OpenAiMessage[] = [
           {
@@ -1104,6 +1108,7 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
         text = lmsResult.rawText;
       } else {
         logStore.setActiveStep(`[2/3] Transmitting request to Google Gemini (${selectedModel})...`);
+        useAgentStore.getState().setActivityStatus('executing_tool', `[2/3] Extracting schema findings via Gemini (${selectedModel})...`, 'extractPDFData');
         const ai = new GoogleGenAI({ apiKey });
         let res: any;
         try {
@@ -1164,6 +1169,7 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
       }
 
         logStore.setActiveStep(`[3/3] Parsing JSON payload & populating table grid...`);
+        useAgentStore.getState().setActivityStatus('executing_tool', `[3/3] Staging extracted findings into table grid...`, 'extractPDFData');
         const parsed = safeJsonParse(text);
 
         let rawRows: any[] = [];

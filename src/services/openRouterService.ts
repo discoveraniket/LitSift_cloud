@@ -179,7 +179,13 @@ export async function streamOpenRouterChatTurn(options: {
   apiKey?: string;
   baseUrl?: string;
   signal?: AbortSignal;
-  onStream?: (chunk: { textChunk?: string; thoughtChunk?: string; fullText: string; fullThoughtText: string }) => void;
+  onStream?: (chunk: {
+    textChunk?: string;
+    thoughtChunk?: string;
+    fullText: string;
+    fullThoughtText: string;
+    toolCallChunk?: { name?: string; argumentsChunk?: string };
+  }) => void;
 }): Promise<StreamTurnResult> {
   const apiKey = options.apiKey ?? getOpenRouterApiKey();
   const baseUrl = (options.baseUrl ?? getOpenRouterBaseUrl()).trim().replace(/\/+$/, '');
@@ -371,6 +377,14 @@ export async function streamOpenRouterChatTurn(options: {
             if (tc.function?.name) accumulatedToolCalls[idx].name += tc.function.name;
             if (tc.function?.arguments) accumulatedToolCalls[idx].arguments += tc.function.arguments;
           }
+          options.onStream?.({
+            fullText: fullAnswerText,
+            fullThoughtText,
+            toolCallChunk: {
+              name: accumulatedToolCalls[idx].name,
+              argumentsChunk: tc.function?.arguments,
+            },
+          });
         }
       }
     }

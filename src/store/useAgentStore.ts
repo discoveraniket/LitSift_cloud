@@ -10,12 +10,18 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   messages: [],
   activePdfId: '',
   isThinking: false,
+  activityStatus: 'idle',
+  activityDetail: undefined,
+  activityToolName: undefined,
   streamingThought: '',
   streamingText: '',
   mode: 'human_in_loop',
   abortController: null,
   lastInteractionId: undefined,
   checkpoint: null,
+
+  setActivityStatus: (status, detail, toolName) =>
+    set({ activityStatus: status, activityDetail: detail, activityToolName: toolName }),
 
   hydrateFromDb: async () => {
     try {
@@ -99,6 +105,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       produce((state: AgentState) => {
         state.messages.push(userMsg);
         state.isThinking = true;
+        state.activityStatus = 'reading_context';
+        state.activityDetail = activePdfTitle
+          ? `Reading "${activePdfTitle}" & assembling context...`
+          : 'Reading prompt & assembling context...';
+        state.activityToolName = undefined;
         state.streamingThought = '';
         state.streamingText = '';
         state.abortController = controller;
@@ -113,9 +124,30 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       activePdfTitle,
       controller.signal,
       (stream) => {
-        set({
-          streamingThought: stream.fullThoughtText || '',
-          streamingText: stream.fullText || '',
+        set((prev) => {
+          let nextStatus = stream.activityStatus || prev.activityStatus;
+          let nextDetail = stream.activityDetail !== undefined ? stream.activityDetail : prev.activityDetail;
+          let nextToolName = stream.activityToolName !== undefined ? stream.activityToolName : prev.activityToolName;
+
+          if (stream.thoughtChunk) {
+            nextStatus = 'thinking';
+            nextDetail = 'Reasoning through research context...';
+          } else if (stream.toolCallChunk) {
+            nextStatus = 'formulating_action';
+            nextToolName = stream.toolCallChunk.name || nextToolName;
+            nextDetail = nextToolName ? `Preparing tool action: ${nextToolName}...` : 'Preparing tool action...';
+          } else if (stream.textChunk && !stream.thoughtChunk && nextStatus !== 'executing_tool') {
+            nextStatus = 'generating_text';
+            nextDetail = undefined;
+          }
+
+          return {
+            streamingThought: stream.fullThoughtText || '',
+            streamingText: stream.fullText || '',
+            activityStatus: nextStatus,
+            activityDetail: nextDetail,
+            activityToolName: nextToolName,
+          };
         });
       }
     )
@@ -152,6 +184,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           produce((state: AgentState) => {
             state.messages.push(agentMsg);
             state.isThinking = false;
+            state.activityStatus = 'idle';
+            state.activityDetail = undefined;
+            state.activityToolName = undefined;
             state.streamingThought = '';
             state.streamingText = '';
             state.abortController = null;
@@ -176,6 +211,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           produce((state: AgentState) => {
             state.messages.push(errMsg);
             state.isThinking = false;
+            state.activityStatus = 'idle';
+            state.activityDetail = undefined;
+            state.activityToolName = undefined;
             state.streamingThought = '';
             state.streamingText = '';
             state.abortController = null;
@@ -190,7 +228,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const controller = get().abortController;
     if (controller) {
       controller.abort();
-      set({ isThinking: false, streamingThought: '', streamingText: '', abortController: null });
+      set({
+        isThinking: false,
+        activityStatus: 'idle',
+        activityDetail: undefined,
+        activityToolName: undefined,
+        streamingThought: '',
+        streamingText: '',
+        abortController: null,
+      });
     }
   },
 
@@ -292,6 +338,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     set(
       produce((state: AgentState) => {
         state.isThinking = true;
+        state.activityStatus = 'reading_context';
+        state.activityDetail = `Resuming from step ${cp.currentStep}/${cp.maxSteps}...`;
+        state.activityToolName = undefined;
         state.streamingThought = '';
         state.streamingText = '';
         state.abortController = controller;
@@ -304,9 +353,30 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         cp.activePdfTitle,
         controller.signal,
         (stream) => {
-          set({
-            streamingThought: stream.fullThoughtText || '',
-            streamingText: stream.fullText || '',
+          set((prev) => {
+            let nextStatus = stream.activityStatus || prev.activityStatus;
+            let nextDetail = stream.activityDetail !== undefined ? stream.activityDetail : prev.activityDetail;
+            let nextToolName = stream.activityToolName !== undefined ? stream.activityToolName : prev.activityToolName;
+
+            if (stream.thoughtChunk) {
+              nextStatus = 'thinking';
+              nextDetail = 'Reasoning through research context...';
+            } else if (stream.toolCallChunk) {
+              nextStatus = 'formulating_action';
+              nextToolName = stream.toolCallChunk.name || nextToolName;
+              nextDetail = nextToolName ? `Preparing tool action: ${nextToolName}...` : 'Preparing tool action...';
+            } else if (stream.textChunk && !stream.thoughtChunk && nextStatus !== 'executing_tool') {
+              nextStatus = 'generating_text';
+              nextDetail = undefined;
+            }
+
+            return {
+              streamingThought: stream.fullThoughtText || '',
+              streamingText: stream.fullText || '',
+              activityStatus: nextStatus,
+              activityDetail: nextDetail,
+              activityToolName: nextToolName,
+            };
           });
         },
         cp
@@ -342,6 +412,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         produce((state: AgentState) => {
           state.messages.push(agentMsg);
           state.isThinking = false;
+          state.activityStatus = 'idle';
+          state.activityDetail = undefined;
+          state.activityToolName = undefined;
           state.streamingThought = '';
           state.streamingText = '';
           state.abortController = null;
@@ -365,6 +438,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         produce((state: AgentState) => {
           state.messages.push(errMsg);
           state.isThinking = false;
+          state.activityStatus = 'idle';
+          state.activityDetail = undefined;
+          state.activityToolName = undefined;
           state.streamingThought = '';
           state.streamingText = '';
           state.abortController = null;

@@ -5,7 +5,7 @@ import { getPdfBase64, buildPaperMarkdownContext, resolveEffectiveGroundingMode 
 import { getToolsForMode, agentToolsRegistry, AgentExecutionMode } from './agentToolRegistry';
 import { useAgentStore } from '../store/useAgentStore';
 import { useLogStore } from '../store/useLogStore';
-import { AgentExecutionResult, AgentToolExecution, AgentCheckpoint } from '../types/agent';
+import { AgentExecutionResult, AgentToolExecution, AgentCheckpoint, AgentActivityStatus } from '../types/agent';
 import {
   getActiveProvider,
   getLmStudioModel,
@@ -164,6 +164,13 @@ export interface AgentStreamUpdate {
   fullThoughtText?: string;
   textChunk?: string;
   fullText?: string;
+  toolCallChunk?: {
+    name?: string;
+    argumentsChunk?: string;
+  };
+  activityStatus?: AgentActivityStatus;
+  activityDetail?: string;
+  activityToolName?: string;
 }
 
 export type AgentStreamCallback = (data: AgentStreamUpdate) => void;
@@ -569,6 +576,12 @@ Execute all required tool actions to fulfill the user's instructions and summari
       if (isOpenAiCompatible) {
         const providerName = isOpenRouter ? 'OpenRouter' : 'LM Studio';
         logStore.setActiveStep(`[Step ${currentStep}/${MAX_STEPS}] Reasoning with ${providerName} (${selectedModel})...`);
+        onStream?.({
+          fullThoughtText: accumulatedThoughts.length > 0 ? accumulatedThoughts.join('\n\n---\n\n') : undefined,
+          fullText: finalReplyText,
+          activityStatus: 'reading_context',
+          activityDetail: `Evaluating prompt with ${providerName} (${selectedModel})...`,
+        });
         const genStartTime = performance.now();
 
         let lmsResult: any;
@@ -592,6 +605,20 @@ Execute all required tool actions to fulfill the user's instructions and summari
                       thoughtChunk: chunk.thoughtChunk,
                       fullThoughtText: liveFullThought,
                       fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                      activityStatus: 'thinking',
+                      activityDetail: 'Reasoning through research context...',
+                    });
+                  }
+                  if (chunk.toolCallChunk) {
+                    onStream?.({
+                      fullThoughtText: accumulatedThoughts.length > 0 ? accumulatedThoughts.join('\n\n---\n\n') : chunk.fullThoughtText,
+                      fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                      toolCallChunk: chunk.toolCallChunk,
+                      activityStatus: 'formulating_action',
+                      activityToolName: chunk.toolCallChunk.name,
+                      activityDetail: chunk.toolCallChunk.name
+                        ? `Formulating tool action: ${chunk.toolCallChunk.name}...`
+                        : 'Formulating tool parameters...',
                     });
                   }
                   if (chunk.textChunk) {
@@ -602,6 +629,7 @@ Execute all required tool actions to fulfill the user's instructions and summari
                       textChunk: chunk.textChunk,
                       fullThoughtText: liveFullThought,
                       fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                      activityStatus: 'generating_text',
                     });
                   }
                 },
@@ -620,6 +648,20 @@ Execute all required tool actions to fulfill the user's instructions and summari
                       thoughtChunk: chunk.thoughtChunk,
                       fullThoughtText: liveFullThought,
                       fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                      activityStatus: 'thinking',
+                      activityDetail: 'Reasoning through research context...',
+                    });
+                  }
+                  if (chunk.toolCallChunk) {
+                    onStream?.({
+                      fullThoughtText: accumulatedThoughts.length > 0 ? accumulatedThoughts.join('\n\n---\n\n') : chunk.fullThoughtText,
+                      fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                      toolCallChunk: chunk.toolCallChunk,
+                      activityStatus: 'formulating_action',
+                      activityToolName: chunk.toolCallChunk.name,
+                      activityDetail: chunk.toolCallChunk.name
+                        ? `Formulating tool action: ${chunk.toolCallChunk.name}...`
+                        : 'Formulating tool parameters...',
                     });
                   }
                   if (chunk.textChunk) {
@@ -630,6 +672,7 @@ Execute all required tool actions to fulfill the user's instructions and summari
                       textChunk: chunk.textChunk,
                       fullThoughtText: liveFullThought,
                       fullText: finalReplyText ? `${finalReplyText}\n\n${chunk.fullText}` : chunk.fullText,
+                      activityStatus: 'generating_text',
                     });
                   }
                 },
@@ -756,6 +799,11 @@ Execute all required tool actions to fulfill the user's instructions and summari
           if (toolSpec) {
             logStore.addLog('info', `[Step ${currentStep}] Invoking tool: ${fc.name}`, fc.args);
             logStore.setActiveStep(`[Step ${currentStep}] Executing ${fc.name}...`);
+            onStream?.({
+              activityStatus: 'executing_tool',
+              activityToolName: fc.name,
+              activityDetail: `Executing tool: ${fc.name}...`,
+            });
             const toolStartTime = performance.now();
             const toolResult = await toolSpec.execute(fc.args || {}, agentMode);
             const toolDurationSec = ((performance.now() - toolStartTime) / 1000).toFixed(2);
@@ -829,6 +877,14 @@ Execute all required tool actions to fulfill the user's instructions and summari
       const allModelParts: any[] = [];
       let lastUsage: any = null;
 
+      logStore.setActiveStep(`[Step ${currentStep}/${MAX_STEPS}] Reasoning with Gemini (${selectedModel})...`);
+      onStream?.({
+        fullThoughtText: accumulatedThoughts.length > 0 ? accumulatedThoughts.join('\n\n---\n\n') : undefined,
+        fullText: finalReplyText,
+        activityStatus: 'reading_context',
+        activityDetail: `Evaluating prompt with Gemini (${selectedModel})...`,
+      });
+
       const executeStreamTurn = async () => {
         const stream = await ai.models.generateContentStream({
           model: selectedModel,
@@ -849,28 +905,39 @@ Execute all required tool actions to fulfill the user's instructions and summari
           for (const part of parts) {
             allModelParts.push(part);
 
+            const getLiveThought = () =>
+              accumulatedThoughts.length > 0
+                ? (stepThoughtText ? accumulatedThoughts.concat(stepThoughtText).join('\n\n---\n\n') : accumulatedThoughts.join('\n\n---\n\n'))
+                : stepThoughtText;
+
             if (part.thought && part.text) {
               stepThoughtText += part.text;
-              const liveFullThought = accumulatedThoughts.concat(stepThoughtText).join('\n\n---\n\n');
               onStream?.({
                 thoughtChunk: part.text,
-                fullThoughtText: liveFullThought,
+                fullThoughtText: getLiveThought(),
                 fullText: finalReplyText ? `${finalReplyText}\n\n${stepAnswerText}` : stepAnswerText,
+                activityStatus: 'thinking',
+                activityDetail: 'Reasoning through research context...',
               });
             } else if (!part.thought && part.text) {
               stepAnswerText += part.text;
-              const liveFullThought = accumulatedThoughts.length > 0
-                ? (stepThoughtText ? accumulatedThoughts.concat(stepThoughtText).join('\n\n---\n\n') : accumulatedThoughts.join('\n\n---\n\n'))
-                : stepThoughtText;
               onStream?.({
                 textChunk: part.text,
-                fullThoughtText: liveFullThought,
+                fullThoughtText: getLiveThought(),
                 fullText: finalReplyText ? `${finalReplyText}\n\n${stepAnswerText}` : stepAnswerText,
+                activityStatus: 'generating_text',
               });
             }
 
             if (part.functionCall) {
               collectedFunctionCalls.push(part.functionCall);
+              onStream?.({
+                fullThoughtText: getLiveThought(),
+                fullText: finalReplyText ? `${finalReplyText}\n\n${stepAnswerText}` : stepAnswerText,
+                activityStatus: 'formulating_action',
+                activityToolName: part.functionCall.name,
+                activityDetail: `Formulating tool action: ${part.functionCall.name}...`,
+              });
             }
           }
 
@@ -969,6 +1036,11 @@ Execute all required tool actions to fulfill the user's instructions and summari
         if (toolSpec) {
           logStore.addLog('info', `[Step ${currentStep}] Invoking tool: ${fc.name}`, fc.args);
           logStore.setActiveStep(`[Step ${currentStep}] Executing ${fc.name}...`);
+          onStream?.({
+            activityStatus: 'executing_tool',
+            activityToolName: fc.name,
+            activityDetail: `Executing tool: ${fc.name}...`,
+          });
 
           const toolStartTime = performance.now();
           const toolResult = await toolSpec.execute(fc.args || {}, agentMode);

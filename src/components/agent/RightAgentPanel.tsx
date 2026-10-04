@@ -9,6 +9,8 @@ import {
   Zap,
   RotateCcw,
   ExternalLink,
+  BookOpen,
+  Cog,
 } from 'lucide-react';
 import { useAgentStore } from '../../store/useAgentStore';
 import { useGridStore } from '../../store/useGridStore';
@@ -30,6 +32,9 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
   const {
     messages,
     isThinking,
+    activityStatus,
+    activityDetail,
+    activityToolName,
     streamingThought,
     streamingText,
     sendMessage,
@@ -557,7 +562,7 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
             );
           })}
 
-        {/* Live Active Thinking Turn */}
+        {/* Live Active Turn with Granular Step Feedback */}
         {isThinking && (
           <div
             className="vscode-chat-turn agent live-thinking"
@@ -591,19 +596,110 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
               >
                 <Bot size={11} color="var(--accent-primary)" />
               </div>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>LitSift Agent</span>
             </div>
 
-            <ThoughtAccordion
-              thought={streamingThought}
-              isActive={true}
-              elapsedSeconds={elapsed}
-              defaultExpanded={true}
-            />
+            {/* Phase 1: Context Reading & Ingestion (Only before text or thoughts have started) */}
+            {activityStatus === 'reading_context' && !streamingThought && !streamingText && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '7px 10px',
+                  borderRadius: '6px',
+                  background: 'rgba(137, 180, 250, 0.05)',
+                  border: '1px solid rgba(137, 180, 250, 0.15)',
+                  fontSize: '11px',
+                  marginBottom: '8px',
+                }}
+              >
+                <BookOpen size={13} color="var(--accent-primary)" style={{ animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+                <span style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>
+                  Reading context & prompt
+                </span>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                  ({elapsed.toFixed(1)}s)...
+                </span>
+                {activityDetail && (
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      color: 'var(--text-muted)',
+                      marginLeft: 'auto',
+                      fontStyle: 'italic',
+                      maxWidth: '220px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={activityDetail}
+                  >
+                    {activityDetail}
+                  </span>
+                )}
+              </div>
+            )}
 
+            {/* Phase 2: Chain-of-Thought (ONLY rendered if thought tokens actually exist) */}
+            {streamingThought && (
+              <ThoughtAccordion
+                thought={streamingThought}
+                isActive={activityStatus === 'thinking' || (!streamingText && activityStatus !== 'executing_tool' && activityStatus !== 'formulating_action')}
+                elapsedSeconds={elapsed}
+                defaultExpanded={true}
+              />
+            )}
+
+            {/* Phase 3 (Case 1): Internal Tokens / Tool Formulation & Execution Feedback */}
+            {(activityStatus === 'formulating_action' || activityStatus === 'executing_tool') && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '7px 10px',
+                  borderRadius: '6px',
+                  background: 'rgba(250, 179, 135, 0.08)',
+                  border: '1px solid rgba(250, 179, 135, 0.25)',
+                  fontSize: '11px',
+                  marginBottom: '8px',
+                }}
+              >
+                <Cog size={13} color="#fab387" style={{ animation: 'spin 2s linear infinite' }} />
+                <span style={{ fontWeight: 600, color: '#fab387' }}>
+                  {activityStatus === 'formulating_action'
+                    ? `Formulating tool call: ${activityToolName || 'tool'}`
+                    : `Executing: ${activityToolName || 'tool'}`}
+                </span>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                  ({elapsed.toFixed(1)}s)...
+                </span>
+                {activityDetail && (
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      color: 'var(--text-muted)',
+                      marginLeft: 'auto',
+                      fontStyle: 'italic',
+                      maxWidth: '220px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={activityDetail}
+                  >
+                    {activityDetail}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Phase 4 (Case 2): Conversational Text Streaming (Direct Markdown, no redundant banner) */}
             {streamingText && (
               <div
                 className="chat-markdown vscode-markdown"
-                style={{ marginTop: '8px', padding: '0 4px' }}
+                style={{ marginTop: '4px', padding: '0 4px' }}
                 dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(streamingText) }}
               />
             )}

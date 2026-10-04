@@ -58,10 +58,21 @@ export interface AgentExecutionResult {
   checkpoint?: AgentCheckpoint;
 }
 
+export type AgentActivityStatus =
+  | 'idle'
+  | 'reading_context'
+  | 'thinking'
+  | 'formulating_action'
+  | 'executing_tool'
+  | 'generating_text';
+
 export interface AgentState {
   messages: AgentMessage[];
   activePdfId: string;
   isThinking: boolean;
+  activityStatus: AgentActivityStatus;
+  activityDetail?: string;
+  activityToolName?: string;
   streamingThought?: string;
   streamingText?: string;
   mode: 'human_in_loop' | 'autonomous_autopilot';
@@ -81,5 +92,6 @@ export interface AgentState {
   setExecutionMode: (mode: 'human_in_loop' | 'autonomous_autopilot') => void;
   setCheckpoint: (checkpoint: AgentCheckpoint | null) => void;
   resumeCheckpoint: () => Promise<void>;
+  setActivityStatus: (status: AgentActivityStatus, detail?: string, toolName?: string) => void;
 }
 
