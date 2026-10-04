@@ -10,6 +10,10 @@ import {
   setOpenRouterBaseUrl,
   getActiveModelLabel,
   DEFAULT_OPENROUTER_MODEL,
+  getModelReasoningCapability,
+  getThinkingEnabled,
+  setThinkingEnabled,
+  setLmStudioReasoningEffort,
 } from '../services/providerConfig';
 import {
   checkOpenRouterConnection,
@@ -59,6 +63,42 @@ describe('OpenRouter Provider Configuration', () => {
     expect(qwenPreset).toBeDefined();
     expect(qwenPreset?.context).toContain('262K');
     expect(qwenPreset?.pricing).toContain('Free');
+  });
+
+  it('classifies model reasoning capabilities correctly into binary, tiered, or none', () => {
+    // Binary thinking models (Qwen, QwQ, DeepSeek-R1)
+    expect(getModelReasoningCapability('qwen/qwen3.8-27b:free')).toBe('binary');
+    expect(getModelReasoningCapability('qwen/qwen-2.5-coder-32b-instruct')).toBe('binary');
+    expect(getModelReasoningCapability('deepseek/deepseek-r1')).toBe('binary');
+    expect(getModelReasoningCapability('deepseek-r1-distill-qwen-14b')).toBe('binary');
+    expect(getModelReasoningCapability('qwq-32b-preview')).toBe('binary');
+    expect(getModelReasoningCapability('my-thinking-model')).toBe('binary');
+    expect(getModelReasoningCapability('deepseek-reasoner')).toBe('binary');
+
+    // Tiered effort models (OpenAI o1, o3, o3-mini, etc.)
+    expect(getModelReasoningCapability('openai/o1')).toBe('tiered');
+    expect(getModelReasoningCapability('openai/o1-mini')).toBe('tiered');
+    expect(getModelReasoningCapability('openai/o3-mini')).toBe('tiered');
+    expect(getModelReasoningCapability('openai/o4')).toBe('tiered');
+    expect(getModelReasoningCapability('custom-reasoning-effort')).toBe('tiered');
+
+    // Non-reasoning standard models
+    expect(getModelReasoningCapability('meta-llama/llama-3.3-70b-instruct')).toBe('none');
+    expect(getModelReasoningCapability('google/gemini-2.5-flash')).toBe('none');
+    expect(getModelReasoningCapability('anthropic/claude-3.5-sonnet')).toBe('none');
+    expect(getModelReasoningCapability('')).toBe('none');
+  });
+
+  it('manages thinkingEnabled toggle state and persistence', () => {
+    expect(getThinkingEnabled()).toBe(true); // Default is true
+
+    setThinkingEnabled(false);
+    expect(getThinkingEnabled()).toBe(false);
+    expect(localStorage.getItem('LITSIFT_THINKING_ENABLED')).toBe('false');
+
+    setThinkingEnabled(true);
+    expect(getThinkingEnabled()).toBe(true);
+    expect(localStorage.getItem('LITSIFT_THINKING_ENABLED')).toBe('true');
   });
 });
 
@@ -234,6 +274,62 @@ describe('OpenRouter HTTP and Streaming Service', () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(2);
     expect(result.parsed.summary).toBe('Success after retry');
+  });
+
+  it('configures OpenRouter reasoning payload adaptively for binary models (on/off)', async () => {
+    let capturedBody: any = null;
+    const encoder = new TextEncoder();
+    const createStream = () =>
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n'));
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        },
+      });
+
+    global.fetch = vi.fn().mockImplementation((_url, init) => {
+      capturedBody = JSON.parse(init.body);
+      return Promise.resolve({
+        ok: true,
+        body: createStream(),
+      });
+    });
+
+    // 1. Binary model with thinkingEnabled = false
+    setThinkingEnabled(false);
+    await streamOpenRouterChatTurn({
+      apiKey: 'sk-or-v1-testkey',
+      model: 'qwen/qwen3.8-27b:free',
+      messages: [{ role: 'user', content: 'Hello' }],
+    });
+    expect(capturedBody.reasoning).toEqual({ effort: 'none' });
+
+    // 2. Binary model with thinkingEnabled = true
+    setThinkingEnabled(true);
+    await streamOpenRouterChatTurn({
+      apiKey: 'sk-or-v1-testkey',
+      model: 'qwen/qwen3.8-27b:free',
+      messages: [{ role: 'user', content: 'Hello' }],
+    });
+    expect(capturedBody.reasoning).toEqual({ exclude: false });
+
+    // 3. Tiered model with reasoningEffort = high
+    setLmStudioReasoningEffort('high');
+    await streamOpenRouterChatTurn({
+      apiKey: 'sk-or-v1-testkey',
+      model: 'openai/o3-mini',
+      messages: [{ role: 'user', content: 'Hello' }],
+    });
+    expect(capturedBody.reasoning).toEqual({ effort: 'high' });
+
+    // 4. Standard non-reasoning model
+    await streamOpenRouterChatTurn({
+      apiKey: 'sk-or-v1-testkey',
+      model: 'meta-llama/llama-3.3-70b-instruct',
+      messages: [{ role: 'user', content: 'Hello' }],
+    });
+    expect(capturedBody.reasoning).toBeUndefined();
   });
 });
 

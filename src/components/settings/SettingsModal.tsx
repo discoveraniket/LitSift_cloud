@@ -25,6 +25,9 @@ import {
   setLmStudioModel,
   getLmStudioReasoningEffort,
   setLmStudioReasoningEffort,
+  getModelReasoningCapability,
+  getThinkingEnabled,
+  setThinkingEnabled,
   LlmProvider,
   ReasoningEffort,
 } from '../../services/providerConfig';
@@ -120,6 +123,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [lmStudioUrl, setLmStudioUrlState] = useState<string>(getLmStudioBaseUrl());
   const [lmStudioModel, setLmStudioModelState] = useState<string>(getLmStudioModel());
   const [reasoningEffort, setReasoningEffortState] = useState<ReasoningEffort>(getLmStudioReasoningEffort());
+  const [thinkingEnabled, setThinkingEnabledState] = useState<boolean>(getThinkingEnabled());
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionResult, setConnectionResult] = useState<{
     tested: boolean;
@@ -224,6 +228,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       setLmStudioBaseUrl(lmStudioUrl);
       setLmStudioModel(lmStudioModel);
       setLmStudioReasoningEffort(reasoningEffort);
+      setThinkingEnabled(thinkingEnabled);
     } else {
       setSelectedGeminiModel(currentModel);
       if (apiKeyInput.trim()) {
@@ -492,38 +497,132 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </div>
               </div>
 
-              {/* Reasoning Effort (For Qwen 3.8 / DeepSeek reasoning models) */}
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                  <Zap size={14} color="var(--accent-primary)" />
-                  REASONING EFFORT (THINKING MODELS)
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
-                  {(['low', 'medium', 'high'] as ReasoningEffort[]).map((effort) => (
-                    <button
-                      key={effort}
-                      type="button"
-                      onClick={() => setReasoningEffortState(effort)}
-                      style={{
-                        padding: '6px 8px',
-                        borderRadius: '6px',
-                        border: reasoningEffort === effort ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
-                        background: reasoningEffort === effort ? 'rgba(137, 180, 250, 0.12)' : 'var(--bg-tertiary)',
-                        color: reasoningEffort === effort ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                        fontSize: '11px',
-                        fontWeight: reasoningEffort === effort ? 600 : 500,
-                        cursor: 'pointer',
-                        textTransform: 'capitalize',
-                      }}
-                    >
-                      {effort}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  Use <strong>Low</strong> for faster multi-turn agent extractions to prevent long internal monologues.
-                </div>
-              </div>
+              {/* Adaptive Reasoning / Thinking Mode */}
+              {(() => {
+                const capability = getModelReasoningCapability(lmStudioModel);
+                if (capability === 'binary') {
+                  return (
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Zap size={14} color="var(--accent-primary)" />
+                          THINKING MODE (FLEXIBLE REASONING)
+                        </label>
+                        <span style={{ fontSize: '10px', color: 'var(--accent-primary)', fontWeight: 600 }}>
+                          On / Off
+                        </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setThinkingEnabledState(true)}
+                          style={{
+                            padding: '6px 8px',
+                            borderRadius: '6px',
+                            border: thinkingEnabled ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+                            background: thinkingEnabled ? 'rgba(137, 180, 250, 0.12)' : 'var(--bg-tertiary)',
+                            color: thinkingEnabled ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            fontSize: '11px',
+                            fontWeight: thinkingEnabled ? 600 : 500,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <span>🧠</span> ON (&lt;think&gt;)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setThinkingEnabledState(false)}
+                          style={{
+                            padding: '6px 8px',
+                            borderRadius: '6px',
+                            border: !thinkingEnabled ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+                            background: !thinkingEnabled ? 'rgba(137, 180, 250, 0.12)' : 'var(--bg-tertiary)',
+                            color: !thinkingEnabled ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            fontSize: '11px',
+                            fontWeight: !thinkingEnabled ? 600 : 500,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <span>⚡</span> OFF (Fast)
+                        </button>
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                        {thinkingEnabled
+                          ? 'Deep reasoning enabled. Model generates internal thinking traces before outputting text.'
+                          : 'Thinking disabled. Lower latency and faster execution for extraction tasks.'}
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (capability === 'tiered') {
+                  return (
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Zap size={14} color="var(--accent-primary)" />
+                          REASONING EFFORT
+                        </label>
+                        <span style={{ fontSize: '10px', color: 'var(--accent-primary)', fontWeight: 600 }}>
+                          Graduated Effort
+                        </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
+                        {(['low', 'medium', 'high'] as ReasoningEffort[]).map((effort) => (
+                          <button
+                            key={effort}
+                            type="button"
+                            onClick={() => setReasoningEffortState(effort)}
+                            style={{
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              border: reasoningEffort === effort ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+                              background: reasoningEffort === effort ? 'rgba(137, 180, 250, 0.12)' : 'var(--bg-tertiary)',
+                              color: reasoningEffort === effort ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                              fontSize: '11px',
+                              fontWeight: reasoningEffort === effort ? 600 : 500,
+                              cursor: 'pointer',
+                              textTransform: 'capitalize',
+                            }}
+                          >
+                            {effort}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                        Controls search budget and depth of reasoning for OpenAI o1/o3 and tiered models.
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '6px',
+                      padding: '8px 10px',
+                      marginBottom: '16px',
+                      fontSize: '11px',
+                      color: 'var(--text-secondary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <span>ℹ️</span> Standard instruction model (direct response without extended reasoning tokens).
+                  </div>
+                );
+              })()}
 
               {/* Informational Card */}
               <div

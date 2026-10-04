@@ -9,6 +9,9 @@ import {
   getOpenRouterBaseUrl,
   getOpenRouterModel,
   DEFAULT_OPENROUTER_MODEL,
+  getModelReasoningCapability,
+  getThinkingEnabled,
+  getLmStudioReasoningEffort,
 } from './providerConfig';
 import { safeJsonParse } from './agentToolRegistry';
 import { createStructuredResponseFormat } from './schemaConverter';
@@ -192,6 +195,21 @@ export async function streamOpenRouterChatTurn(options: {
     temperature: options.temperature ?? 0.2,
     stream: true,
   };
+
+  // Apply model-aware reasoning configuration
+  const capability = getModelReasoningCapability(model);
+  if (capability === 'binary') {
+    if (!getThinkingEnabled()) {
+      requestBody.reasoning = { effort: 'none' };
+    } else {
+      requestBody.reasoning = { exclude: false };
+    }
+  } else if (capability === 'tiered') {
+    const effort = getLmStudioReasoningEffort();
+    if (effort) {
+      requestBody.reasoning = { effort };
+    }
+  }
 
   if (options.tools && options.tools.length > 0) {
     requestBody.tools = options.tools;
@@ -437,6 +455,19 @@ export async function executeOpenRouterStructuredGeneration<T = any>(options: {
     response_format: formatPayload,
     stream: false,
   };
+
+  // Apply model-aware reasoning configuration
+  const capability = getModelReasoningCapability(targetModel);
+  if (capability === 'binary') {
+    if (!getThinkingEnabled()) {
+      requestBody.reasoning = { effort: 'none' };
+    }
+  } else if (capability === 'tiered') {
+    const effort = getLmStudioReasoningEffort();
+    if (effort) {
+      requestBody.reasoning = { effort };
+    }
+  }
 
   const endpoint = `${baseUrl}/chat/completions`;
 

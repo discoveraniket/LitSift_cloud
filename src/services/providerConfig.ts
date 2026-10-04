@@ -5,6 +5,7 @@
 
 export type LlmProvider = 'gemini' | 'lmstudio' | 'openrouter';
 export type ReasoningEffort = 'low' | 'medium' | 'high';
+export type ModelReasoningCapability = 'binary' | 'tiered' | 'none';
 
 const STORAGE_KEYS = {
   PROVIDER: 'LITSIFT_LLM_PROVIDER',
@@ -15,6 +16,7 @@ const STORAGE_KEYS = {
   OPENROUTER_API_KEY: 'LITSIFT_OPENROUTER_API_KEY',
   OPENROUTER_MODEL: 'LITSIFT_OPENROUTER_MODEL',
   OPENROUTER_BASE_URL: 'LITSIFT_OPENROUTER_BASE_URL',
+  THINKING_ENABLED: 'LITSIFT_THINKING_ENABLED',
 };
 
 export const DEFAULT_LMSTUDIO_URL = 'http://localhost:1234/v1';
@@ -66,6 +68,52 @@ export function getLmStudioReasoningEffort(): ReasoningEffort {
 export function setLmStudioReasoningEffort(effort: ReasoningEffort): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(STORAGE_KEYS.LMSTUDIO_REASONING_EFFORT, effort);
+}
+
+export function getThinkingEnabled(): boolean {
+  if (typeof window === 'undefined') return true;
+  const val = localStorage.getItem(STORAGE_KEYS.THINKING_ENABLED);
+  return val !== 'false';
+}
+
+export function setThinkingEnabled(enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(STORAGE_KEYS.THINKING_ENABLED, enabled ? 'true' : 'false');
+}
+
+/**
+ * Classifies model reasoning capability into:
+ * - 'binary': Models supporting on/off flexible thinking (Qwen 3.x, QwQ, DeepSeek-R1)
+ * - 'tiered': Models supporting low/medium/high effort budgets (OpenAI o1/o3/o3-mini, future tiered models)
+ * - 'none': Standard non-reasoning instruction models (Llama, GPT-4o, standard Mistral)
+ */
+export function getModelReasoningCapability(modelId: string): ModelReasoningCapability {
+  if (!modelId) return 'none';
+  const lower = modelId.toLowerCase();
+
+  // Tiered effort models (OpenAI o1, o3, o3-mini, etc.)
+  if (
+    lower.includes('o1') ||
+    lower.includes('o3') ||
+    lower.includes('o4') ||
+    lower.includes('reasoning-effort')
+  ) {
+    return 'tiered';
+  }
+
+  // Binary thinking models (Qwen 3.x, QwQ, DeepSeek-R1, thinking-tagged local models)
+  if (
+    lower.includes('qwen') ||
+    lower.includes('qwq') ||
+    lower.includes('deepseek-r1') ||
+    lower.includes('deepseek/deepseek-r1') ||
+    lower.includes('thinking') ||
+    lower.includes('reasoner')
+  ) {
+    return 'binary';
+  }
+
+  return 'none';
 }
 
 // OpenRouter Config

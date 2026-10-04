@@ -41,6 +41,9 @@ import {
   setOpenRouterBaseUrl,
   LlmProvider,
   ReasoningEffort,
+  getModelReasoningCapability,
+  getThinkingEnabled,
+  setThinkingEnabled,
 } from '../../services/providerConfig';
 import { checkLmStudioConnection, LmStudioModelInfo } from '../../services/lmStudioService';
 import {
@@ -110,6 +113,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose }) => {
   const [lmStudioUrl, setLmStudioUrlState] = useState<string>(getLmStudioBaseUrl());
   const [lmStudioModel, setLmStudioModelState] = useState<string>(getLmStudioModel());
   const [reasoningEffort, setReasoningEffortState] = useState<ReasoningEffort>(getLmStudioReasoningEffort());
+  const [thinkingEnabled, setThinkingEnabledState] = useState<boolean>(getThinkingEnabled());
   const [isTestingLmStudio, setIsTestingLmStudio] = useState(false);
   const [lmStudioResult, setLmStudioResult] = useState<{
     tested: boolean;
@@ -275,8 +279,141 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose }) => {
     setOpenRouterModel(openRouterModel);
     setOpenRouterBaseUrl(openRouterUrl);
 
+    // Save Thinking Mode
+    setThinkingEnabled(thinkingEnabled);
+
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
+  };
+
+  const renderReasoningControls = (targetModelId: string) => {
+    const capability = getModelReasoningCapability(targetModelId);
+
+    if (capability === 'binary') {
+      return (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+              THINKING MODE (FLEXIBLE REASONING)
+            </label>
+            <span style={{ fontSize: '10px', color: 'var(--accent-primary)', fontWeight: 600 }}>
+              Flexible Thinking (On / Off)
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setThinkingEnabledState(true)}
+              style={{
+                flex: 1,
+                padding: '9px 12px',
+                borderRadius: '6px',
+                background: thinkingEnabled ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                color: thinkingEnabled ? 'var(--bg-primary)' : 'var(--text-secondary)',
+                fontWeight: thinkingEnabled ? 700 : 500,
+                fontSize: '11px',
+                border: '1px solid var(--border-subtle)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span>🧠</span> ON (Step-by-step &lt;think&gt;)
+            </button>
+            <button
+              type="button"
+              onClick={() => setThinkingEnabledState(false)}
+              style={{
+                flex: 1,
+                padding: '9px 12px',
+                borderRadius: '6px',
+                background: !thinkingEnabled ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                color: !thinkingEnabled ? 'var(--bg-primary)' : 'var(--text-secondary)',
+                fontWeight: !thinkingEnabled ? 700 : 500,
+                fontSize: '11px',
+                border: '1px solid var(--border-subtle)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span>⚡</span> OFF (Direct response, faster)
+            </button>
+          </div>
+          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '6px', lineHeight: '1.4' }}>
+            {thinkingEnabled
+              ? 'Deep reasoning enabled. Model produces internal step-by-step thinking traces before executing actions.'
+              : 'Thinking disabled. Model provides immediate outputs with lower latency and reduced token usage.'}
+          </div>
+        </div>
+      );
+    }
+
+    if (capability === 'tiered') {
+      return (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+              REASONING EFFORT
+            </label>
+            <span style={{ fontSize: '10px', color: 'var(--accent-primary)', fontWeight: 600 }}>
+              Graduated Search Budget
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {(['low', 'medium', 'high'] as ReasoningEffort[]).map((effort) => (
+              <button
+                key={effort}
+                type="button"
+                onClick={() => setReasoningEffortState(effort)}
+                style={{
+                  flex: 1,
+                  padding: '9px 12px',
+                  borderRadius: '6px',
+                  background: reasoningEffort === effort ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                  color: reasoningEffort === effort ? 'var(--bg-primary)' : 'var(--text-secondary)',
+                  fontWeight: reasoningEffort === effort ? 700 : 500,
+                  fontSize: '11px',
+                  border: '1px solid var(--border-subtle)',
+                  cursor: 'pointer',
+                  textTransform: 'capitalize',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {effort}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '6px', lineHeight: '1.4' }}>
+            Controls the search budget and depth of reasoning for OpenAI o1/o3 and tiered models.
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        style={{
+          padding: '10px 14px',
+          borderRadius: '6px',
+          background: 'var(--bg-tertiary)',
+          border: '1px solid var(--border-subtle)',
+          fontSize: '11px',
+          color: 'var(--text-muted)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}
+      >
+        <span>ℹ️</span> Standard instruction model (responds directly without extended reasoning tokens).
+      </div>
+    );
   };
 
   return (
@@ -901,34 +1038,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose }) => {
                     )}
                   </div>
 
-                  <div>
-                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>
-                      REASONING EFFORT (FOR REASONING MODELS)
-                    </label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      {(['low', 'medium', 'high'] as ReasoningEffort[]).map((effort) => (
-                        <button
-                          key={effort}
-                          type="button"
-                          onClick={() => setReasoningEffortState(effort)}
-                          style={{
-                            flex: 1,
-                            padding: '8px 12px',
-                            borderRadius: '6px',
-                            background: reasoningEffort === effort ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-                            color: reasoningEffort === effort ? 'var(--bg-primary)' : 'var(--text-secondary)',
-                            fontWeight: reasoningEffort === effort ? 700 : 500,
-                            fontSize: '11px',
-                            border: '1px solid var(--border-subtle)',
-                            cursor: 'pointer',
-                            textTransform: 'capitalize',
-                          }}
-                        >
-                          {effort}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  {renderReasoningControls(lmStudioModel)}
                 </div>
               )}
 
@@ -1129,6 +1239,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose }) => {
                       You can type any active model ID from OpenRouter's catalog.
                     </div>
                   </div>
+
+                  {renderReasoningControls(openRouterModel)}
                 </div>
               )}
             </div>

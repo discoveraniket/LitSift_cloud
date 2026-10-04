@@ -15,6 +15,8 @@ import {
   setLmStudioReasoningEffort,
   getActiveModelLabel,
   DEFAULT_LMSTUDIO_URL,
+  getThinkingEnabled,
+  setThinkingEnabled,
 } from '../services/providerConfig';
 import {
   checkLmStudioConnection,
@@ -311,5 +313,63 @@ describe('LM Studio HTTP and Streaming Service', () => {
     expect(result.rawText).toBe(jsonOutput);
     expect(result.parsed.rows[0].sampleSize).toBe('N=120');
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('configures LM Studio reasoning payloads adaptively for binary thinking vs tiered models', async () => {
+    let capturedBody: any = null;
+    const encoder = new TextEncoder();
+    const createStream = () =>
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"Done"}}]}\n\n'));
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        },
+      });
+
+    global.fetch = vi.fn().mockImplementation((_url, init) => {
+      capturedBody = JSON.parse(init.body);
+      return Promise.resolve({
+        ok: true,
+        body: createStream(),
+      });
+    });
+
+    // 1. Qwen binary model with thinking disabled
+    setThinkingEnabled(false);
+    expect(getThinkingEnabled()).toBe(false);
+    await streamLmStudioChatTurn({
+      model: 'qwen2.5-14b-instruct',
+      messages: [{ role: 'user', content: 'Extract' }],
+    });
+    expect(capturedBody.chat_template_kwargs).toEqual({ enable_thinking: false });
+    expect(capturedBody.reasoning_effort).toBeUndefined();
+
+    // 2. Qwen binary model with thinking enabled
+    setThinkingEnabled(true);
+    expect(getThinkingEnabled()).toBe(true);
+    await streamLmStudioChatTurn({
+      model: 'qwen2.5-14b-instruct',
+      messages: [{ role: 'user', content: 'Extract' }],
+    });
+    expect(capturedBody.chat_template_kwargs).toEqual({ enable_thinking: true });
+    expect(capturedBody.reasoning_effort).toBeUndefined();
+
+    // 3. Tiered model (e.g. o3-mini) with reasoning effort
+    setLmStudioReasoningEffort('medium');
+    await streamLmStudioChatTurn({
+      model: 'o3-mini',
+      messages: [{ role: 'user', content: 'Extract' }],
+    });
+    expect(capturedBody.reasoning_effort).toBe('medium');
+    expect(capturedBody.chat_template_kwargs).toBeUndefined();
+
+    // 4. Standard non-reasoning model (e.g. llama-3.3-70b)
+    await streamLmStudioChatTurn({
+      model: 'llama-3.3-70b-instruct',
+      messages: [{ role: 'user', content: 'Extract' }],
+    });
+    expect(capturedBody.chat_template_kwargs).toBeUndefined();
+    expect(capturedBody.reasoning_effort).toBeUndefined();
   });
 });

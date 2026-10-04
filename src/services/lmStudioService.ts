@@ -3,7 +3,13 @@
  * High-performance, native fetch-based client for LM Studio's local OpenAI-compatible API.
  */
 
-import { getEffectiveLmStudioUrl, getLmStudioModel, getLmStudioReasoningEffort } from './providerConfig';
+import {
+  getEffectiveLmStudioUrl,
+  getLmStudioModel,
+  getLmStudioReasoningEffort,
+  getThinkingEnabled,
+  getModelReasoningCapability,
+} from './providerConfig';
 import { safeJsonParse } from './agentToolRegistry';
 import { createStructuredResponseFormat } from './schemaConverter';
 
@@ -145,8 +151,13 @@ export async function streamLmStudioChatTurn(options: {
     payload.tool_choice = 'auto';
   }
 
-  // Include reasoning_effort if supported
-  if (reasoningEffort) {
+  // Apply model-aware reasoning configuration
+  const capability = getModelReasoningCapability(targetModel);
+  if (capability === 'binary') {
+    payload.chat_template_kwargs = {
+      enable_thinking: getThinkingEnabled(),
+    };
+  } else if (capability === 'tiered' && reasoningEffort) {
     payload.reasoning_effort = reasoningEffort;
   }
 
@@ -387,6 +398,19 @@ export async function executeLmStudioStructuredGeneration<T = any>(options: {
     response_format: formatPayload,
     stream: false,
   };
+
+  // Apply model-aware reasoning configuration
+  const capability = getModelReasoningCapability(targetModel);
+  if (capability === 'binary') {
+    requestBody.chat_template_kwargs = {
+      enable_thinking: getThinkingEnabled(),
+    };
+  } else if (capability === 'tiered') {
+    const effort = getLmStudioReasoningEffort();
+    if (effort) {
+      requestBody.reasoning_effort = effort;
+    }
+  }
 
   const endpoint = `${effectiveBase}/chat/completions`;
 
