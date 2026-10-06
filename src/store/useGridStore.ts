@@ -338,6 +338,29 @@ export const useGridStore = create<GridState>((set) => ({
       })
     ),
 
+  addColumns: (headerNames, initialValues, citations) =>
+    set(
+      produce((state: GridState) => {
+        saveSnapshot(state);
+        headerNames.forEach((headerName) => {
+          const cleanName = (headerName || '').trim();
+          if (!cleanName) return;
+          const field = sanitizeField(cleanName);
+          if (!state.columns.some((c) => c.field === field)) {
+            state.columns.push({ field, headerName: cleanName, editable: true });
+            state.rows.forEach((row) => {
+              const val = initialValues?.[row.id] ?? initialValues?.[row.pdfId] ?? initialValues?.[field] ?? '';
+              row[field] = val;
+              if (citations && citations[row.id]) {
+                if (!row.citationMap) row.citationMap = {};
+                row.citationMap[field] = citations[row.id];
+              }
+            });
+          }
+        });
+      })
+    ),
+
   renameColumn: (field, newHeaderName) =>
     set(
       produce((state: GridState) => {

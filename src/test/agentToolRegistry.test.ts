@@ -39,12 +39,13 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(Array.isArray(tools[0].functionDeclarations)).toBe(true);
 
     const names = tools[0].functionDeclarations.map((d: any) => d.name);
-    expect(names).toHaveLength(13);
+    expect(names).toHaveLength(14);
     expect(names).toContain('updateCell');
     expect(names).toContain('batchUpdateCells');
     expect(names).toContain('updateRow');
     expect(names).toContain('appendRows');
-    expect(names).toContain('addColumn');
+    expect(names).toContain('addColumns');
+    expect(names).not.toContain('addColumn');
     expect(names).toContain('renameColumn');
     expect(names).toContain('deleteColumn');
     expect(names).toContain('disaggregateRow');
@@ -53,6 +54,7 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(names).toContain('extractPDFData');
     expect(names).toContain('verifyEvidenceCitation');
     expect(names).toContain('queryGridData');
+    expect(names).toContain('proposeExtractionSchema');
 
     const updateCellDecl = tools[0].functionDeclarations.find((d: any) => d.name === 'updateCell');
     expect(updateCellDecl?.parameters?.type).toBe('OBJECT');
@@ -278,5 +280,26 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     const fencedWithTrailingComma = '```json\n{"rows": [{"id": 1, "name": "Test",}],}\n```';
     const parsed2 = safeJsonParse(fencedWithTrailingComma);
     expect(parsed2.rows[0].name).toBe('Test');
+  });
+
+  it('executes addColumns tool supporting both batch array and single header inputs', async () => {
+    // 1. Batch array of columns
+    const batchRes = await agentToolsRegistry.addColumns.execute(
+      { headerNames: ['Host Range Test', 'Burst Size (pfu)', 'Latent Time'] },
+      'human_in_loop'
+    );
+    expect(batchRes.success).toBe(true);
+    const store = useGridStore.getState();
+    expect(store.columns.some((c) => c.field === 'host_range_test')).toBe(true);
+    expect(store.columns.some((c) => c.field === 'burst_size_pfu')).toBe(true);
+    expect(store.columns.some((c) => c.field === 'latent_time')).toBe(true);
+
+    // 2. Single column string input fallback
+    const singleRes = await agentToolsRegistry.addColumns.execute(
+      { headerName: 'Plaque Morphology' },
+      'human_in_loop'
+    );
+    expect(singleRes.success).toBe(true);
+    expect(useGridStore.getState().columns.some((c) => c.field === 'plaque_morphology')).toBe(true);
   });
 });

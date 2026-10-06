@@ -142,14 +142,9 @@ export async function validateAgentPrerequisites(
     };
   }
 
-  // 5. Schema Guard
+  // 5. Schema Guard: If 0 schema columns exist, the agent will autonomously draft a schema proposal for human review
   if (lowerPrompt.includes('extract') && gridStore.columns.length === 0) {
-    logStore.addLog('warn', 'Extraction requested with 0 schema columns defined.');
-    return {
-      valid: false,
-      error:
-        '📊 **No Schema Columns Defined in Data Grid**\n\nThe extraction grid does not have any target columns defined. Please add columns in the table or import a CSV schema template before extracting findings.',
-    };
+    logStore.addLog('info', 'Extraction requested with 0 schema columns defined. Agent will formulate a schema proposal for review.');
   }
 
   return {
@@ -442,8 +437,13 @@ ${userPrompt}`;
 You are interacting with research document "${activePdfTitle}" and managing a structured scientific data grid.
 Understand the user's high-level objective and autonomously break it down into an ordered sequence of prerequisite and dependent tool actions.
 
-AUTONOMOUS DOCUMENT EXTRACTION & VERIFICATION FLOW:
-- When the user asks to extract findings from the active paper, call extractPDFData.
+AUTONOMOUS SCHEMA MANAGEMENT & EXTRACTION FLOW:
+- SCHEMA CREATION: When adding columns to the table, ALWAYS call addColumns with ALL desired column headers at once (e.g. headerNames: ["Phage Name", "Host Bacteria", "Burst Size (pfu/cell)", "Latent Period (min)"]). addColumns handles both single and multiple columns in ONE single action. Never add multiple columns one-by-one in separate turns.
+- ZERO-COLUMN GUARD: If the table grid has 0 schema columns defined:
+  1. If the user explicitly provided specific target parameters to extract, immediately call addColumns with all requested fields in a single call, then proceed to extract findings.
+  2. If the user's objective is broad or open-ended, call proposeExtractionSchema to draft a proposal for human review.
+  3. Do NOT call extractPDFData directly when 0 schema columns exist in the table grid.
+- When the user asks to extract findings from the active paper and schema columns exist, call extractPDFData.
 - extractPDFData autonomously parses the paper, extracts all schema columns with verbatim citations, and inserts the new rows into the table grid.
 - TASK COMPLETION RULE: Once extractPDFData completes and stages the rows, the extraction objective is FINISHED. Present your final synthesis summary to the user immediately.
 - Do NOT use batchUpdateCells to re-insert or overwrite data from extractPDFData.
@@ -479,7 +479,7 @@ You have access to a rich declarative tool suite:
 - Document extraction & verification: extractPDFData, verifyEvidenceCitation, queryGridData
 - Row creation & structuring: appendRows (supports single or batch row additions), disaggregateRow (to expand composite rows into atomic rows), mergeRows, deleteRows
 - Cell & row editing: updateCell, batchUpdateCells, updateRow
-- Schema management: addColumn (supports optional initialValues), renameColumn, deleteColumn
+- Schema management: addColumns (batch or single: ["Col A", "Col B"]), renameColumn, deleteColumn
 Execute all required tool actions to fulfill the user's instructions and summarize your reasoning and findings clearly.`;
 
     let openAiMessages: OpenAiMessage[] = [

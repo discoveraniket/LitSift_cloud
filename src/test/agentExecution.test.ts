@@ -31,8 +31,8 @@ describe('Agent Multi-Step Execution Store & Tools', () => {
 
   it('executes sequential tool actions and updates the store', async () => {
     // Action 1: Add a new schema column
-    const colRes = await agentToolsRegistry.addColumn.execute(
-      { headerName: 'Phage Morphology' },
+    const colRes = await agentToolsRegistry.addColumns.execute(
+      { headerNames: ['Phage Morphology'] },
       'human_in_loop'
     );
     expect(colRes.success).toBe(true);
@@ -86,7 +86,7 @@ describe('Agent Multi-Step Execution Store & Tools', () => {
     expect(initialEnum).not.toContain('genome_size');
 
     // Add new column
-    await agentToolsRegistry.addColumn.execute({ headerName: 'Genome Size' }, 'human_in_loop');
+    await agentToolsRegistry.addColumns.execute({ headerNames: ['Genome Size'] }, 'human_in_loop');
 
     // Subsequent check - must immediately include genome_size
     const updatedTools = getToolsForMode('human_in_loop');
@@ -124,7 +124,7 @@ describe('Agent Multi-Step Execution Store & Tools', () => {
     expect(noPdfRes.valid).toBe(false);
     expect(noPdfRes.error).toContain('No Research Paper PDF Loaded');
 
-    // 4. Missing schema columns check
+    // 4. Zero schema columns allowed so agent can propose schema
     useGridStore.setState({ columns: [] });
     usePdfStore.setState({
       pdfs: [
@@ -141,9 +141,8 @@ describe('Agent Multi-Step Execution Store & Tools', () => {
       ],
       activePdfId: 'pdf-test-1',
     });
-    const noSchemaRes = await validateAgentPrerequisites('Extract table data from paper');
-    expect(noSchemaRes.valid).toBe(false);
-    expect(noSchemaRes.error).toContain('No Schema Columns Defined');
+    const zeroSchemaRes = await validateAgentPrerequisites('Extract table data from paper');
+    expect(zeroSchemaRes.valid).toBe(true);
 
     // Clean up
     if (originalEnvKey) process.env.GEMINI_API_KEY = originalEnvKey;

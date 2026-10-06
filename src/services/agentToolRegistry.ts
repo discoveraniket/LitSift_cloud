@@ -16,6 +16,7 @@ import {
 } from './providerConfig';
 import { executeLmStudioStructuredGeneration, OpenAiMessage } from './lmStudioService';
 import { executeOpenRouterStructuredGeneration } from './openRouterService';
+import { proposeSchemaFromGoal } from './extractionEngine';
 
 export type AgentExecutionMode = 'human_in_loop' | 'autonomous_autopilot';
 
@@ -235,7 +236,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         }
         if (!targetCol) {
           throw new Error(
-            `Column "${field}" does not exist in the table schema. Please call addColumn("${field}") first.`
+            `Column "${field}" does not exist in the table schema. Please call addColumns(["${field}"]) first.`
           );
         }
 
@@ -620,48 +621,64 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
     },
   },
 
-  addColumn: {
-    name: 'addColumn',
-    description: 'Add a new extraction schema column to the master table, with optional initial values for existing rows.',
+  addColumns: {
+    name: 'addColumns',
+    description: 'Add one or more extraction schema columns to the master table in a single action. Can accept an array of column headers or a single header name, with optional initial values.',
     parameters: {
       type: Type.OBJECT,
       properties: {
-        headerName: {
-          type: Type.STRING,
-          description: 'Title of the new column (e.g. Host Range, Phage Morphology, Genome Size).',
+        headerNames: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: 'List of column titles to add to the table schema (e.g. ["Phage Name", "Host Bacteria", "Burst Size (pfu/cell)", "Latent Period (min)"]). Can also be a single column.',
         },
         initialValues: {
           type: Type.OBJECT,
-          description: 'Optional map of rowId (or global field value) to the value for that row in the new column.',
+          description: 'Optional map of rowId (or global field value) to the value for that row in the new columns.',
         },
       },
-      required: ['headerName'],
+      required: ['headerNames'],
     },
     execute: async (args: any): Promise<ToolExecutionResult> => {
       try {
         const gridStore = useGridStore.getState();
         const logStore = useLogStore.getState();
 
-        if (!args.headerName) {
-          throw new Error('Parameter "headerName" is required to add a column.');
+        let rawHeaders: string[] = [];
+        if (Array.isArray(args.headerNames)) {
+          rawHeaders = args.headerNames;
+        } else if (typeof args.headerNames === 'string') {
+          rawHeaders = [args.headerNames];
+        } else if (typeof args.headerName === 'string') {
+          rawHeaders = [args.headerName];
+        } else if (Array.isArray(args.headers)) {
+          rawHeaders = args.headers;
         }
 
-        logStore.addLog('info', `Adding column "${args.headerName}" to schema`);
-        gridStore.addColumn(args.headerName, args.initialValues);
-        logStore.addLog('success', `Column "${args.headerName}" added`);
+        const validHeaders = rawHeaders
+          .map((h) => (typeof h === 'string' ? h.trim() : ''))
+          .filter((h) => h.length > 0);
+
+        if (validHeaders.length === 0) {
+          throw new Error('Parameter "headerNames" must contain at least one non-empty column title.');
+        }
+
+        logStore.addLog('info', `Adding ${validHeaders.length} column(s) to schema: ${validHeaders.join(', ')}`);
+        gridStore.addColumns(validHeaders, args.initialValues);
+        logStore.addLog('success', `Added ${validHeaders.length} column(s): ${validHeaders.join(', ')}`);
 
         return {
           success: true,
-          replyText: `Added new column **"${args.headerName}"** to the extraction table schema!`,
-          summary: `addColumn(headerName: "${args.headerName}")`,
-          resultData: { headerName: args.headerName },
+          replyText: `Added ${validHeaders.length} column(s) to the extraction table schema: ${validHeaders.map((h) => `**"${h}"**`).join(', ')}!`,
+          summary: `addColumns(${validHeaders.length} column${validHeaders.length === 1 ? '' : 's'}: ${validHeaders.join(', ')})`,
+          resultData: { headerNames: validHeaders },
         };
       } catch (err: any) {
-        useLogStore.getState().addLog('error', `addColumn failed: ${err.message}`);
+        useLogStore.getState().addLog('error', `addColumns failed: ${err.message}`);
         return {
           success: false,
-          replyText: `Failed to add column: ${err.message}`,
-          summary: `addColumn(failed: ${err.message})`,
+          replyText: `Failed to add column(s): ${err.message}`,
+          summary: `addColumns(failed: ${err.message})`,
           error: err.message,
         };
       }
@@ -986,9 +1003,24 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
       const pdfStore = usePdfStore.getState();
       const pdfInfo = pdfStore.pdfs.find((p) => p.id === targetPdfTitle || p.name === targetPdfTitle) || pdfStore.getActivePdf();
 
-      const headers = gridStore.columns.map((c) => c.field);
+      let headers = gridStore.columns.map((c) => c.field);
       if (headers.length === 0) {
-        throw new Error('No schema columns defined in the table.');
+        logStore.setActiveStep(`Formulating extraction schema proposal for "${targetPdfTitle}"...`);
+        const proposal = await proposeSchemaFromGoal(
+          `Extract empirical scientific parameters from ${pdfInfo?.title || targetPdfTitle}`,
+          pdfInfo
+        );
+        const colList = proposal.proposedColumns
+          .map((c, i) => `${i + 1}. **${c.headerName}** (\`${c.field}\`): ${c.description}`)
+          .join('\n');
+
+        return {
+          success: false,
+          replyText: `✋ **Schema Review Required Before Extraction**\n\nNo schema columns are defined in the Data Grid yet. Based on research document *"${pdfInfo?.title || targetPdfTitle}"*, I have drafted the following extraction schema for your review:\n\n${colList}\n\n💡 *Rationale:* ${proposal.rationale}\n\nPlease review and confirm these columns. Once approved, LitSift will extract findings strictly across these fields.`,
+          summary: `proposeSchema(${proposal.proposedColumns.length} columns drafted for review)`,
+          resultData: { proposedColumns: proposal.proposedColumns },
+          error: 'Schema requires user approval before extraction.',
+        };
       }
 
       const contentsParts: any[] = [];
@@ -1411,10 +1443,12 @@ ${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text
       try {
         const gridStore = useGridStore.getState();
         const logStore = useLogStore.getState();
+        const provider = getActiveProvider();
         const apiKey = getGeminiApiKey();
         const selectedModel = getSelectedGeminiModel();
 
-        if (!apiKey) throw new Error('GEMINI_API_KEY is missing.');
+        if (provider === 'gemini' && !apiKey) throw new Error('GEMINI_API_KEY is missing.');
+        if (provider === 'openrouter' && !getOpenRouterApiKey()) throw new Error('OpenRouter API key is missing.');
 
         const targetRow =
           gridStore.rows.find((r) => r.id === args.rowId) ||
@@ -1480,7 +1514,6 @@ Return your response in JSON format:
         contentsParts.push({ text: verifyPrompt });
 
         const genStartTime = performance.now();
-        const provider = getActiveProvider();
         let text: string | undefined = '';
 
         if (provider === 'openrouter') {
@@ -1680,6 +1713,48 @@ Return your response in JSON format:
           success: false,
           replyText: `Failed to query table grid: ${err.message}`,
           summary: `queryGridData(failed: ${err.message})`,
+          error: err.message,
+        };
+      }
+    },
+  },
+
+  proposeExtractionSchema: {
+    name: 'proposeExtractionSchema',
+    description: 'Propose and draft a scientific table schema (3-8 columns) based on user research goals. Present it for human review before extraction.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        researchGoal: {
+          type: Type.STRING,
+          description: 'The user research question or specific parameters to extract (e.g. "phage burst size, host, latency")',
+        },
+      },
+      required: ['researchGoal'],
+    },
+    execute: async (args: any): Promise<ToolExecutionResult> => {
+      try {
+        const pdfStore = usePdfStore.getState();
+        const activePdf = pdfStore.getActivePdf() || pdfStore.pdfs[0];
+        const proposal = await proposeSchemaFromGoal(
+          args.researchGoal || 'Extract empirical scientific parameters',
+          activePdf
+        );
+        const colList = proposal.proposedColumns
+          .map((c, i) => `${i + 1}. **${c.headerName}** (\`${c.field}\`): ${c.description}`)
+          .join('\n');
+
+        return {
+          success: true,
+          replyText: `📋 **Proposed Extraction Schema for Human Review:**\n\n${colList}\n\n💡 *Rationale:* ${proposal.rationale}\n\nPlease review and confirm these columns. Once approved, LitSift will extract findings strictly across these fields.`,
+          summary: `proposeSchema(${proposal.proposedColumns.length} columns)`,
+          resultData: proposal,
+        };
+      } catch (err: any) {
+        return {
+          success: false,
+          replyText: `Failed to propose schema: ${err.message}`,
+          summary: `proposeSchema(failed: ${err.message})`,
           error: err.message,
         };
       }
