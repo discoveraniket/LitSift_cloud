@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { proposeSchemaFromGoal, extractWithFixedSchema, clearSchemaProposalCache } from '../services/extractionEngine';
+import {
+  proposeSchemaFromGoal,
+  extractWithFixedSchema,
+  clearSchemaProposalCache,
+} from '../services/extractionEngine';
 import type { PaperDocumentInfo } from '../types/paper';
 import type { SchemaColumn } from '../types/grid';
 import * as providerConfig from '../services/providerConfig';
 import * as openRouterService from '../services/openRouterService';
-import * as lmStudioService from '../services/lmStudioService';
+import * as geminiService from '../services/geminiService';
+import * as geminiCacheService from '../services/geminiCacheService';
+
+const mockGenerateContent = vi.fn();
 
 vi.mock('../services/providerConfig', () => ({
   getActiveProvider: vi.fn(),
@@ -14,6 +21,18 @@ vi.mock('../services/providerConfig', () => ({
   DEFAULT_OPENROUTER_MODEL: 'test-model',
 }));
 
+vi.mock('../services/geminiService', () => ({
+  getGeminiApiKey: vi.fn(),
+  getSelectedGeminiModel: vi.fn(() => 'gemini-2.5-flash'),
+}));
+
+vi.mock('../services/geminiCacheService', () => ({
+  getOrCreateDocumentCache: vi.fn(),
+  deleteDocumentCache: vi.fn(),
+  clearAllDocumentCaches: vi.fn(),
+  getActiveCacheEntry: vi.fn(),
+}));
+
 vi.mock('../services/openRouterService', () => ({
   executeOpenRouterStructuredGeneration: vi.fn(),
 }));
@@ -21,6 +40,18 @@ vi.mock('../services/openRouterService', () => ({
 vi.mock('../services/lmStudioService', () => ({
   executeLmStudioStructuredGeneration: vi.fn(),
 }));
+
+vi.mock('@google/genai', async (importOriginal) => {
+  const actual = await importOriginal<any>();
+  return {
+    ...actual,
+    GoogleGenAI: vi.fn().mockImplementation(function (this: any) {
+      this.models = {
+        generateContent: mockGenerateContent,
+      };
+    }),
+  };
+});
 
 describe('Extraction Engine Suite', () => {
   const mockPaper: PaperDocumentInfo = {
@@ -95,84 +126,167 @@ describe('Extraction Engine Suite', () => {
     });
   });
 
-  describe('extractWithFixedSchema', () => {
+  describe('extractWithFixedSchema (Asymmetric Routing)', () => {
     it('throws error when lockedSchema is empty', async () => {
       await expect(
         extractWithFixedSchema({ paper: mockPaper, lockedSchema: [] })
       ).rejects.toThrow('No locked schema columns provided');
     });
 
-    it('extracts findings conforming strictly to the locked schema', async () => {
-      vi.mocked(providerConfig.getActiveProvider).mockReturnValue('lmstudio');
-      vi.mocked(lmStudioService.executeLmStudioStructuredGeneration).mockResolvedValue({
-        data: {} as any,
-        rawText: JSON.stringify({
-          observations: [
-            {
-              phage_name: 'Phage V12',
-              burst_size: '85',
-              citations: {
-                phage_name: {
-                  snippetQuote: 'isolated phage V12',
-                  sectionName: 'Abstract',
-                  pageNumber: 1,
-                  reasoning: 'Mentioned',
-                  confidence: 0.99,
+    it('routes to Gemini Frontier profile with explicit context caching', async () => {
+      vi.mocked(providerConfig.getActiveProvider).mockReturnValue('gemini');
+      vi.mocked(geminiService.getGeminiApiKey).mockReturnValue('valid-gemini-key');
+      vi.mocked(geminiCacheService.getOrCreateDocumentCache).mockResolvedValue({
+        cacheName: 'cachedContents/litsift_paper_sample_123',
+        tokenCount: 42000,
+      });
+
+      mockGenerateContent.mockResolvedValueOnce({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    observations: [
+                      {
+                        phage_name: 'Phage V12',
+                        burst_size: '85',
+                        citations: {
+                          phage_name: {
+                            snippetQuote: 'isolated phage V12',
+                            sectionName: 'Abstract',
+                            pageNumber: 1,
+                            reasoning: 'Mentioned in abstract',
+                            confidence: 0.99,
+                          },
+                          burst_size: {
+                            snippetQuote: 'burst size of 85',
+                            sectionName: 'Abstract',
+                            pageNumber: 1,
+                            reasoning: 'Quantified burst size',
+                            confidence: 0.98,
+                          },
+                        },
+                      },
+                    ],
+                    summary: 'Extracted Phage V12 findings.',
+                  }),
                 },
-                burst_size: {
-                  snippetQuote: 'burst size of 85',
-                  sectionName: 'Abstract',
-                  pageNumber: 1,
-                  reasoning: 'Reported value',
-                  confidence: 0.98,
-                },
-              },
+              ],
             },
-          ],
-          summary: 'Phage V12 exhibits typical kinetic profile.',
-        }),
-        parsed: {},
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 150,
+          candidatesTokenCount: 80,
+          cachedContentTokenCount: 42000,
+        },
       });
 
       const result = await extractWithFixedSchema({
         paper: mockPaper,
         lockedSchema: mockLockedSchema,
-        userGoal: 'Extract kinetics',
+        executionProfile: 'frontier',
       });
 
       expect(result.paperId).toBe('paper-sample');
       expect(result.observations).toHaveLength(1);
       expect(result.observations[0].fields['phage_name']).toBe('Phage V12');
       expect(result.observations[0].fields['burst_size']).toBe('85');
-      expect(result.observations[0].citations['burst_size'].snippetQuote).toBe('burst size of 85');
-      expect(result.summary).toBe('Phage V12 exhibits typical kinetic profile.');
+      expect(result.tokensUsed?.cachedTokens).toBe(42000);
+
+      // Verify cachedContent was passed to Gemini generateContent config
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            cachedContent: 'cachedContents/litsift_paper_sample_123',
+          }),
+        })
+      );
     });
 
-    it('populates unmentioned fields with "Not reported" fallback', async () => {
-      vi.mocked(providerConfig.getActiveProvider).mockReturnValue('lmstudio');
-      vi.mocked(lmStudioService.executeLmStudioStructuredGeneration).mockResolvedValue({
-        data: {} as any,
-        rawText: JSON.stringify({
-          observations: [
-            {
-              phage_name: 'Phage V12',
-              // burst_size omitted by LLM
-              citations: {},
+    it('falls back seamlessly to inline Gemini multimodal when context cache returns null (<32k tokens)', async () => {
+      vi.mocked(providerConfig.getActiveProvider).mockReturnValue('gemini');
+      vi.mocked(geminiService.getGeminiApiKey).mockReturnValue('valid-gemini-key');
+      // Below threshold -> returns null
+      vi.mocked(geminiCacheService.getOrCreateDocumentCache).mockResolvedValue(null);
+
+      mockGenerateContent.mockResolvedValueOnce({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    observations: [
+                      {
+                        phage_name: 'Phage V12',
+                        burst_size: '85',
+                        citations: {},
+                      },
+                    ],
+                    summary: 'Extracted Phage V12 inline.',
+                  }),
+                },
+              ],
             },
-          ],
-          summary: 'Extracted phage name.',
-        }),
-        parsed: {},
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 1200,
+          candidatesTokenCount: 60,
+        },
       });
 
       const result = await extractWithFixedSchema({
         paper: mockPaper,
         lockedSchema: mockLockedSchema,
+        executionProfile: 'frontier',
       });
 
       expect(result.observations).toHaveLength(1);
-      expect(result.observations[0].fields['burst_size']).toBe('Not reported');
-      expect(result.observations[0].citations['burst_size'].snippetQuote).toBe('Not reported in document');
+      expect(result.observations[0].fields['phage_name']).toBe('Phage V12');
+      // No cachedContent in config for inline path
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.not.objectContaining({
+            cachedContent: expect.anything(),
+          }),
+        })
+      );
+    });
+
+    it('routes to Local Micro-Agentic profile when active provider is lmstudio or openrouter', async () => {
+      vi.mocked(providerConfig.getActiveProvider).mockReturnValue('openrouter');
+
+      // 1 single structured call returning observations array
+      vi.mocked(openRouterService.executeOpenRouterStructuredGeneration).mockResolvedValueOnce({
+        data: {} as any,
+        rawText: '',
+        parsed: {
+          observations: [
+            {
+              phage_name: 'Phage V12',
+              burst_size: '85 virions/cell',
+            },
+          ],
+          summary: 'Extracted Phage V12 findings.',
+        },
+        usage: { prompt_tokens: 620, completion_tokens: 45 },
+      });
+
+      const result = await extractWithFixedSchema({
+        paper: mockPaper,
+        lockedSchema: mockLockedSchema,
+        executionProfile: 'local_microagent',
+      });
+
+      expect(result.paperId).toBe('paper-sample');
+      expect(result.observations).toHaveLength(1);
+      expect(result.observations[0].fields['phage_name']).toBe('Phage V12');
+      expect(result.observations[0].fields['burst_size']).toBe('85 virions/cell');
+      expect(result.tokensUsed?.promptTokens).toBe(620);
     });
   });
 });

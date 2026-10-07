@@ -51,6 +51,7 @@ export interface PaperDocumentInfo {
   
   // Abstract & Structured Text
   abstractText?: string;
+  extractedText?: string;
   sections?: PaperSection[];
   tables?: PaperTable[];
   figures?: PaperFigure[];

@@ -81,6 +81,7 @@ export async function executeBatchExtraction(
       const result = await extractWithFixedSchema({
         paper,
         lockedSchema,
+        executionProfile: options.executionProfile,
         signal,
       });
 

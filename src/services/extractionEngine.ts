@@ -6,6 +6,7 @@ import type {
   SinglePaperExtractionResult,
   SinglePaperObservation,
   GroundedEvidence,
+  ExecutionProfile,
 } from '../types/extraction';
 import { getActiveProvider } from './providerConfig';
 import { getGeminiApiKey, getSelectedGeminiModel } from './geminiService';
@@ -13,6 +14,8 @@ import { executeLmStudioStructuredGeneration, OpenAiMessage } from './lmStudioSe
 import { executeOpenRouterStructuredGeneration } from './openRouterService';
 import { getPdfBase64, buildPaperMarkdownContext, resolveEffectiveGroundingMode } from './pdfUtils';
 import { safeJsonParse } from './agentToolRegistry';
+import { getOrCreateDocumentCache } from './geminiCacheService';
+import { extractLocalMicroAgentic } from './localMicroAgenticExtractor';
 
 // In-memory cache for proposed schemas to avoid redundant LLM calls across tools
 const schemaProposalCache = new Map<string, { result: SchemaProposalResult; timestamp: number }>();
@@ -20,6 +23,14 @@ const SCHEMA_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export function clearSchemaProposalCache(): void {
   schemaProposalCache.clear();
+}
+
+export interface ExtractWithFixedSchemaOptions {
+  paper: PaperDocumentInfo;
+  lockedSchema: SchemaColumn[];
+  userGoal?: string;
+  executionProfile?: ExecutionProfile;
+  signal?: AbortSignal;
 }
 
 /**
@@ -153,59 +164,9 @@ Rules:
 }
 
 /**
- * Stage 2: Extracts findings from a single research paper strictly adhering to the approved locked schema.
- * Enforces Schema Immutability (no new columns are added).
+ * Builds the dynamic extraction response schema strictly conforming to lockedSchema.
  */
-export async function extractWithFixedSchema(options: {
-  paper: PaperDocumentInfo;
-  lockedSchema: SchemaColumn[];
-  userGoal?: string;
-  signal?: AbortSignal;
-}): Promise<SinglePaperExtractionResult> {
-  const { paper, lockedSchema, userGoal, signal } = options;
-
-  if (!lockedSchema || lockedSchema.length === 0) {
-    throw new Error('Cannot extract findings: No locked schema columns provided.');
-  }
-
-  const startTime = performance.now();
-  const provider = getActiveProvider();
-  const isOpenRouter = provider === 'openrouter';
-  const isLmStudio = provider === 'lmstudio';
-  const isGemini = provider === 'gemini';
-
-  const effectiveGrounding = resolveEffectiveGroundingMode(paper);
-  const contentsParts: any[] = [];
-
-  // Grounding Payload
-  if (isGemini && effectiveGrounding === 'pdf') {
-    try {
-      const rawBase64 = await getPdfBase64(paper);
-      const base64Data = rawBase64.includes(',') ? rawBase64.split(',')[1] : rawBase64;
-      if (base64Data) {
-        contentsParts.push({
-          inlineData: {
-            mimeType: 'application/pdf',
-            data: base64Data.trim(),
-          },
-        });
-      }
-    } catch (e: any) {
-      console.warn(`PDF binary read note for "${paper.name}":`, e.message);
-    }
-  }
-
-  if (contentsParts.length === 0) {
-    const isAbstractOnly = effectiveGrounding === 'abstract_only';
-    const docMarkdown = buildPaperMarkdownContext(paper, { abstractOnly: isAbstractOnly });
-    if (docMarkdown.trim().length > 0) {
-      contentsParts.push({
-        text: `[DOCUMENT CONTENT: "${paper.title || paper.name}"]\n${docMarkdown}`,
-      });
-    }
-  }
-
-  // Construct dynamic extraction schema strictly conforming to lockedSchema
+function buildGeminiExtractionSchema(lockedSchema: SchemaColumn[]) {
   const columnProperties: Record<string, any> = {};
   const citationProperties: Record<string, any> = {};
   const schemaHeaders = lockedSchema.map((c) => c.field);
@@ -240,35 +201,43 @@ export async function extractWithFixedSchema(options: {
     };
   });
 
-  const extractionResponseSchema = {
-    type: Type.OBJECT,
-    properties: {
-      observations: {
-        type: Type.ARRAY,
-        description: 'List of distinct empirical observation rows extracted from the paper.',
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            ...columnProperties,
-            citations: {
-              type: Type.OBJECT,
-              description: 'Grounded citation object containing a citation entry for every extracted column.',
-              properties: citationProperties,
-              required: schemaHeaders,
+  return {
+    schema: {
+      type: Type.OBJECT,
+      properties: {
+        observations: {
+          type: Type.ARRAY,
+          description: 'List of distinct empirical observation rows extracted from the paper.',
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              ...columnProperties,
+              citations: {
+                type: Type.OBJECT,
+                description: 'Grounded citation object containing a citation entry for every extracted column.',
+                properties: citationProperties,
+                required: schemaHeaders,
+              },
             },
+            required: schemaHeaders,
           },
-          required: schemaHeaders,
+        },
+        summary: {
+          type: Type.STRING,
+          description: 'Brief 2-3 sentence scientific synthesis of the findings extracted from this paper.',
         },
       },
-      summary: {
-        type: Type.STRING,
-        description: 'Brief 2-3 sentence scientific synthesis of the findings extracted from this paper.',
-      },
+      required: ['observations', 'summary'],
     },
-    required: ['observations', 'summary'],
+    schemaHeaders,
   };
+}
 
-  const extractionPrompt = `You are an expert scientific literature data extractor.
+/**
+ * Builds standard extraction prompt.
+ */
+function buildExtractionPrompt(paper: PaperDocumentInfo, lockedSchema: SchemaColumn[], userGoal?: string): string {
+  return `You are an expert scientific literature data extractor.
 Target Document: "${paper.title || paper.name}"
 ${userGoal ? `User Research Context: "${userGoal}"\n` : ''}
 
@@ -280,8 +249,39 @@ Core Extraction Rules:
 2. OBSERVATION DISAGGREGATION: If the paper tests multiple distinct variables, strains, or treatments, emit a DISTINCT ROW in "observations" for each tested observation.
 3. MISSING VALUES: If a parameter was not investigated or reported in the paper, return "Not reported". Do NOT guess or hallucinate.
 4. GROUNDED CITATIONS: For every column, provide the exact unaltered verbatim quote in "snippetQuote", sectionName, pageNumber, and reasoning.`;
+}
 
-  contentsParts.push({ text: extractionPrompt });
+/**
+ * Executes Frontier Model Extraction using Google Gemini with explicit context caching.
+ */
+export async function extractGeminiWithCache(
+  options: ExtractWithFixedSchemaOptions
+): Promise<SinglePaperExtractionResult> {
+  const { paper, lockedSchema, userGoal, signal } = options;
+  const startTime = performance.now();
+
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not configured.');
+  }
+
+  const selectedModel = getSelectedGeminiModel();
+  const ai = new GoogleGenAI({ apiKey });
+  const { schema: extractionResponseSchema } = buildGeminiExtractionSchema(lockedSchema);
+  const extractionPrompt = buildExtractionPrompt(paper, lockedSchema, userGoal);
+
+  // 1. Attempt Explicit Context Caching (3600s TTL)
+  let cacheInfo: { cacheName: string; tokenCount?: number } | null = null;
+  try {
+    cacheInfo = await getOrCreateDocumentCache({
+      paper,
+      model: selectedModel,
+      apiKey,
+      signal,
+    });
+  } catch (err: any) {
+    console.warn(`[extractionEngine] Context cache setup skipped:`, err.message);
+  }
 
   let rawText = '';
   let promptTokens = 0;
@@ -289,54 +289,67 @@ Core Extraction Rules:
   let cachedTokens: number | undefined;
   let thinkingTokens: number | undefined;
 
-  if (isOpenRouter) {
-    const fullText = contentsParts.map((p) => p.text || '').filter(Boolean).join('\n\n');
-    const messages: OpenAiMessage[] = [
-      {
-        role: 'system',
-        content: 'You are an autonomous scientific literature data extractor. Return valid JSON only.',
-      },
-      { role: 'user', content: fullText },
-    ];
+  if (cacheInfo && cacheInfo.cacheName) {
+    // Cached Path: Send prompt instructions only; heavy document is cached
+    try {
+      const res = await ai.models.generateContent({
+        model: selectedModel,
+        contents: [{ text: extractionPrompt }],
+        config: {
+          cachedContent: cacheInfo.cacheName,
+          temperature: 0.1,
+          responseMimeType: 'application/json',
+          responseSchema: extractionResponseSchema,
+          abortSignal: signal,
+        },
+      });
 
-    const orRes = await executeOpenRouterStructuredGeneration<any>({
-      schemaName: 'extractionResponse',
-      schema: extractionResponseSchema,
-      messages,
-      temperature: 0.1,
-      signal,
-    });
-    rawText = orRes.rawText;
-    promptTokens = orRes.usage?.prompt_tokens ?? 0;
-    candidateTokens = orRes.usage?.completion_tokens ?? 0;
-  } else if (isLmStudio) {
-    const fullText = contentsParts.map((p) => p.text || '').filter(Boolean).join('\n\n');
-    const messages: OpenAiMessage[] = [
-      {
-        role: 'system',
-        content: 'You are an autonomous scientific literature data extractor. Return valid JSON only.',
-      },
-      { role: 'user', content: fullText },
-    ];
-
-    const lmsRes = await executeLmStudioStructuredGeneration<any>({
-      schemaName: 'extractionResponse',
-      schema: extractionResponseSchema,
-      messages,
-      temperature: 0.1,
-      signal,
-    });
-    rawText = lmsRes.rawText;
-    promptTokens = lmsRes.usage?.prompt_tokens ?? 0;
-    candidateTokens = lmsRes.usage?.completion_tokens ?? 0;
-  } else {
-    // Gemini
-    const apiKey = getGeminiApiKey();
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is not configured.');
+      rawText = res.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const usage = res.usageMetadata;
+      promptTokens = usage?.promptTokenCount ?? 0;
+      candidateTokens = usage?.candidatesTokenCount ?? 0;
+      cachedTokens = usage?.cachedContentTokenCount ?? cacheInfo.tokenCount;
+      thinkingTokens = (usage as any)?.thinkingTokenCount ?? (usage as any)?.reasoningTokenCount;
+    } catch (cacheCallErr: any) {
+      console.warn(`[extractionEngine] Cached query failed, retrying inline:`, cacheCallErr.message);
+      // Fallback to inline if cached generation errors
+      cacheInfo = null;
     }
-    const selectedModel = getSelectedGeminiModel();
-    const ai = new GoogleGenAI({ apiKey });
+  }
+
+  if (!cacheInfo || !rawText) {
+    // Inline Multimodal / Text Path (used when paper < 32k tokens or caching unavailable)
+    const effectiveGrounding = resolveEffectiveGroundingMode(paper);
+    const contentsParts: any[] = [];
+
+    if (effectiveGrounding === 'pdf') {
+      try {
+        const rawBase64 = await getPdfBase64(paper);
+        const base64Data = rawBase64.includes(',') ? rawBase64.split(',')[1] : rawBase64;
+        if (base64Data && base64Data.trim().length > 0) {
+          contentsParts.push({
+            inlineData: {
+              mimeType: 'application/pdf',
+              data: base64Data.trim(),
+            },
+          });
+        }
+      } catch (e: any) {
+        console.warn(`PDF binary read note for "${paper.name}":`, e.message);
+      }
+    }
+
+    if (contentsParts.length === 0) {
+      const isAbstractOnly = effectiveGrounding === 'abstract_only';
+      const docMarkdown = buildPaperMarkdownContext(paper, { abstractOnly: isAbstractOnly });
+      if (docMarkdown.trim().length > 0) {
+        contentsParts.push({
+          text: `[DOCUMENT CONTENT: "${paper.title || paper.name}"]\n${docMarkdown}`,
+        });
+      }
+    }
+
+    contentsParts.push({ text: extractionPrompt });
 
     const res = await ai.models.generateContent({
       model: selectedModel,
@@ -345,6 +358,7 @@ Core Extraction Rules:
         temperature: 0.1,
         responseMimeType: 'application/json',
         responseSchema: extractionResponseSchema,
+        abortSignal: signal,
       },
     });
 
@@ -420,4 +434,33 @@ Core Extraction Rules:
     },
     durationSec,
   };
+}
+
+/**
+ * Stage 2: Extracts findings from a single research paper strictly adhering to the approved locked schema.
+ * Routes dynamically to:
+ * - Frontier Profile (Gemini): Explicit Context Caching + 1-shot Multimodal Extraction.
+ * - Local/Open-Weight Profile (LM Studio / OpenRouter): Smart Section Windowing + Micro-Agentic Pipeline.
+ */
+export async function extractWithFixedSchema(
+  options: ExtractWithFixedSchemaOptions
+): Promise<SinglePaperExtractionResult> {
+  const { lockedSchema } = options;
+
+  if (!lockedSchema || lockedSchema.length === 0) {
+    throw new Error('Cannot extract findings: No locked schema columns provided.');
+  }
+
+  const provider = getActiveProvider();
+  const profile = options.executionProfile ?? 'auto';
+
+  // Determine routing profile
+  const useFrontier = profile === 'frontier' || (profile === 'auto' && provider === 'gemini');
+
+  if (useFrontier) {
+    return extractGeminiWithCache(options);
+  }
+
+  // Local / Open-Weight Micro-Agentic Route
+  return extractLocalMicroAgentic(options);
 }

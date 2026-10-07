@@ -52,10 +52,13 @@ export interface BatchExtractionProgress {
   extractedRowCount: number;
 }
 
+export type ExecutionProfile = 'auto' | 'frontier' | 'local_microagent';
+
 export interface BatchExtractionOptions {
   papers: PaperDocumentInfo[];
   lockedSchema: SchemaColumn[]; // Strict, immutable approved schema
   pacingDelayMs?: number;       // e.g. 2500ms for Gemini, 0ms for local
+  executionProfile?: ExecutionProfile;
   signal?: AbortSignal;
   onPaperStart?: (paper: PaperDocumentInfo, index: number, total: number) => void;
   onPaperComplete?: (paper: PaperDocumentInfo, result: SinglePaperExtractionResult, index: number, total: number) => void;

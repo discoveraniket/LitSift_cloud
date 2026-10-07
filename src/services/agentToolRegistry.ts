@@ -16,7 +16,8 @@ import {
 } from './providerConfig';
 import { executeLmStudioStructuredGeneration, OpenAiMessage } from './lmStudioService';
 import { executeOpenRouterStructuredGeneration } from './openRouterService';
-import { proposeSchemaFromGoal } from './extractionEngine';
+import { proposeSchemaFromGoal, extractWithFixedSchema } from './extractionEngine';
+import { stageExtractedRowsToGrid } from './extractionGridBridge';
 
 export type AgentExecutionMode = 'human_in_loop' | 'autonomous_autopilot';
 
@@ -105,39 +106,65 @@ export const safeJsonParse = <T = any>(rawText: string, fallback?: T): T => {
     throw new Error('Empty text provided for JSON parsing.');
   }
 
-  // 1. Strip markdown fences like ```json ... ``` or ``` ... ```
-  let cleaned = rawText.trim();
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
-  }
-
-  // 2. Direct fast parse
-  try {
-    return JSON.parse(cleaned);
-  } catch (firstErr) {
-    // 3. Fallback: repair trailing commas before closing braces/brackets
+  const parseCandidate = (candidate: string): T | null => {
     try {
-      const withoutTrailingCommas = cleaned.replace(/,\s*([}\]])/g, '$1');
-      return JSON.parse(withoutTrailingCommas);
+      return JSON.parse(candidate);
     } catch {
-      // 4. Fallback: repair unescaped raw newlines or control characters
-      let sanitized = cleaned
-        .replace(/[\u0000-\u001F\u007F-\u009F]/g, (c) => (c === '\n' || c === '\r' || c === '\t' ? c : ''))
-        .replace(/,\s*([}\]])/g, '$1');
+      // Repair trailing commas
       try {
-        return JSON.parse(sanitized);
+        const withoutTrailingCommas = candidate.replace(/,\s*([}\]])/g, '$1');
+        return JSON.parse(withoutTrailingCommas);
       } catch {
-        // 5. Fallback: repair truncated JSON structures (unterminated strings, unclosed brackets/braces)
+        // Repair control characters
+        const sanitized = candidate
+          .replace(/[\u0000-\u001F\u007F-\u009F]/g, (c) => (c === '\n' || c === '\r' || c === '\t' ? c : ''))
+          .replace(/,\s*([}\]])/g, '$1');
         try {
-          const repaired = repairTruncatedJson(sanitized);
-          return JSON.parse(repaired);
+          return JSON.parse(sanitized);
         } catch {
-          if (fallback !== undefined) return fallback;
-          throw firstErr;
+          // Repair truncated JSON
+          try {
+            const repaired = repairTruncatedJson(sanitized);
+            return JSON.parse(repaired);
+          } catch {
+            return null;
+          }
         }
       }
     }
+  };
+
+  const cleaned = rawText.trim();
+
+  // Strategy 1: Direct fast parse
+  let result = parseCandidate(cleaned);
+  if (result !== null) return result;
+
+  // Strategy 2: Extract markdown code blocks (e.g. ```json ... ``` anywhere in output)
+  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch && codeBlockMatch[1]) {
+    result = parseCandidate(codeBlockMatch[1].trim());
+    if (result !== null) return result;
   }
+
+  // Strategy 3: Outermost JSON object { ... }
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    result = parseCandidate(cleaned.slice(firstBrace, lastBrace + 1));
+    if (result !== null) return result;
+  }
+
+  // Strategy 4: Outermost JSON array [ ... ]
+  const firstBracket = cleaned.indexOf('[');
+  const lastBracket = cleaned.lastIndexOf(']');
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    result = parseCandidate(cleaned.slice(firstBracket, lastBracket + 1));
+    if (result !== null) return result;
+  }
+
+  if (fallback !== undefined) return fallback;
+  throw new Error(`Failed to parse JSON from model output: ${rawText.slice(0, 100)}...`);
 };
 
 export const agentToolsRegistry: Record<string, AgentToolSpec> = {
@@ -533,19 +560,52 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
           return rowObj;
         });
 
-        gridStore.appendRows(rowsToAppend);
-        const createdRowIds = rowsToAppend.map((r) => r.id);
+        // Idempotency safeguard: Do not re-append duplicate rows for the same paper
+        // if an existing row has identical values across non-empty fields.
+        const nonDuplicateRows = rowsToAppend.filter((newRow) => {
+          const isExactDuplicate = gridStore.rows.some((existingRow) => {
+            const samePaper =
+              existingRow.pdfTitle.trim().toLowerCase() === newRow.pdfTitle.trim().toLowerCase() ||
+              (existingRow.pdfId && newRow.pdfId && existingRow.pdfId === newRow.pdfId);
+            if (!samePaper) return false;
+
+            // Check if all populated schema columns match identically
+            const hasDifferences = gridStore.columns.some((col) => {
+              const oldVal = String(existingRow[col.field] ?? '').trim().toLowerCase();
+              const newVal = String(newRow[col.field] ?? '').trim().toLowerCase();
+              return oldVal !== newVal;
+            });
+            return !hasDifferences;
+          });
+          return !isExactDuplicate;
+        });
+
+        if (nonDuplicateRows.length === 0 && rowsToAppend.length > 0) {
+          logStore.addLog(
+            'info',
+            `appendRows skipped: Observation(s) already exist in data grid with identical values (deduplication safeguard).`
+          );
+          return {
+            success: true,
+            replyText: `Identical observation row(s) already exist in the data grid for **"${rowsToAppend[0]?.pdfTitle}"**. Existing rows were preserved without duplicate entries.`,
+            summary: `appendRows(0 rows appended, duplicate avoided)`,
+            resultData: { createdRowIds: [], rowsCount: 0, rows: [] },
+          };
+        }
+
+        gridStore.appendRows(nonDuplicateRows);
+        const createdRowIds = nonDuplicateRows.map((r) => r.id);
 
         logStore.addLog(
           'success',
-          `Batch appended ${rowsToAppend.length} new observation row(s) [${createdRowIds.join(', ')}]`
+          `Batch appended ${nonDuplicateRows.length} new observation row(s) [${createdRowIds.join(', ')}]`
         );
 
         return {
           success: true,
-          replyText: `Successfully appended ${rowsToAppend.length} observation row(s) to the table: [${createdRowIds.join(', ')}].`,
-          summary: `appendRows(${rowsToAppend.length} rows created)`,
-          resultData: { createdRowIds, rowsCount: rowsToAppend.length, rows: rowsToAppend },
+          replyText: `Successfully appended ${nonDuplicateRows.length} observation row(s) to the table: [${createdRowIds.join(', ')}].`,
+          summary: `appendRows(${nonDuplicateRows.length} rows created)`,
+          resultData: { createdRowIds, rowsCount: nonDuplicateRows.length, rows: nonDuplicateRows },
         };
       } catch (err: any) {
         useLogStore.getState().addLog('error', `appendRows failed: ${err.message}`);
@@ -963,7 +1023,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
 
   extractPDFData: {
     name: 'extractPDFData',
-    description: 'Extract structured findings and evidence citations from the attached research paper PDF into the table grid.',
+    description: 'Extract structured findings and evidence citations from the attached research paper PDF into the table grid matching the user research goal and approved schema.',
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -971,9 +1031,13 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
           type: Type.STRING,
           description: 'PDF title or ID to extract findings from.',
         },
+        userGoal: {
+          type: Type.STRING,
+          description: 'Optional specific research objective or focus for the extraction (e.g. target strains, treatment conditions).',
+        },
       },
     },
-    execute: async (args: any, mode: AgentExecutionMode): Promise<ToolExecutionResult> => {
+    execute: async (args: any, _mode: AgentExecutionMode): Promise<ToolExecutionResult> => {
       try {
         const gridStore = useGridStore.getState();
         const logStore = useLogStore.getState();
@@ -1007,7 +1071,7 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
       if (headers.length === 0) {
         logStore.setActiveStep(`Formulating extraction schema proposal for "${targetPdfTitle}"...`);
         const proposal = await proposeSchemaFromGoal(
-          `Extract empirical scientific parameters from ${pdfInfo?.title || targetPdfTitle}`,
+          args.userGoal || `Extract empirical scientific parameters from ${pdfInfo?.title || targetPdfTitle}`,
           pdfInfo
         );
         const colList = proposal.proposedColumns
@@ -1023,389 +1087,55 @@ export const agentToolsRegistry: Record<string, AgentToolSpec> = {
         };
       }
 
-      const contentsParts: any[] = [];
-      const effectiveMode = pdfInfo ? resolveEffectiveGroundingMode(pdfInfo) : 'none';
-      let groundingLogMode = 'None (Detached)';
-
-      if (pdfInfo && effectiveMode === 'pdf') {
-        try {
-          const rawBase64 = await getPdfBase64(pdfInfo);
-          const base64Data = rawBase64 && rawBase64.includes(',') ? rawBase64.split(',')[1] : rawBase64;
-          if (base64Data) {
-            contentsParts.push({
-              inlineData: {
-                mimeType: 'application/pdf',
-                data: base64Data.trim(),
-              },
-            });
-            groundingLogMode = 'PDF Multimodal Binary';
-          }
-        } catch (e: any) {
-          logStore.addLog('warn', `PDF binary read note for "${pdfInfo.name}": ${e.message}`);
-        }
+      if (!pdfInfo) {
+        throw new Error(`Paper document "${targetPdfTitle}" was not found in the workspace.`);
       }
 
-      if (contentsParts.length === 0 && pdfInfo && effectiveMode !== 'none') {
-        const isAbstractOnlyMode = effectiveMode === 'abstract_only';
-        const docMarkdown = buildPaperMarkdownContext(pdfInfo, { abstractOnly: isAbstractOnlyMode });
-        if (docMarkdown.trim().length > 0) {
-          contentsParts.push({
-            text: `[DOCUMENT CONTENT (${isAbstractOnlyMode ? 'Abstract Only' : 'Structured Text'}): "${pdfInfo.title || pdfInfo.name}"]\n${docMarkdown}`,
-          });
-          groundingLogMode = isAbstractOnlyMode ? 'Abstract-Only Text' : 'Structured Markdown Text';
-        }
-      }
+      logStore.setActiveStep(`[2/3] Extracting findings via ${modelDisplayName}...`);
+      useAgentStore.getState().setActivityStatus(
+        'executing_tool',
+        `[2/3] Extracting schema findings via ${modelDisplayName}...`,
+        'extractPDFData'
+      );
 
-      logStore.addLog('info', `Active grounding payload mode for extraction: ${groundingLogMode}`);
-
-      const isAbstractOnly = effectiveMode === 'abstract_only' || pdfInfo?.sourceType === 'doi_abstract_only' || (!pdfInfo?.url && !pdfInfo?.file && !pdfInfo?.sections?.length);
-
-      // Construct dynamic structured JSON schema from active table grid columns
-      const columnProperties: Record<string, any> = {};
-      const citationProperties: Record<string, any> = {};
-
-      gridStore.columns.forEach((col) => {
-        const fieldKey = col.field;
-        const headerTitle = col.headerName || col.field;
-
-        columnProperties[fieldKey] = {
-          type: Type.STRING,
-          description: isAbstractOnly
-            ? `Extracted finding for "${headerTitle}" explicitly stated in the abstract. If not disclosed in the abstract, return "Not disclosed in abstract (Requires full PDF)".`
-            : `Extracted scientific finding for "${headerTitle}" from the paper. If not measured, tested, or reported in the document, return "Not reported".`,
-        };
-
-        citationProperties[fieldKey] = {
-          type: Type.OBJECT,
-          description: `Grounded citation for "${headerTitle}". If the parameter is "Not reported", set snippetQuote to "Not reported in document", sectionName to "N/A", and reasoning to an explanation of why the parameter is absent from the paper.`,
-          properties: {
-            pageNumber: {
-              type: Type.INTEGER,
-              description: 'PDF page number (integer, 1 if reading text/abstract)',
-            },
-            sectionName: {
-              type: Type.STRING,
-              description: 'Exact section heading (e.g. Methods §2.1, Results - Table 2, Abstract), or "N/A" if not reported.',
-            },
-            paragraphNumber: {
-              type: Type.STRING,
-              description: 'Paragraph or line location (e.g. Paragraph 2), or "N/A" if not reported.',
-            },
-            snippetQuote: {
-              type: Type.STRING,
-              description: 'The EXACT UNALTERED VERBATIM sentence quote from the paper, or "Not reported in document" if unmentioned.',
-            },
-            reasoning: {
-              type: Type.STRING,
-              description: 'Scientific rationale for why this value was extracted, or explanation of why the parameter is absent from the text.',
-            },
-          },
-          required: ['snippetQuote', 'sectionName', 'reasoning'],
-        };
+      const extractionResult = await extractWithFixedSchema({
+        paper: pdfInfo,
+        lockedSchema: gridStore.columns,
+        userGoal: args.userGoal || `Extract parameters for "${pdfInfo.title || targetPdfTitle}"`,
       });
 
-      const extractionResponseSchema = {
-        type: Type.OBJECT,
-        properties: {
-          rows: {
-            type: Type.ARRAY,
-            description: 'List of distinct experimental observation rows extracted from the paper.',
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                ...columnProperties,
-                citations: {
-                  type: Type.OBJECT,
-                  description: 'Grounded citation object containing a citation entry for EVERY extracted column field.',
-                  properties: citationProperties,
-                  required: headers,
-                },
-              },
-              required: headers,
-            },
-          },
+      logStore.setActiveStep(`[3/3] Staging extracted findings into table grid...`);
+      useAgentStore.getState().setActivityStatus(
+        'executing_tool',
+        `[3/3] Staging extracted findings into table grid...`,
+        'extractPDFData'
+      );
+
+      const stagedRows = stageExtractedRowsToGrid(
+        pdfInfo,
+        extractionResult.observations,
+        gridStore.columns
+      );
+
+      logStore.setActiveStep(null);
+      logStore.addLog(
+        'success',
+        `Extraction completed in ${extractionResult.durationSec}s. ${stagedRows.length} row(s) staged for review.`
+      );
+
+      const createdRowIds = stagedRows.map((r: GridRow) => r.id);
+      return {
+        success: true,
+        replyText: `Extracted ${stagedRows.length} observation row(s) from **${pdfInfo.title || targetPdfTitle}** into the master table with grounded citations! Newly created row IDs: [${createdRowIds.join(', ')}].`,
+        summary: `extractPDFData(${pdfInfo.name || targetPdfTitle} -> ${stagedRows.length} rows: [${createdRowIds.join(', ')}])`,
+        resultData: {
+          status: 'COMPLETED',
+          message: `Successfully created and inserted ${stagedRows.length} new row(s) into the data grid with full evidence citations. The new row IDs are: [${createdRowIds.join(', ')}].`,
+          createdRowIds,
+          pdfId: pdfInfo.id,
+          tokensUsed: extractionResult.tokensUsed,
         },
-        required: ['rows'],
       };
-
-      const schemaPrompt = `You are extracting structured scientific findings from the research paper "${pdfInfo?.title || pdfInfo?.name || targetPdfTitle}".
-
-Target Schema Columns:
-${gridStore.columns.map((c, i) => `${i + 1}. "${c.headerName}" (field key: "${c.field}")`).join('\n')}
-
-Core Extraction Rules:
-1. Multi-Observation Rows: If the paper tests multiple distinct variables, experimental groups, treatments, or pairwise combinations, emit a DISTINCT ROW for each tested subject/observation that has actual experimental results, ignoring background mentions.
-2. Missing Values: If a column was not measured, tested, or reported in the paper, set its value to "Not reported".
-3. Grounded Citations: For EVERY column in "citations", provide the exact unaltered verbatim sentence in "snippetQuote" (or "Not reported in document" if absent), sectionName, and reasoning for browser evidence highlighting.
-${isAbstractOnly ? `4. Abstract-Only: Extract ONLY findings in the abstract text. For unmentioned fields, use "Not disclosed in abstract (Requires full PDF)".` : ''}`;
-
-      contentsParts.push({ text: schemaPrompt });
-
-      const genStartTime = performance.now();
-      let text = '';
-      let elapsed = '0.00';
-
-      if (provider === 'openrouter') {
-        const orModelName = getOpenRouterModel() || DEFAULT_OPENROUTER_MODEL;
-        logStore.setActiveStep(`[2/3] Transmitting request to OpenRouter (${orModelName})...`);
-        useAgentStore.getState().setActivityStatus('executing_tool', `[2/3] Extracting schema findings via OpenRouter (${orModelName})...`, 'extractPDFData');
-        const fullPromptText = contentsParts.map((p) => p.text || '').filter(Boolean).join('\n\n');
-        const openAiMessages: OpenAiMessage[] = [
-          {
-            role: 'system',
-            content: 'You are an autonomous scientific literature data extractor. Extract empirical observation rows adhering strictly to the requested schema. Return valid JSON only.',
-          },
-          {
-            role: 'user',
-            content: fullPromptText,
-          },
-        ];
-
-        const orResult = await executeOpenRouterStructuredGeneration({
-          schemaName: 'extractionResponse',
-          schema: extractionResponseSchema,
-          messages: openAiMessages,
-          temperature: 0.1,
-        });
-
-        elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
-        const usage = orResult.usage;
-        const promptTokens = usage?.prompt_tokens ?? usage?.promptTokens ?? 0;
-        const candidateTokens = usage?.completion_tokens ?? usage?.candidateTokens ?? 0;
-        logStore.addLog(
-          'info',
-          `⏱️ extractPDFData: OpenRouter responded in ${elapsed}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`,
-          { usageMetadata: usage, latencySec: Number(elapsed) }
-        );
-        text = orResult.rawText;
-      } else if (provider === 'lmstudio') {
-        const localModelName = getLmStudioModel() || 'Local Model';
-        logStore.setActiveStep(`[2/3] Transmitting request to LM Studio (${localModelName})...`);
-        useAgentStore.getState().setActivityStatus('executing_tool', `[2/3] Extracting schema findings via LM Studio (${localModelName})...`, 'extractPDFData');
-        const fullPromptText = contentsParts.map((p) => p.text || '').filter(Boolean).join('\n\n');
-        const openAiMessages: OpenAiMessage[] = [
-          {
-            role: 'system',
-            content: 'You are an autonomous scientific literature data extractor. Extract empirical observation rows adhering strictly to the requested schema. Return valid JSON only.',
-          },
-          {
-            role: 'user',
-            content: fullPromptText,
-          },
-        ];
-
-        const lmsResult = await executeLmStudioStructuredGeneration({
-          schemaName: 'extractionResponse',
-          schema: extractionResponseSchema,
-          messages: openAiMessages,
-          temperature: 0.1,
-        });
-
-        elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
-        const usage = lmsResult.usage;
-        const promptTokens = usage?.prompt_tokens ?? usage?.promptTokens ?? 0;
-        const candidateTokens = usage?.completion_tokens ?? usage?.candidateTokens ?? 0;
-        logStore.addLog(
-          'info',
-          `⏱️ extractPDFData: LM Studio responded in ${elapsed}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`,
-          { usageMetadata: usage, latencySec: Number(elapsed) }
-        );
-        text = lmsResult.rawText;
-      } else {
-        const apiKey = getGeminiApiKey();
-        const selectedModel = getSelectedGeminiModel();
-        logStore.setActiveStep(`[2/3] Transmitting request to Google Gemini (${selectedModel})...`);
-        useAgentStore.getState().setActivityStatus('executing_tool', `[2/3] Extracting schema findings via Gemini (${selectedModel})...`, 'extractPDFData');
-        const ai = new GoogleGenAI({ apiKey });
-        let res: any;
-        try {
-          res = await ai.models.generateContent({
-            model: selectedModel,
-            contents: contentsParts,
-            config: {
-              temperature: 0.1,
-              responseMimeType: 'application/json',
-              responseSchema: extractionResponseSchema,
-            },
-          });
-        } catch (firstErr: any) {
-          const errMsg = String(firstErr?.message || '');
-          const isTransient =
-            errMsg.includes('503') ||
-            errMsg.includes('Deadline') ||
-            errMsg.includes('429') ||
-            errMsg.includes('UNAVAILABLE') ||
-            firstErr?.status === 'UNAVAILABLE';
-
-          if (isTransient) {
-            logStore.addLog('warn', `Transient error from Gemini API (${errMsg}). Retrying extraction in 2s...`);
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-            res = await ai.models.generateContent({
-              model: selectedModel,
-              contents: contentsParts,
-              config: {
-                temperature: 0.1,
-                responseMimeType: 'application/json',
-                responseSchema: extractionResponseSchema,
-              },
-            });
-          } else {
-            throw firstErr;
-          }
-        }
-
-        elapsed = ((performance.now() - genStartTime) / 1000).toFixed(2);
-        const usage = res.usageMetadata;
-        const promptTokens = usage?.promptTokenCount ?? 0;
-        const candidateTokens = usage?.candidatesTokenCount ?? 0;
-        const thinkingTokens = (usage as any)?.thinkingTokenCount ?? (usage as any)?.reasoningTokenCount;
-        const cachedTokens = usage?.cachedContentTokenCount;
-
-        let logDetail = `⏱️ extractPDFData: LLM responded in ${elapsed}s | Tokens: Prompt=${promptTokens.toLocaleString()}, Output=${candidateTokens.toLocaleString()}`;
-        if (thinkingTokens) logDetail += `, Thinking=${thinkingTokens.toLocaleString()}`;
-        if (cachedTokens) logDetail += `, Cached=${cachedTokens.toLocaleString()}`;
-        logStore.addLog('info', logDetail, { usageMetadata: usage, latencySec: Number(elapsed) });
-
-        text = res.candidates?.[0]?.content?.parts?.[0]?.text;
-      }
-
-      if (!text) {
-        const err = 'LLM API returned an empty extraction response.';
-        logStore.addLog('error', err);
-        throw new Error(err);
-      }
-
-        logStore.setActiveStep(`[3/3] Parsing JSON payload & populating table grid...`);
-        useAgentStore.getState().setActivityStatus('executing_tool', `[3/3] Staging extracted findings into table grid...`, 'extractPDFData');
-        const parsed = safeJsonParse(text);
-
-        let rawRows: any[] = [];
-        if (Array.isArray(parsed.rows) && parsed.rows.length > 0) {
-          rawRows = parsed.rows;
-        } else if (parsed.extractions && typeof parsed.extractions === 'object') {
-          rawRows = [{ ...parsed.extractions, citations: parsed.citations || {} }];
-        } else if (Array.isArray(parsed)) {
-          rawRows = parsed;
-        } else {
-          rawRows = [parsed];
-        }
-
-        const activePdfId = usePdfStore.getState().activePdfId;
-        const rowsToAppend: GridRow[] = rawRows.map((r: any, i: number) => {
-          const rowId = `extracted-${Date.now()}-${i}`;
-          const rowData: GridRow = {
-            id: rowId,
-            pdfId: pdfInfo?.id || activePdfId || `pdf-${Date.now()}`,
-            pdfTitle: pdfInfo?.name || targetPdfTitle,
-            aiStatus: mode === 'human_in_loop' ? 'Pending Review' : 'Confirmed',
-            pendingReviewFields: mode === 'human_in_loop' ? gridStore.columns.map((c) => c.field) : [],
-            citationMap: {},
-          };
-
-          gridStore.columns.forEach((col) => {
-            const val =
-              r[col.field] ??
-              r[col.headerName] ??
-              Object.entries(r).find(
-                ([k]) =>
-                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
-                  col.field.toLowerCase().replace(/[^a-z0-9]/g, '') ||
-                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
-                  col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
-              )?.[1];
-            let cellStr = val !== undefined && val !== null ? String(val).trim() : 'Not reported';
-            if (cellStr === '-' || cellStr === '' || cellStr.toLowerCase() === 'none' || cellStr.toLowerCase() === 'n/a') {
-              cellStr = 'Not reported';
-            }
-            rowData[col.field] = cellStr;
-          });
-
-          const rawCitations = r.citations || parsed.citations || {};
-          const normalizedCitationMap: Record<string, any> = {};
-
-          gridStore.columns.forEach((col) => {
-            const citation =
-              rawCitations[col.field] ??
-              rawCitations[col.headerName] ??
-              Object.entries(rawCitations).find(
-                ([k]) =>
-                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
-                  col.field.toLowerCase().replace(/[^a-z0-9]/g, '') ||
-                  k.toLowerCase().replace(/[^a-z0-9]/g, '') ===
-                  col.headerName.toLowerCase().replace(/[^a-z0-9]/g, '')
-              )?.[1];
-
-            const isUnreported = rowData[col.field] === 'Not reported';
-
-            if (citation) {
-              const citObj = {
-                pageNumber: Number(citation.pageNumber) || 1,
-                sectionName: citation.sectionName || (isUnreported ? 'N/A' : 'Extracted Section'),
-                paragraphNumber: citation.paragraphNumber || undefined,
-                lineNumber: citation.lineNumber || undefined,
-                snippetQuote: citation.snippetQuote || (isUnreported ? 'Not reported in document' : rowData[col.field]),
-                reasoning: citation.reasoning || (isUnreported ? `The parameter "${col.headerName}" was not reported in the document.` : `Extracted value "${rowData[col.field]}" from document`),
-                confidence: citation.confidence || (isUnreported ? 0.99 : 0.96),
-              };
-              normalizedCitationMap[col.field] = citObj;
-              normalizedCitationMap[col.headerName] = citObj;
-            } else if (isUnreported) {
-              // Guaranteed fallback grounding card for unreported cell
-              const fallbackCit = {
-                pageNumber: 1,
-                sectionName: 'N/A',
-                snippetQuote: 'Not reported in document',
-                reasoning: `The parameter "${col.headerName}" was not investigated or reported in this paper.`,
-                confidence: 0.99,
-              };
-              normalizedCitationMap[col.field] = fallbackCit;
-              normalizedCitationMap[col.headerName] = fallbackCit;
-            }
-          });
-
-          rowData.citationMap = normalizedCitationMap;
-          return rowData;
-        });
-
-        gridStore.appendRows(rowsToAppend);
-
-        useGridStore.setState(
-          produce((state: any) => {
-            const newestRow = state.rows[state.rows.length - rowsToAppend.length];
-            if (newestRow && newestRow.citationMap) {
-              const activeCols = state.columns;
-              const firstField = activeCols[0]?.field;
-              if (firstField && newestRow.citationMap[firstField]) {
-                state.activeCitation = newestRow.citationMap[firstField];
-              }
-            }
-          })
-        );
-
-        logStore.setActiveStep(null);
-        logStore.addLog('success', `Extraction completed in ${elapsed}s. ${rowsToAppend.length} row(s) staged for review.`);
-
-        const createdRowIds = rowsToAppend.map((r) => r.id);
-        const rowSummaries = rowsToAppend.map((r) => {
-          const summaryObj: Record<string, any> = { id: r.id, pdfTitle: r.pdfTitle };
-          gridStore.columns.forEach((c) => {
-            summaryObj[c.field] = r[c.field];
-          });
-          return summaryObj;
-        });
-
-        return {
-          success: true,
-          replyText: `Extracted ${rowsToAppend.length} observation row(s) from **${pdfInfo?.name || targetPdfTitle}** into the master table with grounded citations! Newly created row IDs: [${createdRowIds.join(', ')}].`,
-          summary: `extractPDFData(${pdfInfo?.name || targetPdfTitle} -> ${rowsToAppend.length} rows: [${createdRowIds.join(', ')}])`,
-          resultData: {
-            status: 'COMPLETED',
-            message: `Successfully created and inserted ${rowsToAppend.length} new row(s) into the data grid with full evidence citations. The new row IDs are: [${createdRowIds.join(', ')}]. These rows are already active in the table state. You may use queryGridData with any of these row IDs to inspect and verify specific columns or synthesize your final summary for the user. Do NOT attempt to overwrite other rows with batchUpdateCells.`,
-            createdRowIds,
-            rowsSummary: rowSummaries,
-            pdfId: pdfInfo?.id || activePdfId,
-          },
-        };
       } catch (err: any) {
         useLogStore.getState().setActiveStep(null);
         useLogStore.getState().addLog('error', `extractPDFData failed: ${err.message}`);
@@ -1673,7 +1403,7 @@ Return your response in JSON format:
         },
         searchQuery: {
           type: Type.STRING,
-          description: 'General query or question to answer across the dataset.',
+          description: 'Optional query or keyword to filter rows across all columns. Leave empty or pass "all" / "*" to retrieve the full table state.',
         },
       },
     },
@@ -1687,25 +1417,59 @@ Return your response in JSON format:
 
         let matchingRows = gridStore.rows.filter((r) => !r.isDraftRow);
 
+        const cleanQuery = typeof searchQuery === 'string' ? searchQuery.trim() : '';
+        const isSelectAllQuery =
+          !cleanQuery ||
+          cleanQuery === '*' ||
+          cleanQuery.toLowerCase() === 'all' ||
+          cleanQuery.toLowerCase() === 'list';
+
         if (filterField && filterValue) {
           matchingRows = matchingRows.filter((r) =>
             String(r[filterField] || '').toLowerCase().includes(filterValue.toLowerCase())
           );
-        } else if (searchQuery) {
-          const q = searchQuery.toLowerCase();
+        } else if (cleanQuery && !isSelectAllQuery) {
+          const q = cleanQuery.toLowerCase();
           matchingRows = matchingRows.filter((r) =>
             Object.values(r).some((v) => typeof v === 'string' && v.toLowerCase().includes(q))
           );
         }
 
-        const summary = `Found ${matchingRows.length} matching row(s) in the table grid.`;
-        logStore.addLog('success', summary);
+        const colList = gridStore.columns.map((c) => `"${c.headerName}"`).join(', ');
+        const colsDesc =
+          gridStore.columns.length > 0
+            ? `${gridStore.columns.length} active columns: [${colList}]`
+            : `0 schema columns defined`;
+
+        const rowsContent =
+          matchingRows.length === 0
+            ? `*(0 data rows populated in the grid yet)*`
+            : matchingRows
+                .map(
+                  (r, i) =>
+                    `${i + 1}. **${r.pdfTitle}** | ${gridStore.columns
+                      .map(
+                        (c) =>
+                          `${c.headerName}: ${
+                            r[c.field] !== undefined && r[c.field] !== ''
+                              ? `"${r[c.field]}"`
+                              : '(Empty / Unextracted)'
+                          }`
+                      )
+                      .join(', ')}`
+                )
+                .join('\n');
 
         return {
           success: true,
-          replyText: `📊 **Table Query Results (${matchingRows.length} rows found):**\n\n${matchingRows.map((r, i) => `${i + 1}. **${r.pdfTitle}** | ${gridStore.columns.map((c) => `${c.headerName}: ${r[c.field] !== undefined && r[c.field] !== '' ? `"${r[c.field]}"` : '(Empty / Unextracted)'}`).join(', ')}`).join('\n')}`,
-          summary: `queryGridData(${matchingRows.length} matching rows)`,
-          resultData: { totalRows: gridStore.rows.length, matches: matchingRows },
+          replyText: `📊 **Table State (${colsDesc}; ${matchingRows.length} data rows):**\n\n${rowsContent}`,
+          summary: `queryGridData(${matchingRows.length} rows, ${gridStore.columns.length} cols)`,
+          resultData: {
+            totalRows: gridStore.rows.length,
+            columnCount: gridStore.columns.length,
+            columns: gridStore.columns.map((c) => c.headerName),
+            matches: matchingRows,
+          },
         };
       } catch (err: any) {
         useLogStore.getState().addLog('error', `queryGridData failed: ${err.message}`);

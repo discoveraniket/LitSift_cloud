@@ -187,15 +187,36 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(useGridStore.getState().rows).toHaveLength(0);
   });
 
-  it('executes queryGridData without mutating table state', async () => {
+  it('executes queryGridData without mutating table state and handles "all", "*", or empty queries gracefully', async () => {
+    // 1. Filtered query
     const queryRes = await agentToolsRegistry.queryGridData.execute(
       { filterField: 'sampleSize', filterValue: '100' },
       'human_in_loop'
     );
-
     expect(queryRes.success).toBe(true);
     expect(queryRes.resultData.matches).toHaveLength(1);
     expect(queryRes.resultData.matches[0].id).toBe('row-2');
+
+    // 2. Universal "all" query should return all rows rather than matching literal string "all"
+    const allQueryRes = await agentToolsRegistry.queryGridData.execute(
+      { searchQuery: 'all' },
+      'human_in_loop'
+    );
+    expect(allQueryRes.success).toBe(true);
+    expect(allQueryRes.resultData.matches).toHaveLength(2);
+
+    // 3. Universal "*" wildcard query
+    const starQueryRes = await agentToolsRegistry.queryGridData.execute(
+      { searchQuery: '*' },
+      'human_in_loop'
+    );
+    expect(starQueryRes.success).toBe(true);
+    expect(starQueryRes.resultData.matches).toHaveLength(2);
+
+    // 4. Empty arguments `{}` should also return all rows
+    const emptyQueryRes = await agentToolsRegistry.queryGridData.execute({}, 'human_in_loop');
+    expect(emptyQueryRes.success).toBe(true);
+    expect(emptyQueryRes.resultData.matches).toHaveLength(2);
   });
 
   it('executes appendRows tool to add single or batch observations atomically', async () => {
@@ -226,6 +247,19 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(allRows[2].aiStatus).toBe('Pending Review');
     expect(allRows[3].aiStatus).toBe('Pending Review');
     expect(allRows[4].aiStatus).toBe('Pending Review');
+
+    // 3. Re-appending identical row should trigger idempotency check and prevent duplicate entries
+    const duplicateRes = await agentToolsRegistry.appendRows.execute(
+      {
+        rows: [{ fields: { methodology: 'Single Method', sampleSize: '150' } }],
+        pdfTitle: 'Appended Paper.pdf',
+      },
+      'human_in_loop'
+    );
+    expect(duplicateRes.success).toBe(true);
+    expect(duplicateRes.resultData.rowsCount).toBe(0);
+    // Table length should still be 5
+    expect(useGridStore.getState().rows).toHaveLength(5);
   });
 
   it('handles errors gracefully in updateCell when invalid inputs are passed', async () => {
