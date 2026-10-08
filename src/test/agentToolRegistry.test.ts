@@ -39,7 +39,7 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(Array.isArray(tools[0].functionDeclarations)).toBe(true);
 
     const names = tools[0].functionDeclarations.map((d: any) => d.name);
-    expect(names).toHaveLength(14);
+    expect(names).toHaveLength(16);
     expect(names).toContain('updateCell');
     expect(names).toContain('batchUpdateCells');
     expect(names).toContain('updateRow');
@@ -55,6 +55,8 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(names).toContain('verifyEvidenceCitation');
     expect(names).toContain('queryGridData');
     expect(names).toContain('proposeExtractionSchema');
+    expect(names).toContain('searchAcademicLiterature');
+    expect(names).toContain('stagePaperToWorkspace');
 
     const updateCellDecl = tools[0].functionDeclarations.find((d: any) => d.name === 'updateCell');
     expect(updateCellDecl?.parameters?.type).toBe('OBJECT');
@@ -335,5 +337,23 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     );
     expect(singleRes.success).toBe(true);
     expect(useGridStore.getState().columns.some((c) => c.field === 'plaque_morphology')).toBe(true);
+  });
+
+  it('validates and executes searchAcademicLiterature tool parameters gracefully', async () => {
+    const res = await agentToolsRegistry.searchAcademicLiterature.execute(
+      { query: '' },
+      'human_in_loop'
+    );
+    expect(res.success).toBe(true);
+    expect(res.summary).toContain('searchAcademicLiterature(0 hits)');
+  });
+
+  it('validates stagePaperToWorkspace tool requires doi parameter', async () => {
+    const res = await agentToolsRegistry.stagePaperToWorkspace.execute(
+      {},
+      'human_in_loop'
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Parameter "doi" is required');
   });
 });

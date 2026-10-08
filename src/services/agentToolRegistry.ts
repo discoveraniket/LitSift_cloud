@@ -18,6 +18,7 @@ import { executeLmStudioStructuredGeneration, OpenAiMessage } from './lmStudioSe
 import { executeOpenRouterStructuredGeneration } from './openRouterService';
 import { proposeSchemaFromGoal, extractWithFixedSchema } from './extractionEngine';
 import { stageExtractedRowsToGrid } from './extractionGridBridge';
+import { searchAcademicLiterature, stagePaperByDoi } from './academicSearchService';
 
 export type AgentExecutionMode = 'human_in_loop' | 'autonomous_autopilot';
 
@@ -1519,6 +1520,129 @@ Return your response in JSON format:
           success: false,
           replyText: `Failed to propose schema: ${err.message}`,
           summary: `proposeSchema(failed: ${err.message})`,
+          error: err.message,
+        };
+      }
+    },
+  },
+
+  searchAcademicLiterature: {
+    name: 'searchAcademicLiterature',
+    description: 'Search open international academic registries (OpenAlex & Europe PMC) for research papers matching a scientific topic or related to an existing paper. Returns candidate papers with titles, DOIs, abstracts, and Open Access status for user review.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        query: {
+          type: Type.STRING,
+          description: 'Search keywords, topic, or boolean search query (e.g. "Klebsiella phage biofilm kinetics"). Optional if relatedToDoi is specified.',
+        },
+        relatedToDoi: {
+          type: Type.STRING,
+          description: 'Optional DOI of an active paper to find related papers from its citation graph and co-citation network.',
+        },
+        limit: {
+          type: Type.NUMBER,
+          description: 'Maximum number of candidate papers to retrieve (default: 5, max: 10).',
+        },
+        openAccessOnly: {
+          type: Type.BOOLEAN,
+          description: 'Whether to restrict results to Open Access papers with available text/PDF (default: true).',
+        },
+        yearFrom: {
+          type: Type.NUMBER,
+          description: 'Optional earliest publication year filter (e.g. 2020).',
+        },
+      },
+    },
+    execute: async (args: any): Promise<ToolExecutionResult> => {
+      try {
+        const query = args.query || '';
+        const relatedToDoi = args.relatedToDoi;
+        const limit = typeof args.limit === 'number' ? args.limit : 5;
+        const openAccessOnly = args.openAccessOnly !== false;
+        const yearFrom = typeof args.yearFrom === 'number' ? args.yearFrom : undefined;
+
+        const response = await searchAcademicLiterature({
+          query,
+          relatedToDoi,
+          limit,
+          openAccessOnly,
+          yearFrom,
+        });
+
+        if (response.candidates.length === 0) {
+          return {
+            success: true,
+            replyText: `🔍 **Literature Search Results:**\n\nNo papers found matching "${query || relatedToDoi}". Try broadening your search terms or unchecking the Open Access filter.`,
+            summary: `searchAcademicLiterature(0 hits)`,
+            resultData: response,
+          };
+        }
+
+        const candidateList = response.candidates
+          .map((c, i) => {
+            const authorsStr = c.authors.length > 0 ? c.authors.slice(0, 3).join(', ') + (c.authors.length > 3 ? ' et al.' : '') : 'Unknown Authors';
+            const yearStr = c.year ? ` (${c.year})` : '';
+            const oaBadge = c.isOa ? `[${c.oaStatus.toUpperCase()} OA]` : '[Closed Access]';
+            const inWs = c.isAlreadyInWorkspace ? ' *(Already in Workspace)*' : '';
+            return `${i + 1}. **${c.title}**${yearStr}\n   - *Authors:* ${authorsStr} | *Journal:* ${c.journal}\n   - *DOI:* \`${c.doi || 'N/A'}\` | ${oaBadge}${inWs}\n   - *Abstract:* ${c.abstractSnippet}`;
+          })
+          .join('\n\n');
+
+        return {
+          success: true,
+          replyText: `🔍 **Discovered ${response.candidates.length} Research Paper(s):**\n\n${candidateList}\n\n💡 *Next Step:* Click **[+ Add to Workspace]** on any candidate card below, or ask me to stage specific papers to extract findings from them.`,
+          summary: `searchAcademicLiterature(${response.candidates.length} papers found)`,
+          resultData: response,
+        };
+      } catch (err: any) {
+        return {
+          success: false,
+          replyText: `Failed to search academic literature: ${err.message}`,
+          summary: `searchAcademicLiterature(failed: ${err.message})`,
+          error: err.message,
+        };
+      }
+    },
+  },
+
+  stagePaperToWorkspace: {
+    name: 'stagePaperToWorkspace',
+    description: 'Import and stage an academic paper by DOI into the workspace. Resolves full metadata, abstract, and Open Access PDF/text for extraction.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        doi: {
+          type: Type.STRING,
+          description: 'The canonical DOI of the research paper to stage (e.g. "10.1038/s41467-020-17849-0").',
+        },
+      },
+      required: ['doi'],
+    },
+    execute: async (args: any): Promise<ToolExecutionResult> => {
+      try {
+        const { doi } = args;
+        if (!doi) {
+          throw new Error('Parameter "doi" is required.');
+        }
+
+        const paper = await stagePaperByDoi(doi);
+        return {
+          success: true,
+          replyText: `📄 Successfully staged **"${paper.title || paper.name}"** (DOI: \`${paper.doi}\`) into your workspace!\n\nIt is now active and ready for viewing, schema synthesis, and parameter extraction.`,
+          summary: `stagePaperToWorkspace(${paper.title || doi})`,
+          resultData: {
+            paperId: paper.id,
+            title: paper.title,
+            doi: paper.doi,
+            oaStatus: paper.oaStatus,
+          },
+        };
+      } catch (err: any) {
+        return {
+          success: false,
+          replyText: `Failed to stage paper: ${err.message}`,
+          summary: `stagePaperToWorkspace(failed: ${err.message})`,
           error: err.message,
         };
       }

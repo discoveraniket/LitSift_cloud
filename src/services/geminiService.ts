@@ -483,7 +483,15 @@ EMPTY VS. NOT REPORTED PARAMETERS & PROACTIVE EXTRACTION:
 - When answering questions, querying the grid, or evaluating observations with empty cells, if the source research paper is available in the workspace, proactively inspect the document to extract the missing parameter and populate the table using updateCell or updateRow.
 - Use "Not reported" ONLY when you have checked the source paper and verified that the authors genuinely did not measure, test, or report that specific parameter in the text, figures, or tables. Always provide an evidence citation explaining that the parameter is unmentioned in the document.
 
+AUTONOMOUS LITERATURE DISCOVERY & WORKSPACE STAGING:
+- When the user asks to find, search, or discover research papers on a scientific topic or related to the active document:
+  1. If searching for papers related to the active document ("find papers related to this paper"), pass relatedToDoi: "${validation.activePdf?.doi || ''}" or key scientific keywords from the active document.
+  2. If searching for a new topic or question, formulate a clear query for searchAcademicLiterature.
+  3. Present the discovered candidate papers to the user.
+- When the user asks to add, import, or stage a discovered paper into the workspace, call stagePaperToWorkspace with its DOI.
+
 You have access to a rich declarative tool suite:
+- Academic literature discovery & staging: searchAcademicLiterature (searches OpenAlex & Europe PMC; accepts query or relatedToDoi), stagePaperToWorkspace (stages paper into workspace by DOI)
 - Document extraction & verification: extractPDFData, verifyEvidenceCitation, queryGridData
 - Row creation & structuring: appendRows (supports single or batch row additions), disaggregateRow (to expand composite rows into atomic rows), mergeRows, deleteRows
 - Cell & row editing: updateCell, batchUpdateCells, updateRow

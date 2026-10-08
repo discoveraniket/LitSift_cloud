@@ -19,6 +19,8 @@ import { getActiveModelLabel } from '../../services/providerConfig';
 import { ThoughtAccordion } from './ThoughtAccordion';
 import { AgentToolStepper } from './AgentToolStepper';
 import { AgentChatInput } from './AgentChatInput';
+import { DiscoveryCandidateCard } from './DiscoveryCandidateCard';
+import type { DiscoveredPaperCandidate } from '../../services/academicSearchService';
 
 interface RightAgentPanelProps {
   activePdfTitle?: string;
@@ -460,6 +462,50 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
                     />
                   ) : (
                     <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
+                  )}
+
+                  {/* 3.5. Discovered Academic Papers Cards (Phase 3 HITL Discovery) */}
+                  {!isUser && msg.toolsExecuted && (
+                    (() => {
+                      const discoveryTools = msg.toolsExecuted.filter(
+                        (t) => t.name === 'searchAcademicLiterature' && t.status === 'completed' && t.result?.candidates?.length > 0
+                      );
+                      if (discoveryTools.length === 0) return null;
+
+                      return (
+                        <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {discoveryTools.map((tool) => (
+                            <div key={tool.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  fontSize: '10.5px',
+                                  fontWeight: 600,
+                                  color: 'var(--text-secondary)',
+                                  padding: '0 2px',
+                                }}
+                              >
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <BookOpen size={11} color="var(--accent-primary)" />
+                                  Discovered Papers ({tool.result.candidates.length})
+                                </span>
+                                <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>
+                                  {tool.result.searchStrategy === 'related_works' ? 'Citation Graph' : 'Registry Search'}
+                                </span>
+                              </div>
+                              {tool.result.candidates.map((cand: DiscoveredPaperCandidate, idx: number) => (
+                                <DiscoveryCandidateCard
+                                  key={cand.id || cand.doi || `candidate-${idx}`}
+                                  candidate={cand}
+                                />
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()
                   )}
 
                   {/* 4. Interactive Suggestion Option Chips */}
