@@ -14,12 +14,14 @@ import {
 } from 'lucide-react';
 import { useAgentStore } from '../../store/useAgentStore';
 import { useGridStore } from '../../store/useGridStore';
+import { usePdfStore } from '../../store/usePdfStore';
 import { renderSafeMarkdown } from '../../utils/markdownUtils';
 import { getActiveModelLabel } from '../../services/providerConfig';
 import { ThoughtAccordion } from './ThoughtAccordion';
 import { AgentToolStepper } from './AgentToolStepper';
 import { AgentChatInput } from './AgentChatInput';
 import { DiscoveryCandidateCard } from './DiscoveryCandidateCard';
+import { BatchProgressCard } from './BatchProgressCard';
 import type { DiscoveredPaperCandidate } from '../../services/academicSearchService';
 
 interface RightAgentPanelProps {
@@ -39,12 +41,17 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
     activityToolName,
     streamingThought,
     streamingText,
+    agentScope,
+    setAgentScope,
+    activeBatchProgress,
     sendMessage,
     cancelInteraction,
     selectOption,
     clearMessages,
     deleteMessage,
   } = useAgentStore();
+
+  const activePdf = usePdfStore((state) => state.getActivePdf());
 
   const {
     rows,
@@ -232,6 +239,64 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
           <span>Agent</span>
         </div>
 
+        {/* Dual-Scope Toggle Pill (Workspace vs Current Paper) */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            background: 'rgba(0, 0, 0, 0.28)',
+            borderRadius: '14px',
+            padding: '2px',
+            border: '1px solid var(--border-subtle)',
+            gap: '2px',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setAgentScope('workspace')}
+            title="Workspace Scope: Continuous thread across all loaded papers and data grid"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px',
+              padding: '2px 7px',
+              fontSize: '10px',
+              fontWeight: agentScope === 'workspace' ? 600 : 400,
+              borderRadius: '12px',
+              background: agentScope === 'workspace' ? 'var(--accent-primary)' : 'transparent',
+              color: agentScope === 'workspace' ? '#11111b' : 'var(--text-secondary)',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span>🌍 Workspace</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAgentScope('paper')}
+            disabled={!activePdf}
+            title={activePdf ? `Paper Scope: Isolated notes for "${activePdf.name}"` : 'No active paper loaded in viewer'}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px',
+              padding: '2px 7px',
+              fontSize: '10px',
+              fontWeight: agentScope === 'paper' ? 600 : 400,
+              borderRadius: '12px',
+              background: agentScope === 'paper' ? 'var(--accent-primary)' : 'transparent',
+              color: agentScope === 'paper' ? '#11111b' : 'var(--text-secondary)',
+              border: 'none',
+              cursor: activePdf ? 'pointer' : 'not-allowed',
+              opacity: activePdf ? 1 : 0.45,
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span>📄 Paper</span>
+          </button>
+        </div>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           {/* Start Fresh Session */}
           <button
@@ -254,6 +319,11 @@ export const RightAgentPanel: React.FC<RightAgentPanelProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Live Multi-Paper Batch Extraction Progress Stepper Card */}
+      {activeBatchProgress && (
+        <BatchProgressCard progress={activeBatchProgress} />
+      )}
 
       {/* Interactive AI Cell Reasoning & Grounding Card */}
       {focusedCell && activeCitation && (

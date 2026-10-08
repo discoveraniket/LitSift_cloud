@@ -215,6 +215,7 @@ export async function processAgentInteraction(
 
     // Multi-Level Context Injection: Multi-Cell -> Single Cell -> Row -> Column -> Entire Table
     const gridStore = useGridStore.getState();
+    const pdfStore = usePdfStore.getState();
     const focusedCell = gridStore.focusedCell;
     const selectedCells = (gridStore.selectedCells || []).filter(
       (c) => c.field !== '0' && c.field !== 'rowNum' && gridStore.columns.some((col) => col.field === c.field)
@@ -362,6 +363,27 @@ ${rowsSummary || '  (No populated rows)'}
 ${userPrompt}`;
     }
 
+    if (pdfStore.pdfs.length > 0) {
+      const corpusManifest = pdfStore.pdfs
+        .map((p: any, idx: number) => {
+          const matchingRows = gridStore.rows.filter((r: any) => {
+            const doiMatch = p.doi && r.articleDoi && r.articleDoi.trim().toLowerCase() === p.doi.trim().toLowerCase();
+            const titleMatch = r.pdfTitle && (
+              r.pdfTitle.trim().toLowerCase() === (p.title || '').trim().toLowerCase() ||
+              r.pdfTitle.trim().toLowerCase() === (p.name || '').trim().toLowerCase()
+            );
+            return Boolean(doiMatch || titleMatch);
+          });
+          const rowCount = matchingRows.length;
+          const statusStr = rowCount > 0 ? `${rowCount} row(s) already in table` : 'Not yet extracted';
+          const doiStr = p.doi ? ` | DOI: ${p.doi}` : '';
+          return `  ${idx + 1}. "${p.title || p.name}"${doiStr} [Status: ${statusStr}]`;
+        })
+        .join('\n');
+
+      finalPromptText = `[WORKSPACE CORPUS MANIFEST (${pdfStore.pdfs.length} PAPERS LOADED)]:\n${corpusManifest}\n\n${finalPromptText}`;
+    }
+
     // Build multi-turn contents array with root document anchor (PDF binary or Structured Markdown or Abstract Only)
     const contents: any[] = [];
     const rootUserParts: any[] = [];
@@ -472,8 +494,11 @@ AUTONOMOUS SCHEMA MANAGEMENT & EXTRACTION FLOW:
     2. If the user's objective is broad or open-ended, call proposeExtractionSchema to draft a proposal for human review.
     3. Do NOT call extractPDFData directly when 0 schema columns exist in the table grid.
 - When the user asks to extract findings from the active paper and schema columns exist, call extractPDFData.
-- extractPDFData autonomously parses the paper, extracts all schema columns with verbatim citations, and inserts the new rows into the table grid.
-- Do NOT use batchUpdateCells to re-insert or overwrite data from extractPDFData.
+- When the user asks to extract findings from ALL papers, multiple papers, the entire workspace, or the library, call extractAllWorkspacePapers.
+- extractPDFData autonomously parses the target paper, extracts all schema columns with verbatim citations, and inserts the new rows into the table grid.
+- extractAllWorkspacePapers autonomously iterates over all workspace papers, skips any that were already extracted, and stages all new findings with live progress.
+- Once extractAllWorkspacePapers finishes, simply and concisely notify the user about completion and row counts without generating unrequested comparative essays.
+- Do NOT use batchUpdateCells to re-insert or overwrite data from extractPDFData or extractAllWorkspacePapers.
 
 INTERACTIVE ROW-LEVEL INTEGRITY & COUPLED ATTRIBUTES:
 - In structured scientific and analytical data tables, columns within a single row often represent interdependent, coupled attributes of a single observation or entity.

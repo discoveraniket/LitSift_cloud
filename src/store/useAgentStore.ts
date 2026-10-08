@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { produce } from 'immer';
-import { AgentState, AgentMessage } from '../types/agent';
+import { AgentState, AgentMessage, AgentScope } from '../types/agent';
 import { processAgentInteraction } from '../services/geminiService';
 import { setActiveProvider } from '../services/providerConfig';
 import { useGridStore } from './useGridStore';
@@ -9,6 +9,8 @@ import { db } from '../db/litsiftDb';
 export const useAgentStore = create<AgentState>((set, get) => ({
   messages: [],
   activePdfId: '',
+  agentScope: (typeof localStorage !== 'undefined' && (localStorage.getItem('litsift_agent_scope') as AgentScope)) || 'workspace',
+  activeBatchProgress: null,
   isThinking: false,
   activityStatus: 'idle',
   activityDetail: undefined,
@@ -23,9 +25,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   setActivityStatus: (status, detail, toolName) =>
     set({ activityStatus: status, activityDetail: detail, activityToolName: toolName }),
 
+  setActiveBatchProgress: (progress) =>
+    set({ activeBatchProgress: progress }),
+
   hydrateFromDb: async () => {
     try {
-      const activeId = get().activePdfId || 'master-grid';
+      const isWorkspace = get().agentScope === 'workspace';
+      const activeId = isWorkspace ? 'workspace-global' : (get().activePdfId || 'master-grid');
       const stored = await db.chatMessages.where('pdfId').equals(activeId).sortBy('timestamp');
 
       if (stored.length > 0) {
@@ -44,6 +50,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   setActivePdfId: async (pdfId: string) => {
     set({ activePdfId: pdfId });
+    // In workspace scope, retain continuous conversation stream without blanking
+    if (get().agentScope !== 'paper') {
+      return;
+    }
     try {
       const targetId = pdfId || 'master-grid';
       const paperMessages = await db.chatMessages.where('pdfId').equals(targetId).sortBy('timestamp');
@@ -61,10 +71,36 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     }
   },
 
+  setAgentScope: async (scope: AgentScope) => {
+    set({ agentScope: scope });
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('litsift_agent_scope', scope);
+      }
+    } catch (_) {}
+
+    try {
+      const targetId = scope === 'workspace' ? 'workspace-global' : (get().activePdfId || 'master-grid');
+      const messages = await db.chatMessages.where('pdfId').equals(targetId).sortBy('timestamp');
+
+      if (messages.length > 0) {
+        const cleaned = messages.filter(
+          (m) => m.text !== '⚡ LitSift Agent ready' && !m.text.startsWith('⚡ Viewing')
+        );
+        set({ messages: cleaned });
+      } else {
+        set({ messages: [] });
+      }
+    } catch (err) {
+      console.warn('Failed to switch agent scope messages:', err);
+    }
+  },
+
   setExecutionMode: (mode) => set({ mode }),
 
   addAgentResponse: async (text: string, options?: string[]) => {
-    const currentPdfId = get().activePdfId || 'master-grid';
+    const isWorkspace = get().agentScope === 'workspace';
+    const currentPdfId = isWorkspace ? 'workspace-global' : (get().activePdfId || 'master-grid');
     const agentMsg: AgentMessage = {
       id: `msg-${Date.now()}`,
       pdfId: currentPdfId,
@@ -89,7 +125,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   sendMessage: (text: string, activePdfTitle?: string) => {
     if (!text || !text.trim()) return;
-    const currentPdfId = get().activePdfId || 'master-grid';
+    const isWorkspace = get().agentScope === 'workspace';
+    const currentPdfId = isWorkspace ? 'workspace-global' : (get().activePdfId || 'master-grid');
     const controller = new AbortController();
     const startTime = Date.now();
 
@@ -313,18 +350,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 
   clearMessages: async () => {
-    const currentPdfId = get().activePdfId || 'master-grid';
+    const isWorkspace = get().agentScope === 'workspace';
+    const currentPdfId = isWorkspace ? 'workspace-global' : (get().activePdfId || 'master-grid');
 
     set({
       messages: [],
     });
 
     try {
-      if (currentPdfId === 'master-grid') {
-        await db.chatMessages.clear();
-      } else {
-        await db.chatMessages.where('pdfId').equals(currentPdfId).delete();
-      }
+      await db.chatMessages.where('pdfId').equals(currentPdfId).delete();
     } catch (err) {
       console.warn('Failed to clear chat messages in IndexedDB:', err);
     }

@@ -39,7 +39,7 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(Array.isArray(tools[0].functionDeclarations)).toBe(true);
 
     const names = tools[0].functionDeclarations.map((d: any) => d.name);
-    expect(names).toHaveLength(16);
+    expect(names).toHaveLength(17);
     expect(names).toContain('updateCell');
     expect(names).toContain('batchUpdateCells');
     expect(names).toContain('updateRow');
@@ -52,6 +52,7 @@ describe('agentToolRegistry - Complete Phase 3 Tool Suite', () => {
     expect(names).toContain('mergeRows');
     expect(names).toContain('deleteRows');
     expect(names).toContain('extractPDFData');
+    expect(names).toContain('extractAllWorkspacePapers');
     expect(names).toContain('verifyEvidenceCitation');
     expect(names).toContain('queryGridData');
     expect(names).toContain('proposeExtractionSchema');

@@ -1,3 +1,5 @@
+import type { BatchExtractionProgress } from './extraction';
+
 export interface AgentToolExecution {
   id: string;
   name: string;
@@ -76,9 +78,13 @@ export type AgentActivityStatus =
   | 'executing_tool'
   | 'generating_text';
 
+export type AgentScope = 'workspace' | 'paper';
+
 export interface AgentState {
   messages: AgentMessage[];
   activePdfId: string;
+  agentScope: AgentScope;
+  activeBatchProgress?: BatchExtractionProgress | null;
   isThinking: boolean;
   activityStatus: AgentActivityStatus;
   activityDetail?: string;
@@ -93,6 +99,8 @@ export interface AgentState {
   // Actions
   hydrateFromDb: () => Promise<void>;
   setActivePdfId: (pdfId: string, pdfTitle?: string) => Promise<void>;
+  setAgentScope: (scope: AgentScope) => Promise<void>;
+  setActiveBatchProgress: (progress: BatchExtractionProgress | null) => void;
   sendMessage: (text: string, activePdfTitle?: string) => void;
   addAgentResponse: (text: string, options?: string[]) => Promise<void>;
   cancelInteraction: () => void;

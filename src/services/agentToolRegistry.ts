@@ -19,6 +19,7 @@ import { executeOpenRouterStructuredGeneration } from './openRouterService';
 import { proposeSchemaFromGoal, extractWithFixedSchema } from './extractionEngine';
 import { stageExtractedRowsToGrid } from './extractionGridBridge';
 import { searchAcademicLiterature, stagePaperByDoi } from './academicSearchService';
+import { executeBatchExtraction } from './batchExtractionRunner';
 
 export type AgentExecutionMode = 'human_in_loop' | 'autonomous_autopilot';
 
@@ -1643,6 +1644,141 @@ Return your response in JSON format:
           success: false,
           replyText: `Failed to stage paper: ${err.message}`,
           summary: `stagePaperToWorkspace(failed: ${err.message})`,
+          error: err.message,
+        };
+      }
+    },
+  },
+
+  extractAllWorkspacePapers: {
+    name: 'extractAllWorkspacePapers',
+    description: 'Extract scientific parameters and findings from all research papers loaded in the workspace into the master data grid conforming to the approved schema. Automatically skips papers that have already been extracted.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        userGoal: {
+          type: Type.STRING,
+          description: 'Optional specific research objective or focus for the extraction (e.g. target strains, treatment conditions, burst size).',
+        },
+      },
+    },
+    execute: async (args: any, _mode: AgentExecutionMode): Promise<ToolExecutionResult> => {
+      const pdfStore = usePdfStore.getState();
+      const gridStore = useGridStore.getState();
+      const logStore = useLogStore.getState();
+      const agentStore = useAgentStore.getState();
+
+      const provider = getActiveProvider();
+      const isOpenRouter = provider === 'openrouter';
+      const isGemini = provider === 'gemini';
+
+      if (isGemini && !getGeminiApiKey()) {
+        throw new Error('GEMINI_API_KEY is not configured in settings or environment.');
+      }
+      if (isOpenRouter && !getOpenRouterApiKey()) {
+        throw new Error('OpenRouter API key is not configured in settings.');
+      }
+
+      if (pdfStore.pdfs.length === 0) {
+        return {
+          success: false,
+          replyText: '📄 **No research papers loaded in workspace.**\n\nPlease upload PDF files or discover papers before requesting multi-paper extraction.',
+          summary: 'extractAllWorkspacePapers(no papers in workspace)',
+          error: 'No research papers in workspace.',
+        };
+      }
+
+      // Check if schema columns are defined; if not, propose schema based on the first paper
+      if (gridStore.columns.length === 0) {
+        const anchorPaper = pdfStore.getActivePdf() || pdfStore.pdfs[0];
+        logStore.setActiveStep(`Formulating extraction schema proposal for "${anchorPaper.name}"...`);
+        const proposal = await proposeSchemaFromGoal(
+          args.userGoal || `Extract empirical scientific parameters across research papers`,
+          anchorPaper
+        );
+        const colList = proposal.proposedColumns
+          .map((c, i) => `${i + 1}. **${c.headerName}** (\`${c.field}\`): ${c.description}`)
+          .join('\n');
+
+        return {
+          success: false,
+          replyText: `✋ **Schema Review Required Before Batch Extraction**\n\nNo schema columns are defined in the Data Grid yet. Based on *"${anchorPaper.title || anchorPaper.name}"*, I have drafted the following extraction schema for your review:\n\n${colList}\n\n💡 *Rationale:* ${proposal.rationale}\n\nPlease review and confirm these columns. Once approved, LitSift will extract findings across all workspace papers strictly conforming to these fields.`,
+          summary: `proposeSchema(${proposal.proposedColumns.length} columns drafted for review)`,
+          resultData: { proposedColumns: proposal.proposedColumns },
+          error: 'Schema requires user approval before extraction.',
+        };
+      }
+
+      // Filter out papers that have already been extracted into the data grid
+      const existingRows = gridStore.rows;
+      const unextractedPapers = pdfStore.pdfs.filter((paper) => {
+        const alreadyExtracted = existingRows.some((r) => {
+          const doiMatch = paper.doi && r.articleDoi && r.articleDoi.trim().toLowerCase() === paper.doi.trim().toLowerCase();
+          const titleMatch = r.pdfTitle && (
+            r.pdfTitle.trim().toLowerCase() === (paper.title || '').trim().toLowerCase() ||
+            r.pdfTitle.trim().toLowerCase() === (paper.name || '').trim().toLowerCase()
+          );
+          return Boolean(doiMatch || titleMatch);
+        });
+        return !alreadyExtracted;
+      });
+
+      const skippedCount = pdfStore.pdfs.length - unextractedPapers.length;
+
+      if (unextractedPapers.length === 0) {
+        return {
+          success: true,
+          replyText: `ℹ️ **All ${pdfStore.pdfs.length} paper(s) in the workspace have already been extracted into the data grid.**\n\nNo unextracted papers remain. All observation rows and grounded citations are already staged in the Data Grid.`,
+          summary: `extractAllWorkspacePapers(all ${pdfStore.pdfs.length} papers already extracted)`,
+          resultData: {
+            totalPapers: pdfStore.pdfs.length,
+            skippedCount,
+            extractedCount: 0,
+          },
+        };
+      }
+
+      logStore.addLog(
+        'info',
+        `Starting multi-paper batch extraction for ${unextractedPapers.length} paper(s) (skipping ${skippedCount} previously extracted)...`
+      );
+
+      try {
+        const batchResult = await executeBatchExtraction({
+          papers: unextractedPapers,
+          lockedSchema: gridStore.columns,
+          signal: agentStore.abortController?.signal,
+          onProgress: (prog) => {
+            agentStore.setActiveBatchProgress(prog);
+            logStore.setActiveStep(prog.message);
+          },
+        });
+
+        agentStore.setActiveBatchProgress(null);
+        logStore.setActiveStep(null);
+
+        const skippedNote = skippedCount > 0 ? ` (skipped ${skippedCount} previously extracted paper${skippedCount > 1 ? 's' : ''})` : '';
+        const failNote = batchResult.failedPapers > 0 ? ` (${batchResult.failedPapers} paper(s) encountered errors)` : '';
+
+        return {
+          success: true,
+          replyText: `✅ **Batch extraction complete!**\n\nSuccessfully extracted **${batchResult.totalRowsExtracted} new observation row(s)** across **${batchResult.successfulPapers} of ${unextractedPapers.length} paper(s)**${skippedNote}${failNote}. All findings have been staged into the Data Grid for your review.`,
+          summary: `extractAllWorkspacePapers(${batchResult.successfulPapers}/${unextractedPapers.length} papers -> ${batchResult.totalRowsExtracted} rows)`,
+          resultData: {
+            totalRowsExtracted: batchResult.totalRowsExtracted,
+            successfulPapers: batchResult.successfulPapers,
+            failedPapers: batchResult.failedPapers,
+            skippedCount,
+          },
+        };
+      } catch (err: any) {
+        agentStore.setActiveBatchProgress(null);
+        logStore.setActiveStep(null);
+        logStore.addLog('error', `Batch extraction failed: ${err.message}`);
+        return {
+          success: false,
+          replyText: `⚠️ Batch extraction halted: ${err.message}`,
+          summary: `extractAllWorkspacePapers(failed: ${err.message})`,
           error: err.message,
         };
       }
