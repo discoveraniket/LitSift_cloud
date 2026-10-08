@@ -52,6 +52,7 @@ export const useGridStore = create<GridState>((set) => ({
   selectedRowIds: [],
   selectedCells: [],
   isTableSelected: false,
+  pendingCsvImport: null,
 
   hydrateFromDb: async () => {
     try {
@@ -930,6 +931,8 @@ export const useGridStore = create<GridState>((set) => ({
         state.rows.splice(destinationIndex, 0, movedRow);
       })
     ),
+
+  setPendingCsvImport: (parsed) => set({ pendingCsvImport: parsed }),
 }));
 
 // Robust automatic localStorage synchronization on EVERY state update

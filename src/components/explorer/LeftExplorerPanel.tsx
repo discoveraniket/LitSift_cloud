@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useSettingsUiStore } from '../../store/useSettingsUiStore';
 import { getActiveProvider } from '../../services/providerConfig';
+import { parseCsv } from '../../services/csvImportService';
 
 interface LeftExplorerPanelProps {
   activeSidebarView?: SidebarViewMode;
@@ -133,74 +134,8 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
       const text = event.target?.result as string;
       if (!text) return;
 
-      const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
-      if (lines.length === 0) return;
-
-      const parseCsvLine = (line: string): string[] => {
-        const result: string[] = [];
-        let current = '';
-        let inQuotes = false;
-        for (let i = 0; i < line.length; i++) {
-          const char = line[i];
-          if (char === '"') {
-            inQuotes = !inQuotes;
-          } else if (char === ',' && !inQuotes) {
-            result.push(current.trim());
-            current = '';
-          } else {
-            current += char;
-          }
-        }
-        result.push(current.trim());
-        return result;
-      };
-
-      const headers = parseCsvLine(lines[0]);
-      const parsedRows = lines.slice(1).map((line) => {
-        const vals = parseCsvLine(line);
-        const rowObj: Record<string, string> = {};
-        headers.forEach((h, idx) => {
-          rowObj[h] = vals[idx] || '';
-        });
-        return rowObj;
-      });
-
-      const gridStore = useGridStore.getState();
-      const hasExistingData = gridStore.rows.length > 0 || gridStore.columns.length > 0;
-
-      if (!hasExistingData) {
-        gridStore.importCsvDataset(headers, parsedRows);
-        useAgentStore.setState((state) => ({
-          messages: [
-            ...state.messages,
-            {
-              id: `msg-${Date.now()}`,
-              sender: 'agent',
-              text: `📥 Automatically imported "${file.name}" (${parsedRows.length} rows, ${headers.length} columns) into master data grid.`,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            },
-          ],
-        }));
-      } else {
-        (window as any).__pendingCsvImport = { headers, parsedRows, filename: file.name };
-
-        useAgentStore.setState((state) => ({
-          messages: [
-            ...state.messages,
-            {
-              id: `msg-${Date.now()}`,
-              sender: 'agent',
-              text: `📥 CSV File "${file.name}" ready for import (${parsedRows.length} rows, ${headers.length} columns). How would you like to handle your open table?`,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              options: [
-                `👉 Append to current table (${file.name})`,
-                `👉 Replace current table (${file.name})`,
-              ],
-            },
-          ],
-        }));
-      }
-
+      const parsed = parseCsv(text, file.name);
+      useGridStore.getState().setPendingCsvImport(parsed);
       onOpenMasterGrid();
       setActiveItem('master-grid');
     };

@@ -9,6 +9,7 @@ import { BottomGridPanel } from '../data-grid/BottomGridPanel';
 import { DebugLogsModal } from '../agent/DebugLogsModal';
 import { AboutModal } from './AboutModal';
 import { EnrichAuthorsModal } from '../explorer/EnrichAuthorsModal';
+import { CsvSchemaMapperModal } from '../data-grid/CsvSchemaMapperModal';
 import { EditorTab, SidebarViewMode } from '../../types/layout';
 
 import { usePdfStore } from '../../store/usePdfStore';
@@ -23,6 +24,8 @@ export const WorkspaceLayout: React.FC = () => {
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showEnrichAuthorsModal, setShowEnrichAuthorsModal] = useState(false);
+  const pendingCsvImport = useGridStore((state) => state.pendingCsvImport);
+  const setPendingCsvImport = useGridStore((state) => state.setPendingCsvImport);
   const [activeSidebarView, setActiveSidebarView] = useState<SidebarViewMode>(() => {
     const saved = localStorage.getItem('litsift_layout_active_sidebar_view');
     return (saved as SidebarViewMode) || 'explorer';
@@ -614,6 +617,16 @@ export const WorkspaceLayout: React.FC = () => {
       <EnrichAuthorsModal
         isOpen={showEnrichAuthorsModal}
         onClose={() => setShowEnrichAuthorsModal(false)}
+      />
+
+      <CsvSchemaMapperModal
+        isOpen={Boolean(pendingCsvImport)}
+        onClose={() => setPendingCsvImport(null)}
+        parsedCsv={pendingCsvImport}
+        onImportComplete={() => {
+          setActiveTabId('master-grid');
+          setShowBottomPanel(true);
+        }}
       />
     </div>
   );

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, Sparkles, Loader2, Table } from 'lucide-react';
+import { Plus, Sparkles, Loader2, Table, FileSpreadsheet } from 'lucide-react';
 import { useGridStore } from '../../store/useGridStore';
 import { usePdfStore } from '../../store/usePdfStore';
 import { useAgentStore } from '../../store/useAgentStore';
 import { replayDemoExtraction } from '../../services/samplePaperService';
+import { parseCsv } from '../../services/csvImportService';
 
 interface EmptyGridOverlayProps {
   filterPdfId?: string;
@@ -124,6 +125,55 @@ export const EmptyGridOverlay: React.FC<EmptyGridOverlayProps> = ({
           <Plus size={13} />
           Add Row
         </button>
+
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: 'var(--bg-primary, #1e1e2e)',
+            border: '1px solid var(--border-subtle, #313244)',
+            color: 'var(--text-primary, #cdd6f4)',
+            borderRadius: '6px',
+            padding: '6px 12px',
+            fontSize: '11.5px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'var(--accent-primary, #89b4fa)';
+            e.currentTarget.style.color = 'var(--accent-primary, #89b4fa)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'var(--border-subtle, #313244)';
+            e.currentTarget.style.color = 'var(--text-primary, #cdd6f4)';
+          }}
+        >
+          <FileSpreadsheet size={13} />
+          Import CSV Schema
+          <input
+            type="file"
+            accept=".csv"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const files = e.target.files;
+              if (files && files[0]) {
+                const file = files[0];
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                  const text = evt.target?.result as string;
+                  if (text) {
+                    const parsed = parseCsv(text, file.name);
+                    useGridStore.getState().setPendingCsvImport(parsed);
+                  }
+                };
+                reader.readAsText(file);
+              }
+              e.target.value = '';
+            }}
+          />
+        </label>
 
         <button
           onClick={handleExtract}

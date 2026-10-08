@@ -54,6 +54,7 @@ export interface GridState {
   isTableSelected?: boolean;
   activeEvidence?: EvidenceLocation | null;
   activeCitation?: CellCitation | null;
+  pendingCsvImport?: any;
   
   // Actions
   hydrateFromDb: () => Promise<void>;
@@ -96,4 +97,5 @@ export interface GridState {
   appendRows: (rows: GridRow[]) => void;
   clearTable: () => void;
   reorderRows: (sourceIndex: number, destinationIndex: number) => void;
+  setPendingCsvImport: (parsed: any) => void;
 }
