@@ -501,6 +501,8 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   const isCtrlKeyPressedRef = useRef(false);
   const isMouseDownWithModifierRef = useRef(false);
   const anchorCellRef = useRef<{ rowIndex: number; colIndex: number; rowId: string; field: string } | null>(null);
+  const anchorRowIndexRef = useRef<number | null>(null);
+  const anchorColFieldRef = useRef<string | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -626,16 +628,29 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
           : null);
 
       if (row && colId) {
-        // If clicking the row index helper column (#), select the entire row instead of a fake "0" field
+        // If clicking the row index helper column (#), select the entire row or a contiguous range of rows
         if (colId === 'rowNum' || colId === '0' || colId === '#') {
-          if (isCtrl) {
+          const targetRowIndex = rowIndex !== null ? rowIndex : rowData.findIndex((r) => r.id === row.id);
+
+          if (isShift && targetRowIndex >= 0) {
+            // Range row selection from anchor to target
+            const startIdx = anchorRowIndexRef.current !== null ? anchorRowIndexRef.current : targetRowIndex;
+            const minIdx = Math.min(startIdx, targetRowIndex);
+            const maxIdx = Math.max(startIdx, targetRowIndex);
+            const rangedRowIds = rowData.slice(minIdx, maxIdx + 1).map((r) => r.id);
+            setSelectedRows(rangedRowIds);
+          } else if (isCtrl) {
+            // Toggle individual row
             const current = useGridStore.getState().selectedRowIds;
             const updated = current.includes(row.id)
               ? current.filter((id) => id !== row.id)
               : [...current, row.id];
             setSelectedRows(updated);
+            anchorRowIndexRef.current = targetRowIndex;
           } else {
+            // Single row selection (resets row anchor)
             setSelectedRows([row.id]);
+            anchorRowIndexRef.current = targetRowIndex;
           }
           return;
         }
@@ -829,6 +844,36 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
       return;
     }
     if (field && field !== 'pdfTitle' && field !== '+ Column' && field !== 'addCol') {
+      const nativeEvent = event.event as MouseEvent | undefined;
+      const isShift = Boolean(nativeEvent?.shiftKey || isShiftKeyPressedRef.current);
+
+      if (isShift && anchorColFieldRef.current && rowData.length > 0) {
+        const anchorField = anchorColFieldRef.current;
+        const startColIdx = columns.findIndex((c) => c.field === anchorField);
+        const endColIdx = columns.findIndex((c) => c.field === field);
+
+        if (startColIdx >= 0 && endColIdx >= 0) {
+          const minCol = Math.min(startColIdx, endColIdx);
+          const maxCol = Math.max(startColIdx, endColIdx);
+          const rangedCols = columns.slice(minCol, maxCol + 1);
+
+          const rangeCells: Array<{ rowId: string; field: string }> = [];
+          for (const r of rowData) {
+            for (const col of rangedCols) {
+              rangeCells.push({ rowId: r.id, field: col.field });
+            }
+          }
+
+          setSelectedCells(rangeCells, {
+            rowId: rowData[0]?.id || '',
+            field,
+          });
+          setSelectedColumnField(field);
+          return;
+        }
+      }
+
+      anchorColFieldRef.current = field;
       if (selectedColumnField === field) {
         setSelectedColumnField(undefined); // Toggle off if clicked twice
       } else {
@@ -859,15 +904,16 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     []
   );
 
-  // Cleanly refresh cells when selection or row data updates without interrupting active cell editors
+  // Cleanly refresh cells and rows when selection or row data updates without interrupting active cell editors
   useEffect(() => {
     if (gridApiRef.current?.api) {
       const editingCells = gridApiRef.current.api.getEditingCells();
       if (!editingCells || editingCells.length === 0) {
         gridApiRef.current.api.refreshCells({ suppressFlash: true });
+        gridApiRef.current.api.redrawRows();
       }
     }
-  }, [focusedCell, selectedCells, rowData]);
+  }, [focusedCell, selectedCells, selectedRowIds, rowData]);
 
   const handleCellEditRequest = useCallback(
     (event: CellEditRequestEvent<GridRow>) => {
@@ -943,6 +989,8 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         rowSelection="multiple"
         suppressRowClickSelection={true}
         rowClassRules={{
+          'row-selected': (params) => !!params.data?.id && selectedRowIds.includes(params.data.id),
+          'ag-row-selected': (params) => !!params.data?.id && selectedRowIds.includes(params.data.id),
           'row-pending-review': (params) =>
             params.data?.aiStatus === 'Pending Review' &&
             (!params.data?.pendingReviewFields || params.data.pendingReviewFields.length === 0),

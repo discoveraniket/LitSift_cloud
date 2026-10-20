@@ -141,4 +141,50 @@ describe('Data Grid Multi-Cell Staged Updates & Pending Review UX', () => {
     useGridStore.getState().rejectAIEdits();
     expect(useGridStore.getState().rows.length).toBe(2);
   });
+  it('merges confirmed rows into a confirmed row without accept/reject highlight, and selects the merged row', () => {
+    useGridStore.setState({
+      rows: [
+        {
+          id: 'row-merge-1',
+          pdfId: 'pdf-sample',
+          pdfTitle: 'Sample Paper.pdf',
+          optimal_temp: '37 °C',
+          optimal_ph: '7.0',
+          host_species: 'Klebsiella pneumoniae',
+          aiStatus: 'Confirmed',
+          pendingReviewFields: [],
+        },
+        {
+          id: 'row-merge-2',
+          pdfId: 'pdf-sample',
+          pdfTitle: 'Sample Paper.pdf',
+          optimal_temp: '37 °C',
+          optimal_ph: '7.5',
+          host_species: 'Pseudomonas aeruginosa',
+          aiStatus: 'Confirmed',
+          pendingReviewFields: [],
+        },
+      ],
+      selectedRowIds: ['row-merge-1', 'row-merge-2'],
+    });
+
+    expect(useGridStore.getState().rows.length).toBe(2);
+
+    // Merge rows
+    useGridStore.getState().mergeSelectedRows(['row-merge-1', 'row-merge-2']);
+
+    const rows = useGridStore.getState().rows;
+    expect(rows.length).toBe(1);
+
+    const merged = rows[0];
+    expect(merged.host_species).toContain('Klebsiella pneumoniae');
+    expect(merged.host_species).toContain('Pseudomonas aeruginosa');
+
+    // Confirm that the merged row does NOT receive Pending Review status
+    expect(merged.aiStatus).toBe('Confirmed');
+    expect(merged.pendingReviewFields).toEqual([]);
+
+    // Confirm the new merged row is automatically selected for immediate visual feedback
+    expect(useGridStore.getState().selectedRowIds).toEqual([merged.id]);
+  });
 });

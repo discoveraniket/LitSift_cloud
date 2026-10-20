@@ -519,17 +519,27 @@ body {
   color: var(--text-primary) !important;
 }
 
-/* Selected row: Sleek dark blue tint, NOT light grey */
+/* Selected row: Distinct blue tint, crisp accent borders, and prominent selection indicator */
 .ag-root-wrapper .ag-row-selected,
-.ag-root-wrapper .ag-row.ag-row-selected {
-  background-color: rgba(137, 180, 250, 0.08) !important;
+.ag-root-wrapper .ag-row.ag-row-selected,
+.ag-root-wrapper .ag-row.row-selected {
+  background-color: rgba(137, 180, 250, 0.18) !important;
   color: var(--text-primary) !important;
 }
 
 .ag-root-wrapper .ag-row-selected .ag-cell,
-.ag-root-wrapper .ag-row.ag-row-selected .ag-cell {
-  background-color: transparent !important;
+.ag-root-wrapper .ag-row.ag-row-selected .ag-cell,
+.ag-root-wrapper .ag-row.row-selected .ag-cell {
+  background-color: rgba(137, 180, 250, 0.15) !important;
   color: var(--text-primary) !important;
+  border-top: 1px solid rgba(137, 180, 250, 0.35) !important;
+  border-bottom: 1px solid rgba(137, 180, 250, 0.35) !important;
+}
+
+.ag-root-wrapper .ag-row-selected .ag-cell:first-child,
+.ag-root-wrapper .ag-row.ag-row-selected .ag-cell:first-child,
+.ag-root-wrapper .ag-row.row-selected .ag-cell:first-child {
+  border-left: 4px solid var(--accent-primary, #89b4fa) !important;
 }
 
 /* Sleek Theme-Tinted Row Hover with Crisp Border Retention */
@@ -548,8 +558,10 @@ body {
 }
 
 .ag-root-wrapper .ag-row.ag-row-selected:hover,
-.ag-root-wrapper .ag-row.ag-row-selected:hover .ag-cell {
-  background-color: rgba(137, 180, 250, 0.12) !important;
+.ag-root-wrapper .ag-row.row-selected:hover,
+.ag-root-wrapper .ag-row.ag-row-selected:hover .ag-cell,
+.ag-root-wrapper .ag-row.row-selected:hover .ag-cell {
+  background-color: rgba(137, 180, 250, 0.24) !important;
 }
 
 .ag-root-wrapper .ag-cell {

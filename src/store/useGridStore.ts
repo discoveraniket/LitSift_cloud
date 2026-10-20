@@ -425,11 +425,20 @@ export const useGridStore = create<GridState>((set) => ({
 
         saveSnapshot(state);
         const firstRowIndex = state.rows.findIndex((r) => r.id === targetRows[0].id);
+
+        // Preserve confirmed status for manual user merges (do NOT mark as unverified AI pending review)
+        const targetAiStatus = consolidatedRow
+          ? 'Pending Review'
+          : targetRows.every((r) => r.aiStatus === 'Pending Review')
+          ? 'Pending Review'
+          : 'Confirmed';
+
         const mergedRow: GridRow = {
           id: `row-${Date.now()}`,
           pdfId: targetRows[0].pdfId,
           pdfTitle: targetRows[0].pdfTitle,
-          aiStatus: 'Pending Review',
+          aiStatus: targetAiStatus,
+          pendingReviewFields: targetAiStatus === 'Confirmed' ? [] : (targetRows[0].pendingReviewFields || []),
           citationMap: citations || {},
         };
 
@@ -490,7 +499,7 @@ export const useGridStore = create<GridState>((set) => ({
         // Remove original rows and insert merged row at first position
         state.rows = state.rows.filter((r) => !rowIds.includes(r.id));
         state.rows.splice(firstRowIndex, 0, mergedRow);
-        state.selectedRowIds = [];
+        state.selectedRowIds = [mergedRow.id];
       })
     ),
 
