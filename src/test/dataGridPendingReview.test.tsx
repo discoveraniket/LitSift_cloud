@@ -91,4 +91,54 @@ describe('Data Grid Multi-Cell Staged Updates & Pending Review UX', () => {
     expect(useGridStore.getState().rows[0].optimal_temp).toBe('37 °C');
     expect(useGridStore.getState().rows[0].optimal_ph).toBe('7.4');
   });
+  it('splits selected row into distinct rows without incorrectly flagging them as AI pending review, and supports Undo/Redo', () => {
+    // 1. Setup a confirmed row with two host bacterial species
+    useGridStore.setState({
+      rows: [
+        {
+          id: 'row-to-split',
+          pdfId: 'pdf-sample',
+          pdfTitle: 'Sample Paper.pdf',
+          optimal_temp: '37 °C',
+          optimal_ph: '7.0',
+          host_species: 'Klebsiella pneumoniae\n• Pseudomonas aeruginosa',
+          aiStatus: 'Confirmed',
+          pendingReviewFields: [],
+        },
+      ],
+    });
+
+    expect(useGridStore.getState().rows.length).toBe(1);
+
+    // 2. Perform Split
+    useGridStore.getState().splitSelectedRow('row-to-split');
+
+    let splitRows = useGridStore.getState().rows;
+    expect(splitRows.length).toBe(2);
+
+    // Verify split content
+    expect(splitRows[0].host_species).toBe('Klebsiella pneumoniae');
+    expect(splitRows[1].host_species).toBe('Pseudomonas aeruginosa');
+
+    // Verify they are NOT flagged as Pending Review (anomaly fix #2)
+    expect(splitRows[0].aiStatus).toBe('Confirmed');
+    expect(splitRows[1].aiStatus).toBe('Confirmed');
+
+    // 3. Verify Undo directly restores original row (anomaly fix #1 & #4)
+    useGridStore.getState().undo();
+    expect(useGridStore.getState().rows.length).toBe(1);
+    expect(useGridStore.getState().rows[0].id).toBe('row-to-split');
+    expect(useGridStore.getState().rows[0].host_species).toBe('Klebsiella pneumoniae\n• Pseudomonas aeruginosa');
+
+    // 4. Verify Redo restores the split rows
+    useGridStore.getState().redo();
+    splitRows = useGridStore.getState().rows;
+    expect(splitRows.length).toBe(2);
+    expect(splitRows[0].host_species).toBe('Klebsiella pneumoniae');
+    expect(splitRows[1].host_species).toBe('Pseudomonas aeruginosa');
+
+    // 5. Verify rejectAIEdits does NOT delete the confirmed split rows (anomaly fix #3)
+    useGridStore.getState().rejectAIEdits();
+    expect(useGridStore.getState().rows.length).toBe(2);
+  });
 });

@@ -502,49 +502,110 @@ export const useGridStore = create<GridState>((set) => ({
         const sourceRow = state.rows[rowIndex];
         if (sourceRow.isDraftRow) return;
 
-        // Find field to split (either targetField, or first multi-line / bullet / semicolon field)
+        // 1. Snapshot state for full Undo / Redo support
+        saveSnapshot(state);
+
+        // 2. Intelligently determine which column to split:
+        const validCols = state.columns.filter((c) => c.field !== 'pdfTitle' && c.field !== 'articleDoi');
         let fieldToSplit = targetField;
+        if (fieldToSplit && !validCols.some((c) => c.field === fieldToSplit)) {
+          fieldToSplit = undefined;
+        }
+
+        // Priority A: First column containing multi-value delimiters (\n, •, ;)
         if (!fieldToSplit) {
-          fieldToSplit = state.columns.find((col) => {
+          fieldToSplit = validCols.find((col) => {
             const val = sourceRow[col.field];
             return typeof val === 'string' && (val.includes('\n') || val.includes('•') || val.includes(';'));
           })?.field;
         }
 
+        // Priority B: First column containing comma-separated items (e.g. "Strain A, Strain B")
         if (!fieldToSplit) {
-          fieldToSplit = 'methodology'; // default fallback
+          fieldToSplit = validCols.find((col) => {
+            const val = sourceRow[col.field];
+            return typeof val === 'string' && val.includes(',') && val.split(',').length > 1;
+          })?.field;
         }
 
-        const rawVal = sourceRow[fieldToSplit] || '';
-        // Split by \n, •, or ;
-        const parts = rawVal
-          .split(/\n|•|;/)
-          .map((s: string) => s.trim())
-          .filter((s: string) => s.length > 0);
+        // Priority C: First column with non-empty text content
+        if (!fieldToSplit) {
+          fieldToSplit = validCols.find((col) => {
+            const val = sourceRow[col.field];
+            return typeof val === 'string' && val.trim().length > 0;
+          })?.field;
+        }
+
+        // Priority D: Fallback to first available column or 'methodology'
+        if (!fieldToSplit) {
+          fieldToSplit = validCols[0]?.field || 'methodology';
+        }
+
+        const rawVal =
+          sourceRow[fieldToSplit] !== undefined && sourceRow[fieldToSplit] !== null
+            ? String(sourceRow[fieldToSplit]).trim()
+            : '';
+
+        // 3. Decompose value into distinct parts
+        let parts: string[] = [];
+        if (rawVal.includes('\n') || rawVal.includes('•') || rawVal.includes(';')) {
+          parts = rawVal
+            .split(/\n|•|;/)
+            .map((s: string) => s.trim())
+            .filter((s: string) => s.length > 0);
+        } else if (rawVal.includes(',')) {
+          parts = rawVal
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter((s: string) => s.length > 0);
+        }
 
         if (parts.length <= 1) {
-          // If no delimiters found, cleanly split string in half
-          const mid = Math.floor(rawVal.length / 2);
-          parts[0] = rawVal.slice(0, mid).trim() || 'Part 1';
-          parts[1] = rawVal.slice(mid).trim() || 'Part 2';
+          if (!rawVal) {
+            parts = ['Part 1', 'Part 2'];
+          } else {
+            // Split across word boundary if multiple words exist
+            const words = rawVal.split(/\s+/);
+            if (words.length > 1) {
+              const mid = Math.ceil(words.length / 2);
+              parts = [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
+            } else {
+              parts = [rawVal, ''];
+            }
+          }
         }
+
+        // 4. Preserve confirmed status for manual user splits (do NOT mark as unverified AI pending review)
+        const targetAiStatus = sourceRow.aiStatus === 'Pending Review' ? 'Pending Review' : 'Confirmed';
+
+        const newRowAId = `row-${Date.now()}-a`;
+        const newRowBId = `row-${Date.now()}-b`;
 
         const newRowA: GridRow = {
           ...sourceRow,
-          id: `row-${Date.now()}-a`,
+          id: newRowAId,
           [fieldToSplit]: parts[0],
-          aiStatus: 'Pending Review',
+          aiStatus: targetAiStatus,
+          pendingReviewFields: sourceRow.pendingReviewFields ? [...sourceRow.pendingReviewFields] : [],
         };
 
         const newRowB: GridRow = {
           ...sourceRow,
-          id: `row-${Date.now()}-b`,
+          id: newRowBId,
           [fieldToSplit]: parts.slice(1).join('\n• '),
-          aiStatus: 'Pending Review',
+          aiStatus: targetAiStatus,
+          pendingReviewFields: sourceRow.pendingReviewFields ? [...sourceRow.pendingReviewFields] : [],
         };
 
-        // Replace original row with split rows
+        // 5. Replace original row with split rows and maintain clean selection/focus
         state.rows.splice(rowIndex, 1, newRowA, newRowB);
+        state.selectedRowIds = [newRowAId];
+        if (state.focusedCell && state.focusedCell.rowId === rowId) {
+          state.focusedCell = {
+            rowId: newRowAId,
+            field: fieldToSplit,
+          };
+        }
       })
     ),
 
