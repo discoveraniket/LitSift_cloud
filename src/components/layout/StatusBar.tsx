@@ -3,7 +3,7 @@ import { useAgentStore } from '../../store/useAgentStore';
 import { useGridStore } from '../../store/useGridStore';
 import { usePdfStore } from '../../store/usePdfStore';
 import { getSelectedGeminiModel } from '../../services/geminiService';
-import { ShieldCheck, Zap, Bot, Layers } from 'lucide-react';
+import { ShieldCheck, Zap, Bot, Layers, CheckCircle2 } from 'lucide-react';
 
 interface StatusBarProps {
   activePdfTitle?: string;
@@ -43,8 +43,33 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     redo,
   } = useGridStore();
 
-  const activePdf = usePdfStore((state) => state.getActivePdf());
+  const pdfs = usePdfStore((state) => state.pdfs);
+  const activePdfId = usePdfStore((state) => state.activePdfId);
+  const setPaperProcessingStatus = usePdfStore((state) => state.setPaperProcessingStatus);
+
+  const activePdf =
+    pdfs.find((p) => p.id === activePdfId) ||
+    (activePdfTitle ? pdfs.find((p) => p.name === activePdfTitle || p.title === activePdfTitle) : undefined) ||
+    usePdfStore.getState().getActivePdf();
+
   const activePdfName = activePdfTitle || (activePdf ? activePdf.name : 'Master Workspace');
+
+  const isCurrentPaperDone = activePdf
+    ? activePdf.processingStatus === 'done' ||
+      (activePdf.processingStatus !== 'pending' &&
+        rows.some(
+          (r) =>
+            !r.isDraftRow &&
+            (r.pdfId === activePdf.id ||
+              r.pdfTitle === activePdf.name ||
+              (activePdf.title && r.pdfTitle === activePdf.title))
+        ))
+    : false;
+
+  const handleTogglePaperDone = () => {
+    if (!activePdf) return;
+    setPaperProcessingStatus(activePdf.id, isCurrentPaperDone ? 'pending' : 'done');
+  };
 
   const focusedColName = focusedCell
     ? columns.find((c) => c.field === focusedCell.field)?.headerName || focusedCell.field
@@ -121,6 +146,30 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           <div className="status-grid-controls" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <button className="grid-action-btn primary" onClick={handleExtractData} title="Run AI Data Extraction">
               ⚡ Extract
+            </button>
+
+            <button
+              className={`grid-action-btn ${isCurrentPaperDone ? 'success' : ''}`}
+              onClick={handleTogglePaperDone}
+              disabled={!activePdf}
+              title={
+                !activePdf
+                  ? 'No active paper selected to mark as done'
+                  : isCurrentPaperDone
+                  ? `Paper "${activePdf.name || activePdf.title}" is marked as Done (click to mark as Pending)`
+                  : `Mark active paper "${activePdf.name || activePdf.title}" as Done`
+              }
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontWeight: isCurrentPaperDone ? 600 : 500,
+                color: isCurrentPaperDone ? 'var(--accent-success, #a6e3a1)' : undefined,
+                borderColor: isCurrentPaperDone ? 'var(--accent-success, #a6e3a1)' : undefined,
+              }}
+            >
+              <CheckCircle2 size={12} />
+              {isCurrentPaperDone ? 'Done' : 'Mark Done'}
             </button>
 
             <button
@@ -223,9 +272,32 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         )}
 
         {/* Active PDF Paper */}
-        <div className="status-item">
+        <div className="status-item" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ opacity: 0.6 }}>Paper:</span>
           <span className="status-value">{activePdfName}</span>
+          {!showBottomPanel && activePdf && (
+            <button
+              className={`grid-action-btn ${isCurrentPaperDone ? 'success' : ''}`}
+              onClick={handleTogglePaperDone}
+              title={
+                isCurrentPaperDone
+                  ? `Paper "${activePdf.name || activePdf.title}" is marked as Done (click to mark as Pending)`
+                  : `Mark active paper "${activePdf.name || activePdf.title}" as Done`
+              }
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+                padding: '1px 6px',
+                fontSize: '10.5px',
+                fontWeight: isCurrentPaperDone ? 600 : 500,
+                cursor: 'pointer',
+              }}
+            >
+              <CheckCircle2 size={10} />
+              {isCurrentPaperDone ? 'Done' : 'Mark Done'}
+            </button>
+          )}
         </div>
 
         {/* Active Cell Focus Context */}
