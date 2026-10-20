@@ -16,6 +16,7 @@ import {
   Terminal,
   Copy,
   Check,
+  CheckCheck,
   Maximize2,
   FileArchive,
   Link,
@@ -60,7 +61,9 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
 }) => {
   const { columns, rows, clearTable } = useGridStore();
   const { logs, clearLogs } = useLogStore();
-  const { pdfs, activePdfId, addPdfFile, setActivePdf } = usePdfStore();
+  const { pdfs, activePdfId, addPdfFile, setActivePdf, setPaperProcessingStatus, setAllPapersProcessingStatus } = usePdfStore();
+  const [draggedPdfId, setDraggedPdfId] = useState<string | null>(null);
+  const [dragOverZone, setDragOverZone] = useState<'pending' | 'extracted' | null>(null);
   const { activeSection, setActiveSection } = useSettingsUiStore();
   const currentProvider = getActiveProvider();
 
@@ -196,14 +199,17 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   // 1. Pending papers at TOP (alphabetically sorted A-Z)
   // 2. Extracted papers at BOTTOM (alphabetically sorted A-Z)
   const { pendingPdfs, extractedPdfs } = useMemo(() => {
-    const isPaperExtracted = (file: typeof pdfs[0]) =>
-      rows.some(
+    const isPaperExtracted = (file: typeof pdfs[0]) => {
+      if (file.processingStatus === 'done') return true;
+      if (file.processingStatus === 'pending') return false;
+      return rows.some(
         (r) =>
           !r.isDraftRow &&
           (r.pdfId === file.id ||
             r.pdfTitle === file.name ||
             (file.title && r.pdfTitle === file.title))
       );
+    };
 
     const pending: typeof pdfs = [];
     const extracted: typeof pdfs = [];
@@ -228,10 +234,11 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
     return { pendingPdfs: pending, extractedPdfs: extracted };
   }, [pdfs, rows]);
 
-  // Helper to render minimal multiline paper row
+  // Helper to render minimal multiline paper row with drag & drop support
   const renderPaperItem = (file: typeof pdfs[0], isExtracted: boolean) => {
     const isActive = activePdfId === file.id;
     const isLastVisited = !isActive && lastVisitedPdfId === file.id;
+    const isBeingDragged = draggedPdfId === file.id;
 
     const extractedRowCount = isExtracted
       ? rows.filter(
@@ -247,6 +254,16 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
       <div
         key={file.id}
         className={`vscode-tree-item ${isActive ? 'active' : ''}`}
+        draggable={true}
+        onDragStart={(e) => {
+          e.dataTransfer.setData('text/plain', file.id);
+          e.dataTransfer.effectAllowed = 'move';
+          setDraggedPdfId(file.id);
+        }}
+        onDragEnd={() => {
+          setDraggedPdfId(null);
+          setDragOverZone(null);
+        }}
         onClick={() => {
           setActivePdf(file.id);
           onSelectPdf(file.id, file.name);
@@ -273,12 +290,20 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
             : isLastVisited
             ? 'inset 0 0 8px rgba(203, 166, 247, 0.04)'
             : 'none',
-          cursor: 'pointer',
+          cursor: isBeingDragged ? 'grabbing' : 'grab',
+          opacity: isBeingDragged ? 0.4 : 1,
           transition: 'all 0.15s ease',
         }}
       >
-        {/* Real-time Extraction Status Indicator Icon */}
-        <div style={{ marginTop: '2px', flexShrink: 0 }}>
+        {/* Real-time Extraction Status Indicator Icon - Clickable to toggle status */}
+        <div
+          style={{ marginTop: '2px', flexShrink: 0, cursor: 'pointer' }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPaperProcessingStatus(file.id, isExtracted ? 'pending' : 'done');
+          }}
+          title={isExtracted ? 'Click to mark as Pending' : 'Click to mark as Done'}
+        >
           {isExtracted ? (
             <span
               title={`Extraction Complete (${extractedRowCount} row${extractedRowCount > 1 ? 's' : ''} in Data Grid)`}
@@ -289,9 +314,9 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
           ) : (
             <span
               title="Extraction Pending / Not started"
-              style={{ display: 'flex', alignItems: 'center', opacity: 0.55 }}
+              style={{ display: 'flex', alignItems: 'center', opacity: 0.65 }}
             >
-              <CircleDot size={13} color="var(--text-muted, #6c7086)" />
+              <CircleDot size={13} color="var(--accent-warning, #f9e2af)" />
             </span>
           )}
         </div>
@@ -487,6 +512,32 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                   {papersOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} RESEARCH PAPERS ({pdfs.length})
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {pdfs.length > 0 && (
+                    <>
+                      <span
+                        className="vscode-action-icon"
+                        title="Mark All Papers as Done / Extracted"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAllPapersProcessingStatus('done');
+                        }}
+                        style={{ color: 'var(--accent-success, #a6e3a1)', display: 'flex', alignItems: 'center' }}
+                      >
+                        <CheckCheck size={13} />
+                      </span>
+                      <span
+                        className="vscode-action-icon"
+                        title="Mark All Papers as Pending"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAllPapersProcessingStatus('pending');
+                        }}
+                        style={{ color: 'var(--accent-warning, #f9e2af)', display: 'flex', alignItems: 'center' }}
+                      >
+                        <RotateCcw size={12} />
+                      </span>
+                    </>
+                  )}
                   <span
                     className="vscode-action-icon"
                     title="Search Literature & Ingest DOIs"
@@ -529,34 +580,125 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
 
             {papersOpen && (
               <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: '8px' }}>
-                {/* 1. Pending Papers (Top Group) */}
-                {pendingPdfs.length > 0 && (
-                  <div>
-                    {extractedPdfs.length > 0 && (
+                {/* 1. Pending Papers (Top Group & Drop Zone) */}
+                {pdfs.length > 0 && (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dragOverZone !== 'pending') setDragOverZone('pending');
+                    }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                        setDragOverZone(null);
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const paperId = e.dataTransfer.getData('text/plain') || draggedPdfId;
+                      if (paperId) {
+                        setPaperProcessingStatus(paperId, 'pending');
+                      }
+                      setDraggedPdfId(null);
+                      setDragOverZone(null);
+                    }}
+                    style={{
+                      borderRadius: '4px',
+                      transition: 'all 0.15s ease',
+                      border: dragOverZone === 'pending' ? '1px dashed var(--accent-warning, #f9e2af)' : '1px dashed transparent',
+                      background: dragOverZone === 'pending' ? 'rgba(249, 226, 175, 0.08)' : 'transparent',
+                      marginBottom: '4px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '6px 12px 3px 12px',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        letterSpacing: '0.06em',
+                        textTransform: 'uppercase',
+                        color: 'var(--accent-warning, #f9e2af)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: 'rgba(0, 0, 0, 0.12)',
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <CircleDot size={10} />
+                        Pending ({pendingPdfs.length})
+                      </span>
+                      {pendingPdfs.length > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAllPapersProcessingStatus('done');
+                          }}
+                          title="Mark all pending papers as Done / Extracted"
+                          style={{
+                            background: 'rgba(166, 227, 161, 0.15)',
+                            border: '1px solid rgba(166, 227, 161, 0.3)',
+                            borderRadius: '3px',
+                            color: 'var(--accent-success, #a6e3a1)',
+                            fontSize: '8.5px',
+                            padding: '1px 5px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                          }}
+                        >
+                          <Check size={9} /> Mark All Done
+                        </button>
+                      )}
+                    </div>
+                    {pendingPdfs.map((file) => renderPaperItem(file, false))}
+                    {pendingPdfs.length === 0 && extractedPdfs.length > 0 && (
                       <div
                         style={{
-                          padding: '6px 12px 3px 12px',
-                          fontSize: '9px',
-                          fontWeight: 700,
-                          letterSpacing: '0.06em',
-                          textTransform: 'uppercase',
+                          padding: '10px 12px',
+                          fontSize: '10px',
                           color: 'var(--text-muted, #6c7086)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          background: 'rgba(0, 0, 0, 0.12)',
+                          textAlign: 'center',
+                          fontStyle: 'italic',
                         }}
                       >
-                        <span>Pending ({pendingPdfs.length})</span>
+                        All papers are processed. Drag papers here to mark as Pending.
                       </div>
                     )}
-                    {pendingPdfs.map((file) => renderPaperItem(file, false))}
                   </div>
                 )}
 
-                {/* 2. Extracted Papers (Bottom Group) */}
-                {extractedPdfs.length > 0 && (
-                  <div>
+                {/* 2. Extracted / Done Papers (Bottom Group & Drop Zone) */}
+                {pdfs.length > 0 && (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dragOverZone !== 'extracted') setDragOverZone('extracted');
+                    }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                        setDragOverZone(null);
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const paperId = e.dataTransfer.getData('text/plain') || draggedPdfId;
+                      if (paperId) {
+                        setPaperProcessingStatus(paperId, 'done');
+                      }
+                      setDraggedPdfId(null);
+                      setDragOverZone(null);
+                    }}
+                    style={{
+                      borderRadius: '4px',
+                      transition: 'all 0.15s ease',
+                      border: dragOverZone === 'extracted' ? '1px dashed var(--accent-success, #a6e3a1)' : '1px dashed transparent',
+                      background: dragOverZone === 'extracted' ? 'rgba(166, 227, 161, 0.08)' : 'transparent',
+                      borderTop: '1px solid var(--border-subtle, #313244)',
+                    }}
+                  >
                     <div
                       style={{
                         padding: '6px 12px 3px 12px',
@@ -568,13 +710,51 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        borderTop: pendingPdfs.length > 0 ? '1px solid var(--border-subtle, #313244)' : 'none',
                         background: 'rgba(0, 0, 0, 0.12)',
                       }}
                     >
-                      <span>Extracted ({extractedPdfs.length})</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <CheckCircle2 size={10} />
+                        Extracted ({extractedPdfs.length})
+                      </span>
+                      {extractedPdfs.length > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAllPapersProcessingStatus('pending');
+                          }}
+                          title="Mark all extracted papers as Pending"
+                          style={{
+                            background: 'rgba(249, 226, 175, 0.15)',
+                            border: '1px solid rgba(249, 226, 175, 0.3)',
+                            borderRadius: '3px',
+                            color: 'var(--accent-warning, #f9e2af)',
+                            fontSize: '8.5px',
+                            padding: '1px 5px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                          }}
+                        >
+                          <RotateCcw size={9} /> Mark All Pending
+                        </button>
+                      )}
                     </div>
                     {extractedPdfs.map((file) => renderPaperItem(file, true))}
+                    {extractedPdfs.length === 0 && pendingPdfs.length > 0 && (
+                      <div
+                        style={{
+                          padding: '10px 12px',
+                          fontSize: '10px',
+                          color: 'var(--text-muted, #6c7086)',
+                          textAlign: 'center',
+                          fontStyle: 'italic',
+                        }}
+                      >
+                        Drag papers here to mark as Done / Extracted.
+                      </div>
+                    )}
                   </div>
                 )}
 

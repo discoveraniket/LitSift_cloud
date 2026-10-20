@@ -16,6 +16,8 @@ interface PdfState {
   addPdf: (paper: PaperDocumentInfo) => Promise<PaperDocumentInfo>;
   updatePaperDocument: (id: string, updates: Partial<PaperDocumentInfo>) => Promise<void>;
   setPaperGroundingMode: (id: string, mode: GroundingMode) => Promise<void>;
+  setPaperProcessingStatus: (id: string, status: 'pending' | 'done') => Promise<void>;
+  setAllPapersProcessingStatus: (status: 'pending' | 'done') => Promise<void>;
   addPdfUrl: (id: string, name: string, url: string) => Promise<void>;
   removePdf: (id: string) => Promise<void>;
   clearAllPdfs: () => Promise<void>;
@@ -48,6 +50,7 @@ export const usePdfStore = create<PdfState>((set, get) => ({
             name: item.name || item.title || 'Untitled Paper',
             url: blobUrl,
             status: item.status || 'Ready',
+            processingStatus: item.processingStatus,
             file: item.blob,
             base64: item.base64,
             doi: item.doi,
@@ -206,6 +209,41 @@ export const usePdfStore = create<PdfState>((set, get) => ({
 
   setPaperGroundingMode: async (id: string, mode: GroundingMode) => {
     await get().updatePaperDocument(id, { groundingMode: mode });
+  },
+
+  setPaperProcessingStatus: async (id: string, status: 'pending' | 'done') => {
+    const paperStatus = status === 'done' ? 'Extracted' : 'Ready';
+    await get().updatePaperDocument(id, {
+      processingStatus: status,
+      status: paperStatus,
+    });
+  },
+
+  setAllPapersProcessingStatus: async (status: 'pending' | 'done') => {
+    const paperStatus = status === 'done' ? 'Extracted' : 'Ready';
+    const currentPdfs = get().pdfs;
+    set({
+      pdfs: currentPdfs.map((p) => ({
+        ...p,
+        processingStatus: status,
+        status: paperStatus,
+      })),
+    });
+
+    try {
+      for (const p of currentPdfs) {
+        const existing = await db.pdfs.get(p.id);
+        if (existing) {
+          await db.pdfs.put({
+            ...existing,
+            status: paperStatus,
+            processingStatus: status,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Error updating all papers processing status in DB:', err);
+    }
   },
 
   addPdfUrl: async (id, name, url) => {

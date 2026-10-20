@@ -125,4 +125,86 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
     expect(screen.getByText('OPEN')).toBeInTheDocument();
     expect(screen.getByText('LAST')).toBeInTheDocument();
   });
+  it('allows marking all papers as Done or Pending via UI buttons', async () => {
+    const { rerender } = render(
+      <LeftExplorerPanel
+        onSelectPdf={vi.fn()}
+        onOpenMasterGrid={vi.fn()}
+      />
+    );
+
+    // Initial state: Pending (2), Extracted (1)
+    expect(screen.getByText(/Pending \(2\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Extracted \(1\)/i)).toBeInTheDocument();
+
+    // Click "Mark All Done"
+    const markAllDoneBtn = screen.getByTitle(/Mark all pending papers as Done \/ Extracted/i);
+    markAllDoneBtn.click();
+
+    rerender(
+      <LeftExplorerPanel
+        onSelectPdf={vi.fn()}
+        onOpenMasterGrid={vi.fn()}
+      />
+    );
+
+    // All 3 papers should now be in Extracted (3), and Pending should be 0
+    expect(screen.getByText(/Pending \(0\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Extracted \(3\)/i)).toBeInTheDocument();
+
+    // Click "Mark All Pending"
+    const markAllPendingBtn = screen.getByTitle(/Mark all extracted papers as Pending/i);
+    markAllPendingBtn.click();
+
+    rerender(
+      <LeftExplorerPanel
+        onSelectPdf={vi.fn()}
+        onOpenMasterGrid={vi.fn()}
+      />
+    );
+
+    // All 3 papers should now be in Pending (3), and Extracted should be 0
+    expect(screen.getByText(/Pending \(3\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Extracted \(0\)/i)).toBeInTheDocument();
+  });
+
+  it('supports drag and drop to move papers between Pending and Extracted', async () => {
+    const { rerender } = render(
+      <LeftExplorerPanel
+        onSelectPdf={vi.fn()}
+        onOpenMasterGrid={vi.fn()}
+      />
+    );
+
+    // Initial state: paperA (Zeta) is in Pending
+    expect(usePdfStore.getState().pdfs.find((p) => p.id === 'paper-a')?.processingStatus).toBeUndefined();
+
+    // Simulate dropping paper-a onto Extracted zone
+    await usePdfStore.getState().setPaperProcessingStatus('paper-a', 'done');
+
+    rerender(
+      <LeftExplorerPanel
+        onSelectPdf={vi.fn()}
+        onOpenMasterGrid={vi.fn()}
+      />
+    );
+
+    // Now paperA and paperB are Extracted (2), and only paperC is Pending (1)
+    expect(screen.getByText(/Pending \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Extracted \(2\)/i)).toBeInTheDocument();
+
+    // Simulate dropping paper-b onto Pending zone
+    await usePdfStore.getState().setPaperProcessingStatus('paper-b', 'pending');
+
+    rerender(
+      <LeftExplorerPanel
+        onSelectPdf={vi.fn()}
+        onOpenMasterGrid={vi.fn()}
+      />
+    );
+
+    // Now paperB and paperC are Pending (2), and only paperA is Extracted (1)
+    expect(screen.getByText(/Pending \(2\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Extracted \(1\)/i)).toBeInTheDocument();
+  });
 });

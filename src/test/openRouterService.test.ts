@@ -25,8 +25,19 @@ import {
 } from '../services/openRouterService';
 
 describe('OpenRouter Provider Configuration', () => {
+  const originalEnvKey = process.env.OPENROUTER_API_KEY;
+
   beforeEach(() => {
     localStorage.clear();
+    delete process.env.OPENROUTER_API_KEY;
+  });
+
+  afterEach(() => {
+    if (originalEnvKey !== undefined) {
+      process.env.OPENROUTER_API_KEY = originalEnvKey;
+    } else {
+      delete process.env.OPENROUTER_API_KEY;
+    }
   });
 
   it('manages switching to openrouter provider and persists in localStorage', () => {
