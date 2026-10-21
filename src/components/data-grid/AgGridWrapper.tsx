@@ -618,7 +618,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         }
       }
 
-      if (rowIndex !== null) setFocusedRowIndex(rowIndex);
+      if (rowIndex !== null && focusedRowIndexRef.current !== rowIndex) setFocusedRowIndex(rowIndex);
       const row =
         directRowData ||
         (rowIndex !== null
@@ -695,7 +695,18 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
           }
         } else {
           // Single cell selection (resets anchor)
-          setSelectedCells([{ rowId: row.id, field: colId }], { rowId: row.id, field: colId });
+          const currentFc = useGridStore.getState().focusedCell;
+          const currentSelected = useGridStore.getState().selectedCells;
+          const isSameSingleCell =
+            currentFc?.rowId === row.id &&
+            currentFc?.field === colId &&
+            currentSelected.length === 1 &&
+            currentSelected[0].rowId === row.id &&
+            currentSelected[0].field === colId;
+
+          if (!isSameSingleCell) {
+            setSelectedCells([{ rowId: row.id, field: colId }], { rowId: row.id, field: colId });
+          }
           if (targetColIndex >= 0 && targetRowIndex >= 0) {
             anchorCellRef.current = { rowIndex: targetRowIndex, colIndex: targetColIndex, rowId: row.id, field: colId };
           }
@@ -775,7 +786,9 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         return;
       }
 
-      setFocusedRowIndex(event.rowIndex);
+      if (focusedRowIndexRef.current !== event.rowIndex) {
+        setFocusedRowIndex(event.rowIndex);
+      }
 
       // If mouse is being clicked with modifier (Ctrl/Meta/Shift), let handleCellClicked handle multi-selection
       if (isMouseDownWithModifierRef.current) {
@@ -895,25 +908,48 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         field !== '+ Column' &&
         field !== 'addCol'
       ) {
-        gridApiRef.current.api.startEditingCell({
-          rowIndex: event.rowIndex,
-          colKey: field,
-        });
+        const editingCells = gridApiRef.current.api.getEditingCells();
+        const isAlreadyEditing =
+          editingCells &&
+          editingCells.length > 0 &&
+          editingCells.some(
+            (c: any) =>
+              c.rowIndex === event.rowIndex &&
+              (c.column.getColId ? c.column.getColId() : c.column.colId) === field
+          );
+        if (!isAlreadyEditing) {
+          gridApiRef.current.api.startEditingCell({
+            rowIndex: event.rowIndex,
+            colKey: field,
+          });
+        }
       }
     },
     []
   );
 
-  // Cleanly refresh cells and rows when selection or row data updates without interrupting active cell editors
+  // Cleanly refresh cells when selection or row data updates without interrupting active cell editors or destroying row DOM
   useEffect(() => {
     if (gridApiRef.current?.api) {
       const editingCells = gridApiRef.current.api.getEditingCells();
       if (!editingCells || editingCells.length === 0) {
-        gridApiRef.current.api.refreshCells({ suppressFlash: true });
-        gridApiRef.current.api.redrawRows();
+        gridApiRef.current.api.refreshCells({ force: true, suppressFlash: true });
       }
     }
-  }, [focusedCell, selectedCells, selectedRowIds, rowData]);
+  }, [focusedCell, selectedCells, rowData]);
+
+  // Sync row-level selection cleanly with AG Grid row nodes without tearing down DOM on cell focus
+  useEffect(() => {
+    if (gridApiRef.current?.api) {
+      gridApiRef.current.api.forEachNode((node: any) => {
+        const isSelected = !!node.data?.id && selectedRowIds.includes(node.data.id);
+        if (node.isSelected() !== isSelected) {
+          node.setSelected(isSelected);
+        }
+      });
+      gridApiRef.current.api.refreshCells({ force: true, suppressFlash: true });
+    }
+  }, [selectedRowIds]);
 
   const handleCellEditRequest = useCallback(
     (event: CellEditRequestEvent<GridRow>) => {

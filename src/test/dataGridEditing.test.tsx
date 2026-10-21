@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { render, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { AgGridWrapper } from '../components/data-grid/AgGridWrapper';
 import { useGridStore } from '../store/useGridStore';
@@ -43,5 +43,13 @@ describe('Data Grid Multiline Cell Editing UX', () => {
     const { container } = render(<AgGridWrapper />);
     expect(container.querySelector('.ag-theme-quartz-dark')).not.toBeNull();
     expect(container.textContent).not.toContain('Active Schema:');
+  });
+
+  it('updates cell value in store through updateCell preserving newlines', async () => {
+    render(<AgGridWrapper />);
+    await act(async () => {
+      useGridStore.getState().updateCell('row-edit-1', 'notes', 'Updated line 1\nUpdated line 2');
+    });
+    expect(useGridStore.getState().rows[0].notes).toBe('Updated line 1\nUpdated line 2');
   });
 });
