@@ -790,107 +790,6 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                   </div>
                 )}
 
-                {/* 3. Review Papers (Bottom Group & Drop Zone, Collapsed by Default) */}
-                {pdfs.length > 0 && (
-                  <div
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.dataTransfer.dropEffect = 'move';
-                      if (dragOverZone !== 'review') setDragOverZone('review');
-                    }}
-                    onDragLeave={(e) => {
-                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                        setDragOverZone(null);
-                      }
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const paperId = e.dataTransfer.getData('text/plain') || draggedPdfId;
-                      if (paperId) {
-                        setPaperProcessingStatus(paperId, 'review');
-                        setIsReviewCollapsed(false);
-                      }
-                      setDraggedPdfId(null);
-                      setDragOverZone(null);
-                    }}
-                    style={{
-                      borderRadius: '4px',
-                      transition: 'all 0.15s ease',
-                      border: dragOverZone === 'review' ? '1px dashed var(--accent-secondary, #cba6f7)' : '1px dashed transparent',
-                      background: dragOverZone === 'review' ? 'rgba(203, 166, 247, 0.08)' : 'transparent',
-                      borderTop: '1px solid var(--border-subtle, #313244)',
-                    }}
-                  >
-                    <div
-                      onClick={() => setIsReviewCollapsed(!isReviewCollapsed)}
-                      style={{
-                        padding: '6px 12px 3px 12px',
-                        fontSize: '9px',
-                        fontWeight: 700,
-                        letterSpacing: '0.06em',
-                        textTransform: 'uppercase',
-                        color: 'var(--accent-secondary, #cba6f7)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        background: 'rgba(0, 0, 0, 0.12)',
-                        cursor: 'pointer',
-                        userSelect: 'none',
-                      }}
-                      title={isReviewCollapsed ? 'Click to expand Review papers' : 'Click to collapse Review papers'}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        {isReviewCollapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
-                        <FileSearch size={10} />
-                        Review ({reviewPdfs.length})
-                      </span>
-                      {reviewPdfs.length > 0 && !isReviewCollapsed && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            for (const p of reviewPdfs) {
-                              setPaperProcessingStatus(p.id, 'done');
-                            }
-                          }}
-                          title="Mark all review papers as Done"
-                          style={{
-                            background: 'rgba(166, 227, 161, 0.15)',
-                            border: '1px solid rgba(166, 227, 161, 0.3)',
-                            borderRadius: '3px',
-                            color: 'var(--accent-success, #a6e3a1)',
-                            fontSize: '8.5px',
-                            padding: '1px 5px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '3px',
-                          }}
-                        >
-                          <Check size={9} /> Mark All Done
-                        </button>
-                      )}
-                    </div>
-                    {!isReviewCollapsed && (
-                      <>
-                        {reviewPdfs.map((file) => renderPaperItem(file, 'review'))}
-                        {reviewPdfs.length === 0 && (
-                          <div
-                            style={{
-                              padding: '10px 12px',
-                              fontSize: '10px',
-                              color: 'var(--text-muted, #6c7086)',
-                              textAlign: 'center',
-                              fontStyle: 'italic',
-                            }}
-                          >
-                            No papers under review. Drag papers here or use "Mark Review".
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-
                 {pdfs.length === 0 && (
                   <div
                     style={{
@@ -910,6 +809,119 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
               </div>
             )}
           </div>
+
+          {/* 3. Review Papers (Stacked below Done, permanently docked right above VIEWS) */}
+          {pdfs.length > 0 && (
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (dragOverZone !== 'review') setDragOverZone('review');
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  setDragOverZone(null);
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const paperId = e.dataTransfer.getData('text/plain') || draggedPdfId;
+                if (paperId) {
+                  setPaperProcessingStatus(paperId, 'review');
+                  setIsReviewCollapsed(false);
+                }
+                setDraggedPdfId(null);
+                setDragOverZone(null);
+              }}
+              style={{
+                flexShrink: 0,
+                maxHeight: isReviewCollapsed ? undefined : '260px',
+                display: 'flex',
+                flexDirection: 'column',
+                borderTop: '1px solid var(--border-subtle, #313244)',
+                background: dragOverZone === 'review' ? 'rgba(203, 166, 247, 0.08)' : 'var(--bg-secondary, #181825)',
+                transition: 'all 0.15s ease',
+                zIndex: 4,
+              }}
+            >
+              <div
+                onClick={() => setIsReviewCollapsed(!isReviewCollapsed)}
+                style={{
+                  padding: '6px 12px 3px 12px',
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  color: 'var(--accent-secondary, #cba6f7)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'rgba(0, 0, 0, 0.18)',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  flexShrink: 0,
+                }}
+                title={isReviewCollapsed ? 'Click to expand Review papers' : 'Click to collapse Review papers'}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {isReviewCollapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+                  <FileSearch size={10} />
+                  Review ({reviewPdfs.length})
+                </span>
+                {reviewPdfs.length > 0 && !isReviewCollapsed && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      for (const p of reviewPdfs) {
+                        setPaperProcessingStatus(p.id, 'done');
+                      }
+                    }}
+                    title="Mark all review papers as Done"
+                    style={{
+                      background: 'rgba(166, 227, 161, 0.15)',
+                      border: '1px solid rgba(166, 227, 161, 0.3)',
+                      borderRadius: '3px',
+                      color: 'var(--accent-success, #a6e3a1)',
+                      fontSize: '8.5px',
+                      padding: '1px 5px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                    }}
+                  >
+                    <Check size={9} /> Mark All Done
+                  </button>
+                )}
+              </div>
+              {!isReviewCollapsed && (
+                <div
+                  style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    padding: '2px 0 4px 0',
+                    border: dragOverZone === 'review' ? '1px dashed var(--accent-secondary, #cba6f7)' : 'none',
+                  }}
+                >
+                  {reviewPdfs.map((file) => renderPaperItem(file, 'review'))}
+                  {reviewPdfs.length === 0 && (
+                    <div
+                      style={{
+                        padding: '10px 12px',
+                        fontSize: '10px',
+                        color: 'var(--text-muted, #6c7086)',
+                        textAlign: 'center',
+                        fontStyle: 'italic',
+                      }}
+                    >
+                      No papers under review. Drag papers here or use "Mark Review".
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Bottom: VIEWS SECTION (Permanently Docked at Bottom of Sidebar) */}
           <div
