@@ -710,16 +710,25 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
               {/* Delete Paper from Workspace Button */}
               <button
                 onClick={() => {
-                  if (window.confirm(`Delete paper "${foundPdf.name}" from your workspace?`)) {
-                    usePdfStore.getState().removePdf(foundPdf.id);
+                  if (foundPdf.processingStatus === 'deleted') {
+                    if (window.confirm(`Permanently delete paper "${foundPdf.name}"? This cannot be undone.`)) {
+                      usePdfStore.getState().permanentlyDeletePaper(foundPdf.id);
+                      onNavigateToGrid?.();
+                    }
+                  } else {
+                    usePdfStore.getState().deletePaper(foundPdf.id);
                     onNavigateToGrid?.();
                   }
                 }}
-                title={`Delete "${foundPdf.name}" from workspace`}
+                title={
+                  foundPdf.processingStatus === 'deleted'
+                    ? `Permanently delete "${foundPdf.name}"`
+                    : `Move "${foundPdf.name}" to Deleted`
+                }
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: 'var(--text-muted, #6c7086)',
+                  color: foundPdf.processingStatus === 'deleted' ? 'var(--accent-danger, #f38ba8)' : 'var(--text-muted, #6c7086)',
                   padding: '3px 6px',
                   cursor: 'pointer',
                   display: 'flex',
@@ -730,7 +739,7 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
                   (e.currentTarget as HTMLElement).style.color = 'var(--accent-danger, #f38ba8)';
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.color = 'var(--text-muted, #6c7086)';
+                  (e.currentTarget as HTMLElement).style.color = foundPdf.processingStatus === 'deleted' ? 'var(--accent-danger, #f38ba8)' : 'var(--text-muted, #6c7086)';
                 }}
               >
                 <Trash2 size={12} />
@@ -784,8 +793,66 @@ export const CentralViewerPanel: React.FC<CentralViewerPanelProps> = ({
         </>
       )}
 
+      {/* Deleted Paper Warning Banner */}
+      {foundPdf && foundPdf.processingStatus === 'deleted' && (
+        <div
+          style={{
+            flexShrink: 0,
+            background: 'rgba(243, 139, 168, 0.12)',
+            borderBottom: '1px solid rgba(243, 139, 168, 0.3)',
+            padding: '4px 12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '11px',
+            color: 'var(--accent-danger, #f38ba8)',
+            zIndex: 10,
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Trash2 size={12} />
+            <span>This paper is in the <strong>Deleted</strong> section.</span>
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              onClick={() => usePdfStore.getState().restorePaper(foundPdf.id)}
+              style={{
+                background: 'rgba(137, 180, 250, 0.18)',
+                border: '1px solid rgba(137, 180, 250, 0.4)',
+                borderRadius: '3px',
+                color: 'var(--accent-primary, #89b4fa)',
+                fontSize: '10px',
+                padding: '2px 8px',
+                cursor: 'pointer',
+              }}
+            >
+              Restore Paper
+            </button>
+            <button
+              onClick={() => {
+                if (window.confirm(`Permanently delete "${foundPdf.name}"? This cannot be undone.`)) {
+                  usePdfStore.getState().permanentlyDeletePaper(foundPdf.id);
+                  onNavigateToGrid?.();
+                }
+              }}
+              style={{
+                background: 'rgba(243, 139, 168, 0.2)',
+                border: '1px solid rgba(243, 139, 168, 0.4)',
+                borderRadius: '3px',
+                color: 'var(--accent-danger, #f38ba8)',
+                fontSize: '10px',
+                padding: '2px 8px',
+                cursor: 'pointer',
+              }}
+            >
+              Delete Permanently
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Document Content Area (Takes 100% of vertical height with 0px top wasted space) */}
-      <div style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {foundPdf ? (
           viewMode === 'reader' || !hasRealPdf ? (
             <ArticleReaderView

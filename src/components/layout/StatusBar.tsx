@@ -58,6 +58,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     ? activePdf.processingStatus === 'done' ||
       (activePdf.processingStatus !== 'pending' &&
         activePdf.processingStatus !== 'review' &&
+        activePdf.processingStatus !== 'deleted' &&
         rows.some(
           (r) =>
             !r.isDraftRow &&

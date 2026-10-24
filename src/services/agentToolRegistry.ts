@@ -1712,6 +1712,7 @@ Return your response in JSON format:
       // Filter out papers that have already been extracted into the data grid
       const existingRows = gridStore.rows;
       const unextractedPapers = pdfStore.pdfs.filter((paper) => {
+        if (paper.processingStatus === 'deleted') return false;
         const alreadyExtracted = existingRows.some((r) => {
           const doiMatch = paper.doi && r.articleDoi && r.articleDoi.trim().toLowerCase() === paper.doi.trim().toLowerCase();
           const titleMatch = r.pdfTitle && (

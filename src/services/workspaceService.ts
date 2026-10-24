@@ -446,6 +446,8 @@ export const restoreWorkspaceBundle = async (
       blob: pdfBlob,
       base64: p.base64 || '',
       status: p.status || 'Ready',
+      processingStatus: p.processingStatus,
+      previousProcessingStatus: p.previousProcessingStatus,
       uploadedAt: p.uploadedAt || Date.now(),
       doi: p.doi,
       pmcid: p.pmcid,

@@ -76,6 +76,7 @@ describe('Bottom Toolbar (StatusBar) Paper Mark Done and Mark Review Suite', () 
     expect(screen.getByText(/Pending \(2\)/i)).toBeInTheDocument();
     expect(screen.getByText(/Done \(0\)/i)).toBeInTheDocument();
     expect(screen.getByText(/Review \(0\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Deleted \(0\)/i)).toBeInTheDocument();
 
     const markDoneBtn = screen.getByRole('button', { name: /Mark Done/i });
     expect(markDoneBtn).toBeInTheDocument();

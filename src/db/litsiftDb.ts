@@ -9,7 +9,8 @@ export interface StoredPdf {
   blob?: Blob;
   base64?: string;
   status: 'Ready' | 'Extracted' | 'Error';
-  processingStatus?: 'pending' | 'done' | 'review';
+  processingStatus?: 'pending' | 'done' | 'review' | 'deleted';
+  previousProcessingStatus?: 'pending' | 'done' | 'review';
   uploadedAt: number;
   
   // Rich Paper Metadata

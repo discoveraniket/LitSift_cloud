@@ -16,8 +16,13 @@ interface PdfState {
   addPdf: (paper: PaperDocumentInfo) => Promise<PaperDocumentInfo>;
   updatePaperDocument: (id: string, updates: Partial<PaperDocumentInfo>) => Promise<void>;
   setPaperGroundingMode: (id: string, mode: GroundingMode) => Promise<void>;
-  setPaperProcessingStatus: (id: string, status: 'pending' | 'done' | 'review') => Promise<void>;
+  setPaperProcessingStatus: (id: string, status: 'pending' | 'done' | 'review' | 'deleted') => Promise<void>;
   setAllPapersProcessingStatus: (status: 'pending' | 'done' | 'review') => Promise<void>;
+  deletePaper: (id: string) => Promise<void>;
+  restorePaper: (id: string) => Promise<void>;
+  permanentlyDeletePaper: (id: string) => Promise<void>;
+  emptyTrash: () => Promise<void>;
+  restoreAllDeleted: () => Promise<void>;
   addPdfUrl: (id: string, name: string, url: string) => Promise<void>;
   removePdf: (id: string) => Promise<void>;
   clearAllPdfs: () => Promise<void>;
@@ -51,6 +56,7 @@ export const usePdfStore = create<PdfState>((set, get) => ({
             url: blobUrl,
             status: item.status || 'Ready',
             processingStatus: item.processingStatus,
+            previousProcessingStatus: item.previousProcessingStatus,
             file: item.blob,
             base64: item.base64,
             doi: item.doi,
@@ -211,27 +217,71 @@ export const usePdfStore = create<PdfState>((set, get) => ({
     await get().updatePaperDocument(id, { groundingMode: mode });
   },
 
-  setPaperProcessingStatus: async (id: string, status: 'pending' | 'done' | 'review') => {
+  setPaperProcessingStatus: async (id: string, status: 'pending' | 'done' | 'review' | 'deleted') => {
     const paperStatus = status === 'done' ? 'Extracted' : 'Ready';
-    await get().updatePaperDocument(id, {
+    const paper = get().pdfs.find((p) => p.id === id);
+    const updates: Partial<PaperDocumentInfo> = {
       processingStatus: status,
       status: paperStatus,
-    });
+    };
+    if (status === 'deleted' && paper && paper.processingStatus !== 'deleted') {
+      updates.previousProcessingStatus = paper.processingStatus || 'pending';
+    }
+    await get().updatePaperDocument(id, updates);
+  },
+
+  deletePaper: async (id: string) => {
+    await get().setPaperProcessingStatus(id, 'deleted');
+    if (get().activePdfId === id) {
+      const remainingActive = get().pdfs.find((p) => p.id !== id && p.processingStatus !== 'deleted');
+      if (remainingActive) {
+        get().setActivePdf(remainingActive.id);
+      }
+    }
+  },
+
+  restorePaper: async (id: string) => {
+    const paper = get().pdfs.find((p) => p.id === id);
+    const targetStatus = paper?.previousProcessingStatus || 'pending';
+    await get().setPaperProcessingStatus(id, targetStatus);
+  },
+
+  permanentlyDeletePaper: async (id: string) => {
+    await get().removePdf(id);
+  },
+
+  emptyTrash: async () => {
+    const deletedPapers = get().pdfs.filter((p) => p.processingStatus === 'deleted');
+    for (const paper of deletedPapers) {
+      await get().removePdf(paper.id);
+    }
+  },
+
+  restoreAllDeleted: async () => {
+    const deletedPapers = get().pdfs.filter((p) => p.processingStatus === 'deleted');
+    for (const paper of deletedPapers) {
+      await get().restorePaper(paper.id);
+    }
   },
 
   setAllPapersProcessingStatus: async (status: 'pending' | 'done' | 'review') => {
     const paperStatus = status === 'done' ? 'Extracted' : 'Ready';
     const currentPdfs = get().pdfs;
     set({
-      pdfs: currentPdfs.map((p) => ({
-        ...p,
-        processingStatus: status,
-        status: paperStatus,
-      })),
+      pdfs: currentPdfs.map((p) =>
+        p.processingStatus === 'deleted'
+          ? p
+          : {
+              ...p,
+              processingStatus: status,
+              status: paperStatus,
+            }
+      ),
     });
 
     try {
       for (const p of currentPdfs) {
+        if (p.processingStatus === 'deleted') continue;
         const existing = await db.pdfs.get(p.id);
         if (existing) {
           await db.pdfs.put({

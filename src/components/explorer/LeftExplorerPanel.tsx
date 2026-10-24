@@ -62,10 +62,23 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
 }) => {
   const { columns, rows, clearTable } = useGridStore();
   const { logs, clearLogs } = useLogStore();
-  const { pdfs, activePdfId, addPdfFile, setActivePdf, setPaperProcessingStatus, setAllPapersProcessingStatus } = usePdfStore();
+  const {
+    pdfs,
+    activePdfId,
+    addPdfFile,
+    setActivePdf,
+    setPaperProcessingStatus,
+    setAllPapersProcessingStatus,
+    deletePaper,
+    restorePaper,
+    permanentlyDeletePaper,
+    emptyTrash,
+    restoreAllDeleted,
+  } = usePdfStore();
   const [draggedPdfId, setDraggedPdfId] = useState<string | null>(null);
-  const [dragOverZone, setDragOverZone] = useState<'pending' | 'done' | 'review' | null>(null);
+  const [dragOverZone, setDragOverZone] = useState<'pending' | 'done' | 'review' | 'deleted' | null>(null);
   const [isReviewCollapsed, setIsReviewCollapsed] = useState<boolean>(true);
+  const [isDeletedCollapsed, setIsDeletedCollapsed] = useState<boolean>(true);
   const { activeSection, setActiveSection } = useSettingsUiStore();
   const currentProvider = getActiveProvider();
 
@@ -197,12 +210,14 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
 
   const validRowCount = rows.filter((r) => !r.isDraftRow).length;
 
-  // Three-Tier Alphabetical Sorting:
+  // Four-Tier Alphabetical Sorting:
   // 1. Pending papers at TOP (alphabetically sorted A-Z)
   // 2. Done papers in MIDDLE (alphabetically sorted A-Z)
-  // 3. Review papers at BOTTOM (alphabetically sorted A-Z)
-  const { pendingPdfs, donePdfs, reviewPdfs } = useMemo(() => {
-    const getPaperCategory = (file: typeof pdfs[0]): 'pending' | 'done' | 'review' => {
+  // 3. Review papers (alphabetically sorted A-Z)
+  // 4. Deleted papers at BOTTOM (alphabetically sorted A-Z)
+  const { pendingPdfs, donePdfs, reviewPdfs, deletedPdfs } = useMemo(() => {
+    const getPaperCategory = (file: typeof pdfs[0]): 'pending' | 'done' | 'review' | 'deleted' => {
+      if (file.processingStatus === 'deleted') return 'deleted';
       if (file.processingStatus === 'review') return 'review';
       if (file.processingStatus === 'done') return 'done';
       if (file.processingStatus === 'pending') return 'pending';
@@ -219,10 +234,13 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
     const pending: typeof pdfs = [];
     const done: typeof pdfs = [];
     const review: typeof pdfs = [];
+    const deleted: typeof pdfs = [];
 
     pdfs.forEach((p) => {
       const cat = getPaperCategory(p);
-      if (cat === 'review') {
+      if (cat === 'deleted') {
+        deleted.push(p);
+      } else if (cat === 'review') {
         review.push(p);
       } else if (cat === 'done') {
         done.push(p);
@@ -240,17 +258,19 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
     pending.sort(alphaSort);
     done.sort(alphaSort);
     review.sort(alphaSort);
+    deleted.sort(alphaSort);
 
-    return { pendingPdfs: pending, donePdfs: done, reviewPdfs: review };
+    return { pendingPdfs: pending, donePdfs: done, reviewPdfs: review, deletedPdfs: deleted };
   }, [pdfs, rows]);
 
   // Helper to render minimal multiline paper row with drag & drop support
-  const renderPaperItem = (file: typeof pdfs[0], category: 'pending' | 'done' | 'review') => {
+  const renderPaperItem = (file: typeof pdfs[0], category: 'pending' | 'done' | 'review' | 'deleted') => {
     const isActive = activePdfId === file.id;
     const isLastVisited = !isActive && lastVisitedPdfId === file.id;
     const isBeingDragged = draggedPdfId === file.id;
     const isDone = category === 'done';
     const isReview = category === 'review';
+    const isDeleted = category === 'deleted';
 
     const extractedRowCount = isDone
       ? rows.filter(
@@ -303,7 +323,7 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
             ? 'inset 0 0 8px rgba(203, 166, 247, 0.04)'
             : 'none',
           cursor: isBeingDragged ? 'grabbing' : 'grab',
-          opacity: isBeingDragged ? 0.4 : 1,
+          opacity: isBeingDragged ? 0.4 : isDeleted ? 0.75 : 1,
           transition: 'all 0.15s ease',
         }}
       >
@@ -312,7 +332,9 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
           style={{ marginTop: '2px', flexShrink: 0, cursor: 'pointer' }}
           onClick={(e) => {
             e.stopPropagation();
-            if (category === 'pending') {
+            if (isDeleted) {
+              restorePaper(file.id);
+            } else if (category === 'pending') {
               setPaperProcessingStatus(file.id, 'done');
             } else if (category === 'done') {
               setPaperProcessingStatus(file.id, 'pending');
@@ -321,7 +343,9 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
             }
           }}
           title={
-            isDone
+            isDeleted
+              ? 'Click to Restore Paper'
+              : isDone
               ? 'Click to mark as Pending'
               : isReview
               ? 'Click to mark as Done'
@@ -342,6 +366,13 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
             >
               <FileSearch size={13} color="var(--accent-secondary, #cba6f7)" />
             </span>
+          ) : isDeleted ? (
+            <span
+              title="Deleted Paper — Click to Restore"
+              style={{ display: 'flex', alignItems: 'center' }}
+            >
+              <Trash2 size={13} color="var(--accent-danger, #f38ba8)" />
+            </span>
           ) : (
             <span
               title="Extraction Pending / Not started"
@@ -359,11 +390,14 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
               fontSize: '11.5px',
               lineHeight: 1.4,
               fontWeight: isActive ? 600 : isLastVisited ? 500 : 400,
-              color: isActive
+              color: isDeleted
+                ? 'var(--text-muted, #6c7086)'
+                : isActive
                 ? 'var(--accent-primary, #89b4fa)'
                 : isLastVisited
                 ? 'var(--accent-secondary, #cba6f7)'
                 : 'var(--text-primary, #cdd6f4)',
+              textDecoration: isDeleted ? 'line-through' : 'none',
               wordBreak: 'break-word',
               whiteSpace: 'normal',
               display: '-webkit-box',
@@ -377,61 +411,136 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
           </div>
         </div>
 
-        {/* Badges on right: Active (OPEN) or Last Visited (LAST) */}
-        {isActive ? (
-          <span
-            style={{
-              fontSize: '8.5px',
-              fontWeight: 700,
-              padding: '1px 5px',
-              borderRadius: '3px',
-              background: 'rgba(137, 180, 250, 0.22)',
-              color: 'var(--accent-primary, #89b4fa)',
-              border: '1px solid rgba(137, 180, 250, 0.35)',
-              letterSpacing: '0.4px',
-              textTransform: 'uppercase',
-              flexShrink: 0,
-              marginTop: '1px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '3px',
-            }}
-          >
-            <span
-              style={{
-                width: '4px',
-                height: '4px',
-                borderRadius: '50%',
-                background: 'var(--accent-primary, #89b4fa)',
-                boxShadow: '0 0 4px var(--accent-primary)',
-              }}
-            />
-            OPEN
-          </span>
-        ) : isLastVisited ? (
-          <span
-            title="Last visited paper"
-            style={{
-              fontSize: '8px',
-              fontWeight: 600,
-              padding: '1px 4px',
-              borderRadius: '3px',
-              background: 'rgba(203, 166, 247, 0.15)',
-              color: 'var(--accent-secondary, #cba6f7)',
-              border: '1px solid rgba(203, 166, 247, 0.3)',
-              letterSpacing: '0.3px',
-              textTransform: 'uppercase',
-              flexShrink: 0,
-              marginTop: '1px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '2px',
-            }}
-          >
-            <History size={8} />
-            LAST
-          </span>
-        ) : null}
+        {/* Action icons / Badges on right */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+          {isDeleted ? (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  restorePaper(file.id);
+                }}
+                title="Restore Paper"
+                style={{
+                  background: 'rgba(137, 180, 250, 0.15)',
+                  border: '1px solid rgba(137, 180, 250, 0.35)',
+                  color: 'var(--accent-primary, #89b4fa)',
+                  padding: '2px 4px',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <RotateCcw size={11} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm("Permanently delete this paper? This cannot be undone.")) {
+                    permanentlyDeletePaper(file.id);
+                  }
+                }}
+                title="Delete Permanently"
+                style={{
+                  background: 'rgba(243, 139, 168, 0.15)',
+                  border: '1px solid rgba(243, 139, 168, 0.35)',
+                  color: 'var(--accent-danger, #f38ba8)',
+                  padding: '2px 4px',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <Trash2 size={11} />
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Quick Move to Deleted Trash Button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deletePaper(file.id);
+                }}
+                title="Move to Deleted"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted, #6c7086)',
+                  padding: '2px 3px',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  opacity: 0.65,
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.opacity = '1';
+                  (e.currentTarget as HTMLElement).style.color = 'var(--accent-danger, #f38ba8)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.opacity = '0.65';
+                  (e.currentTarget as HTMLElement).style.color = 'var(--text-muted, #6c7086)';
+                }}
+              >
+                <Trash2 size={11} />
+              </button>
+
+              {isActive ? (
+                <span
+                  style={{
+                    fontSize: '8.5px',
+                    fontWeight: 700,
+                    padding: '1px 5px',
+                    borderRadius: '3px',
+                    background: 'rgba(137, 180, 250, 0.22)',
+                    color: 'var(--accent-primary, #89b4fa)',
+                    border: '1px solid rgba(137, 180, 250, 0.35)',
+                    letterSpacing: '0.4px',
+                    textTransform: 'uppercase',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: '4px',
+                      height: '4px',
+                      borderRadius: '50%',
+                      background: 'var(--accent-primary, #89b4fa)',
+                      boxShadow: '0 0 4px var(--accent-primary)',
+                    }}
+                  />
+                  OPEN
+                </span>
+              ) : isLastVisited ? (
+                <span
+                  title="Last visited paper"
+                  style={{
+                    fontSize: '8px',
+                    fontWeight: 600,
+                    padding: '1px 4px',
+                    borderRadius: '3px',
+                    background: 'rgba(203, 166, 247, 0.15)',
+                    color: 'var(--accent-secondary, #cba6f7)',
+                    border: '1px solid rgba(203, 166, 247, 0.3)',
+                    letterSpacing: '0.3px',
+                    textTransform: 'uppercase',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '2px',
+                  }}
+                >
+                  <History size={8} />
+                  LAST
+                </span>
+              ) : null}
+            </>
+          )}
+        </div>
       </div>
     );
   };
@@ -916,6 +1025,142 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                       }}
                     >
                       No papers under review. Drag papers here or use "Mark Review".
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 4. Deleted Papers (Stacked directly below Review, permanently docked above VIEWS) */}
+          {pdfs.length > 0 && (
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (dragOverZone !== 'deleted') setDragOverZone('deleted');
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  setDragOverZone(null);
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const paperId = e.dataTransfer.getData('text/plain') || draggedPdfId;
+                if (paperId) {
+                  deletePaper(paperId);
+                  setIsDeletedCollapsed(false);
+                }
+                setDraggedPdfId(null);
+                setDragOverZone(null);
+              }}
+              style={{
+                flexShrink: 0,
+                maxHeight: isDeletedCollapsed ? undefined : '220px',
+                display: 'flex',
+                flexDirection: 'column',
+                borderTop: '1px solid var(--border-subtle, #313244)',
+                background: dragOverZone === 'deleted' ? 'rgba(243, 139, 168, 0.08)' : 'var(--bg-secondary, #181825)',
+                transition: 'all 0.15s ease',
+                zIndex: 4,
+              }}
+            >
+              <div
+                onClick={() => setIsDeletedCollapsed(!isDeletedCollapsed)}
+                style={{
+                  padding: '6px 12px 3px 12px',
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  color: 'var(--accent-danger, #f38ba8)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'rgba(0, 0, 0, 0.18)',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  flexShrink: 0,
+                }}
+                title={isDeletedCollapsed ? 'Click to expand Deleted papers' : 'Click to collapse Deleted papers'}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {isDeletedCollapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+                  <Trash2 size={10} />
+                  Deleted ({deletedPdfs.length})
+                </span>
+                {deletedPdfs.length > 0 && !isDeletedCollapsed && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        restoreAllDeleted();
+                      }}
+                      title="Restore all deleted papers"
+                      style={{
+                        background: 'rgba(137, 180, 250, 0.15)',
+                        border: '1px solid rgba(137, 180, 250, 0.3)',
+                        borderRadius: '3px',
+                        color: 'var(--accent-primary, #89b4fa)',
+                        fontSize: '8.5px',
+                        padding: '1px 5px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                      }}
+                    >
+                      <RotateCcw size={9} /> Restore All
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Permanently delete all ${deletedPdfs.length} papers in Deleted? This cannot be undone.`)) {
+                          emptyTrash();
+                        }
+                      }}
+                      title="Permanently remove all deleted papers"
+                      style={{
+                        background: 'rgba(243, 139, 168, 0.15)',
+                        border: '1px solid rgba(243, 139, 168, 0.3)',
+                        borderRadius: '3px',
+                        color: 'var(--accent-danger, #f38ba8)',
+                        fontSize: '8.5px',
+                        padding: '1px 5px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                      }}
+                    >
+                      <Trash2 size={9} /> Empty
+                    </button>
+                  </div>
+                )}
+              </div>
+              {!isDeletedCollapsed && (
+                <div
+                  style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    padding: '2px 0 4px 0',
+                    border: dragOverZone === 'deleted' ? '1px dashed var(--accent-danger, #f38ba8)' : 'none',
+                  }}
+                >
+                  {deletedPdfs.map((file) => renderPaperItem(file, 'deleted'))}
+                  {deletedPdfs.length === 0 && (
+                    <div
+                      style={{
+                        padding: '10px 12px',
+                        fontSize: '10px',
+                        color: 'var(--text-muted, #6c7086)',
+                        textAlign: 'center',
+                        fontStyle: 'italic',
+                      }}
+                    >
+                      No deleted papers. Papers you delete will appear here.
                     </div>
                   )}
                 </div>

@@ -68,7 +68,8 @@ export interface PaperDocumentInfo {
   textSourceUrl?: string;
   
   status: 'Ready' | 'Extracted' | 'Error';
-  processingStatus?: 'pending' | 'done' | 'review';
+  processingStatus?: 'pending' | 'done' | 'review' | 'deleted';
+  previousProcessingStatus?: 'pending' | 'done' | 'review';
   uploadedAt: number;
   errorMessage?: string;
 }

@@ -81,6 +81,7 @@ describe('LeftExplorerPanel Three-Tier (Pending, Done, Review) Sorting Suite', (
     expect(screen.getByText(/Pending \(2\)/i)).toBeInTheDocument();
     expect(screen.getByText(/Done \(1\)/i)).toBeInTheDocument();
     expect(screen.getByText(/Review \(0\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Deleted \(0\)/i)).toBeInTheDocument();
 
     // Check all paper titles are present
     expect(screen.getByText('Alpha Phage against Pseudomonas aeruginosa')).toBeInTheDocument();
