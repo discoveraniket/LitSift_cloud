@@ -3,7 +3,7 @@ import { useAgentStore } from '../../store/useAgentStore';
 import { useGridStore } from '../../store/useGridStore';
 import { usePdfStore } from '../../store/usePdfStore';
 import { getSelectedGeminiModel } from '../../services/geminiService';
-import { ShieldCheck, Zap, Bot, Layers, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Zap, Bot, Layers, CheckCircle2, FileSearch } from 'lucide-react';
 
 interface StatusBarProps {
   activePdfTitle?: string;
@@ -57,6 +57,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   const isCurrentPaperDone = activePdf
     ? activePdf.processingStatus === 'done' ||
       (activePdf.processingStatus !== 'pending' &&
+        activePdf.processingStatus !== 'review' &&
         rows.some(
           (r) =>
             !r.isDraftRow &&
@@ -66,9 +67,16 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         ))
     : false;
 
+  const isCurrentPaperReview = activePdf ? activePdf.processingStatus === 'review' : false;
+
   const handleTogglePaperDone = () => {
     if (!activePdf) return;
     setPaperProcessingStatus(activePdf.id, isCurrentPaperDone ? 'pending' : 'done');
+  };
+
+  const handleTogglePaperReview = () => {
+    if (!activePdf) return;
+    setPaperProcessingStatus(activePdf.id, isCurrentPaperReview ? 'pending' : 'review');
   };
 
   const focusedColName = focusedCell
@@ -170,6 +178,31 @@ export const StatusBar: React.FC<StatusBarProps> = ({
             >
               <CheckCircle2 size={12} />
               {isCurrentPaperDone ? 'Done' : 'Mark Done'}
+            </button>
+
+            <button
+              className={`grid-action-btn ${isCurrentPaperReview ? 'active' : ''}`}
+              onClick={handleTogglePaperReview}
+              disabled={!activePdf}
+              title={
+                !activePdf
+                  ? 'No active paper selected to mark for review'
+                  : isCurrentPaperReview
+                  ? `Paper "${activePdf.name || activePdf.title}" is under Review (click to mark as Pending)`
+                  : `Mark active paper "${activePdf.name || activePdf.title}" for Review`
+              }
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontWeight: isCurrentPaperReview ? 600 : 500,
+                color: isCurrentPaperReview ? 'var(--accent-secondary, #cba6f7)' : undefined,
+                borderColor: isCurrentPaperReview ? 'var(--accent-secondary, #cba6f7)' : undefined,
+                background: isCurrentPaperReview ? 'rgba(203, 166, 247, 0.18)' : undefined,
+              }}
+            >
+              <FileSearch size={12} />
+              {isCurrentPaperReview ? 'Review' : 'Mark Review'}
             </button>
 
             <button
@@ -276,27 +309,53 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           <span style={{ opacity: 0.6 }}>Paper:</span>
           <span className="status-value">{activePdfName}</span>
           {!showBottomPanel && activePdf && (
-            <button
-              className={`grid-action-btn ${isCurrentPaperDone ? 'success' : ''}`}
-              onClick={handleTogglePaperDone}
-              title={
-                isCurrentPaperDone
-                  ? `Paper "${activePdf.name || activePdf.title}" is marked as Done (click to mark as Pending)`
-                  : `Mark active paper "${activePdf.name || activePdf.title}" as Done`
-              }
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '3px',
-                padding: '1px 6px',
-                fontSize: '10.5px',
-                fontWeight: isCurrentPaperDone ? 600 : 500,
-                cursor: 'pointer',
-              }}
-            >
-              <CheckCircle2 size={10} />
-              {isCurrentPaperDone ? 'Done' : 'Mark Done'}
-            </button>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <button
+                className={`grid-action-btn ${isCurrentPaperDone ? 'success' : ''}`}
+                onClick={handleTogglePaperDone}
+                title={
+                  isCurrentPaperDone
+                    ? `Paper "${activePdf.name || activePdf.title}" is marked as Done (click to mark as Pending)`
+                    : `Mark active paper "${activePdf.name || activePdf.title}" as Done`
+                }
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  padding: '1px 6px',
+                  fontSize: '10.5px',
+                  fontWeight: isCurrentPaperDone ? 600 : 500,
+                  cursor: 'pointer',
+                }}
+              >
+                <CheckCircle2 size={10} />
+                {isCurrentPaperDone ? 'Done' : 'Mark Done'}
+              </button>
+              <button
+                className={`grid-action-btn ${isCurrentPaperReview ? 'active' : ''}`}
+                onClick={handleTogglePaperReview}
+                title={
+                  isCurrentPaperReview
+                    ? `Paper "${activePdf.name || activePdf.title}" is under Review (click to mark as Pending)`
+                    : `Mark active paper "${activePdf.name || activePdf.title}" for Review`
+                }
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  padding: '1px 6px',
+                  fontSize: '10.5px',
+                  fontWeight: isCurrentPaperReview ? 600 : 500,
+                  cursor: 'pointer',
+                  color: isCurrentPaperReview ? 'var(--accent-secondary, #cba6f7)' : undefined,
+                  borderColor: isCurrentPaperReview ? 'var(--accent-secondary, #cba6f7)' : undefined,
+                  background: isCurrentPaperReview ? 'rgba(203, 166, 247, 0.18)' : undefined,
+                }}
+              >
+                <FileSearch size={10} />
+                {isCurrentPaperReview ? 'Review' : 'Mark Review'}
+              </button>
+            </div>
           )}
         </div>
 

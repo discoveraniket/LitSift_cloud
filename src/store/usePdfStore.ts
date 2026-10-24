@@ -16,8 +16,8 @@ interface PdfState {
   addPdf: (paper: PaperDocumentInfo) => Promise<PaperDocumentInfo>;
   updatePaperDocument: (id: string, updates: Partial<PaperDocumentInfo>) => Promise<void>;
   setPaperGroundingMode: (id: string, mode: GroundingMode) => Promise<void>;
-  setPaperProcessingStatus: (id: string, status: 'pending' | 'done') => Promise<void>;
-  setAllPapersProcessingStatus: (status: 'pending' | 'done') => Promise<void>;
+  setPaperProcessingStatus: (id: string, status: 'pending' | 'done' | 'review') => Promise<void>;
+  setAllPapersProcessingStatus: (status: 'pending' | 'done' | 'review') => Promise<void>;
   addPdfUrl: (id: string, name: string, url: string) => Promise<void>;
   removePdf: (id: string) => Promise<void>;
   clearAllPdfs: () => Promise<void>;
@@ -211,7 +211,7 @@ export const usePdfStore = create<PdfState>((set, get) => ({
     await get().updatePaperDocument(id, { groundingMode: mode });
   },
 
-  setPaperProcessingStatus: async (id: string, status: 'pending' | 'done') => {
+  setPaperProcessingStatus: async (id: string, status: 'pending' | 'done' | 'review') => {
     const paperStatus = status === 'done' ? 'Extracted' : 'Ready';
     await get().updatePaperDocument(id, {
       processingStatus: status,
@@ -219,7 +219,7 @@ export const usePdfStore = create<PdfState>((set, get) => ({
     });
   },
 
-  setAllPapersProcessingStatus: async (status: 'pending' | 'done') => {
+  setAllPapersProcessingStatus: async (status: 'pending' | 'done' | 'review') => {
     const paperStatus = status === 'done' ? 'Extracted' : 'Ready';
     const currentPdfs = get().pdfs;
     set({

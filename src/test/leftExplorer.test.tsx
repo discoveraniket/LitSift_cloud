@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@google/genai', () => ({
@@ -18,7 +18,7 @@ import { usePdfStore } from '../store/usePdfStore';
 import { useGridStore } from '../store/useGridStore';
 import { PaperDocumentInfo } from '../types/paper';
 
-describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
+describe('LeftExplorerPanel Three-Tier (Pending, Done, Review) Sorting Suite', () => {
   const paperA: PaperDocumentInfo = {
     id: 'paper-a',
     name: 'Zeta Phage against Klebsiella',
@@ -55,33 +55,32 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
       activePdfId: 'paper-a',
     });
 
-    // Mark paperB as extracted in the data grid
+    // Mark paperB as extracted in the data grid (so it classifies as done by default)
     useGridStore.setState({
       rows: [
         {
-          id: 'row-1',
+          id: 'row-b',
           pdfId: 'paper-b',
-          pdfTitle: paperB.title || paperB.name,
+          pdfTitle: 'Alpha Phage against Pseudomonas aeruginosa',
           aiStatus: 'Confirmed',
-          data: { Host: 'Pseudomonas' },
-        },
+        } as any,
       ],
-      columns: [{ field: 'Host', headerName: 'Host' }],
+      columns: [],
     });
   });
 
-  it('renders two-tier alphabetically sorted sections: Pending first, Extracted second', () => {
-    const handleSelectPdf = vi.fn();
+  it('renders three-tier sections: Pending first, Done second, Review third (collapsed by default)', () => {
     render(
       <LeftExplorerPanel
-        onSelectPdf={handleSelectPdf}
+        onSelectPdf={vi.fn()}
         onOpenMasterGrid={vi.fn()}
       />
     );
 
     // Group headers
     expect(screen.getByText(/Pending \(2\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Extracted \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Done \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review \(0\)/i)).toBeInTheDocument();
 
     // Check all paper titles are present
     expect(screen.getByText('Alpha Phage against Pseudomonas aeruginosa')).toBeInTheDocument();
@@ -96,8 +95,39 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
     // betaEl appears before zetaEl in the document
     expect(betaEl.compareDocumentPosition(zetaEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    // Extracted paper (Alpha) appears after pending papers (Zeta)
+    // Done paper (Alpha) appears after pending papers (Zeta)
     expect(zetaEl.compareDocumentPosition(alphaEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('toggles Review section expansion when clicking the Review header', async () => {
+    // Put paperC into review
+    usePdfStore.setState({
+      pdfs: [
+        paperA,
+        paperB,
+        { ...paperC, processingStatus: 'review' },
+      ],
+    });
+
+    render(
+      <LeftExplorerPanel
+        onSelectPdf={vi.fn()}
+        onOpenMasterGrid={vi.fn()}
+      />
+    );
+
+    // Review is collapsed by default, so paperC is not rendered in the DOM yet
+    expect(screen.getByText(/Review \(1\)/i)).toBeInTheDocument();
+    expect(screen.queryByText('Beta Phage against Staphylococcus aureus')).not.toBeInTheDocument();
+
+    // Click Review header to expand
+    const reviewHeader = screen.getByText(/Review \(1\)/i);
+    await act(async () => {
+      fireEvent.click(reviewHeader);
+    });
+
+    // Now paperC is visible
+    expect(screen.getByText('Beta Phage against Staphylococcus aureus')).toBeInTheDocument();
   });
 
   it('highlights currently active paper with OPEN badge and previous paper with LAST badge upon switching', () => {
@@ -125,6 +155,7 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
     expect(screen.getByText('OPEN')).toBeInTheDocument();
     expect(screen.getByText('LAST')).toBeInTheDocument();
   });
+
   it('allows marking all papers as Done or Pending via UI buttons', async () => {
     const { rerender } = render(
       <LeftExplorerPanel
@@ -133,13 +164,15 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
       />
     );
 
-    // Initial state: Pending (2), Extracted (1)
+    // Initial state: Pending (2), Done (1)
     expect(screen.getByText(/Pending \(2\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Extracted \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Done \(1\)/i)).toBeInTheDocument();
 
     // Click "Mark All Done"
-    const markAllDoneBtn = screen.getByTitle(/Mark all pending papers as Done \/ Extracted/i);
-    markAllDoneBtn.click();
+    const markAllDoneBtn = screen.getByTitle(/Mark all pending papers as Done/i);
+    await act(async () => {
+      markAllDoneBtn.click();
+    });
 
     rerender(
       <LeftExplorerPanel
@@ -148,13 +181,15 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
       />
     );
 
-    // All 3 papers should now be in Extracted (3), and Pending should be 0
+    // All 3 papers should now be in Done (3), and Pending should be 0
     expect(screen.getByText(/Pending \(0\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Extracted \(3\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Done \(3\)/i)).toBeInTheDocument();
 
     // Click "Mark All Pending"
-    const markAllPendingBtn = screen.getByTitle(/Mark all extracted papers as Pending/i);
-    markAllPendingBtn.click();
+    const markAllPendingBtn = screen.getByTitle(/Mark all done papers as Pending/i);
+    await act(async () => {
+      markAllPendingBtn.click();
+    });
 
     rerender(
       <LeftExplorerPanel
@@ -163,12 +198,12 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
       />
     );
 
-    // All 3 papers should now be in Pending (3), and Extracted should be 0
+    // All 3 papers should now be in Pending (3), and Done should be 0
     expect(screen.getByText(/Pending \(3\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Extracted \(0\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Done \(0\)/i)).toBeInTheDocument();
   });
 
-  it('supports drag and drop to move papers between Pending and Extracted', async () => {
+  it('supports drag and drop to move papers between Pending, Done, and Review', async () => {
     const { rerender } = render(
       <LeftExplorerPanel
         onSelectPdf={vi.fn()}
@@ -179,8 +214,10 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
     // Initial state: paperA (Zeta) is in Pending
     expect(usePdfStore.getState().pdfs.find((p) => p.id === 'paper-a')?.processingStatus).toBeUndefined();
 
-    // Simulate dropping paper-a onto Extracted zone
-    await usePdfStore.getState().setPaperProcessingStatus('paper-a', 'done');
+    // Move paper-a to done
+    await act(async () => {
+      await usePdfStore.getState().setPaperProcessingStatus('paper-a', 'done');
+    });
 
     rerender(
       <LeftExplorerPanel
@@ -189,12 +226,14 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
       />
     );
 
-    // Now paperA and paperB are Extracted (2), and only paperC is Pending (1)
+    // Now paperA and paperB are Done (2), and only paperC is Pending (1)
     expect(screen.getByText(/Pending \(1\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Extracted \(2\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Done \(2\)/i)).toBeInTheDocument();
 
-    // Simulate dropping paper-b onto Pending zone
-    await usePdfStore.getState().setPaperProcessingStatus('paper-b', 'pending');
+    // Move paper-b to review
+    await act(async () => {
+      await usePdfStore.getState().setPaperProcessingStatus('paper-b', 'review');
+    });
 
     rerender(
       <LeftExplorerPanel
@@ -203,8 +242,9 @@ describe('LeftExplorerPanel Minimal Multiline & Two-Tier Sorting Suite', () => {
       />
     );
 
-    // Now paperB and paperC are Pending (2), and only paperA is Extracted (1)
-    expect(screen.getByText(/Pending \(2\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Extracted \(1\)/i)).toBeInTheDocument();
+    // Now paperA is Done (1), paperC is Pending (1), and paperB is in Review (1)
+    expect(screen.getByText(/Pending \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Done \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review \(1\)/i)).toBeInTheDocument();
   });
 });

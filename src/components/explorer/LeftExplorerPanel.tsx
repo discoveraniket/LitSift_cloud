@@ -30,6 +30,7 @@ import {
   Cpu,
   ShieldCheck,
   FileText,
+  FileSearch,
   Shield,
 } from 'lucide-react';
 import { useSettingsUiStore } from '../../store/useSettingsUiStore';
@@ -63,7 +64,8 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
   const { logs, clearLogs } = useLogStore();
   const { pdfs, activePdfId, addPdfFile, setActivePdf, setPaperProcessingStatus, setAllPapersProcessingStatus } = usePdfStore();
   const [draggedPdfId, setDraggedPdfId] = useState<string | null>(null);
-  const [dragOverZone, setDragOverZone] = useState<'pending' | 'extracted' | null>(null);
+  const [dragOverZone, setDragOverZone] = useState<'pending' | 'done' | 'review' | null>(null);
+  const [isReviewCollapsed, setIsReviewCollapsed] = useState<boolean>(true);
   const { activeSection, setActiveSection } = useSettingsUiStore();
   const currentProvider = getActiveProvider();
 
@@ -195,28 +197,35 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
 
   const validRowCount = rows.filter((r) => !r.isDraftRow).length;
 
-  // Two-Tier Alphabetical Sorting:
+  // Three-Tier Alphabetical Sorting:
   // 1. Pending papers at TOP (alphabetically sorted A-Z)
-  // 2. Extracted papers at BOTTOM (alphabetically sorted A-Z)
-  const { pendingPdfs, extractedPdfs } = useMemo(() => {
-    const isPaperExtracted = (file: typeof pdfs[0]) => {
-      if (file.processingStatus === 'done') return true;
-      if (file.processingStatus === 'pending') return false;
-      return rows.some(
+  // 2. Done papers in MIDDLE (alphabetically sorted A-Z)
+  // 3. Review papers at BOTTOM (alphabetically sorted A-Z)
+  const { pendingPdfs, donePdfs, reviewPdfs } = useMemo(() => {
+    const getPaperCategory = (file: typeof pdfs[0]): 'pending' | 'done' | 'review' => {
+      if (file.processingStatus === 'review') return 'review';
+      if (file.processingStatus === 'done') return 'done';
+      if (file.processingStatus === 'pending') return 'pending';
+      const hasGridRows = rows.some(
         (r) =>
           !r.isDraftRow &&
           (r.pdfId === file.id ||
             r.pdfTitle === file.name ||
             (file.title && r.pdfTitle === file.title))
       );
+      return hasGridRows ? 'done' : 'pending';
     };
 
     const pending: typeof pdfs = [];
-    const extracted: typeof pdfs = [];
+    const done: typeof pdfs = [];
+    const review: typeof pdfs = [];
 
     pdfs.forEach((p) => {
-      if (isPaperExtracted(p)) {
-        extracted.push(p);
+      const cat = getPaperCategory(p);
+      if (cat === 'review') {
+        review.push(p);
+      } else if (cat === 'done') {
+        done.push(p);
       } else {
         pending.push(p);
       }
@@ -229,18 +238,21 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
     };
 
     pending.sort(alphaSort);
-    extracted.sort(alphaSort);
+    done.sort(alphaSort);
+    review.sort(alphaSort);
 
-    return { pendingPdfs: pending, extractedPdfs: extracted };
+    return { pendingPdfs: pending, donePdfs: done, reviewPdfs: review };
   }, [pdfs, rows]);
 
   // Helper to render minimal multiline paper row with drag & drop support
-  const renderPaperItem = (file: typeof pdfs[0], isExtracted: boolean) => {
+  const renderPaperItem = (file: typeof pdfs[0], category: 'pending' | 'done' | 'review') => {
     const isActive = activePdfId === file.id;
     const isLastVisited = !isActive && lastVisitedPdfId === file.id;
     const isBeingDragged = draggedPdfId === file.id;
+    const isDone = category === 'done';
+    const isReview = category === 'review';
 
-    const extractedRowCount = isExtracted
+    const extractedRowCount = isDone
       ? rows.filter(
           (r) =>
             !r.isDraftRow &&
@@ -295,21 +307,40 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
           transition: 'all 0.15s ease',
         }}
       >
-        {/* Real-time Extraction Status Indicator Icon - Clickable to toggle status */}
+        {/* Real-time Status Indicator Icon - Clickable to toggle status */}
         <div
           style={{ marginTop: '2px', flexShrink: 0, cursor: 'pointer' }}
           onClick={(e) => {
             e.stopPropagation();
-            setPaperProcessingStatus(file.id, isExtracted ? 'pending' : 'done');
+            if (category === 'pending') {
+              setPaperProcessingStatus(file.id, 'done');
+            } else if (category === 'done') {
+              setPaperProcessingStatus(file.id, 'pending');
+            } else {
+              setPaperProcessingStatus(file.id, 'done');
+            }
           }}
-          title={isExtracted ? 'Click to mark as Pending' : 'Click to mark as Done'}
+          title={
+            isDone
+              ? 'Click to mark as Pending'
+              : isReview
+              ? 'Click to mark as Done'
+              : 'Click to mark as Done'
+          }
         >
-          {isExtracted ? (
+          {isDone ? (
             <span
               title={`Extraction Complete (${extractedRowCount} row${extractedRowCount > 1 ? 's' : ''} in Data Grid)`}
               style={{ display: 'flex', alignItems: 'center' }}
             >
               <CheckCircle2 size={13} color="var(--accent-success, #a6e3a1)" />
+            </span>
+          ) : isReview ? (
+            <span
+              title="Under Review — Click to mark Done"
+              style={{ display: 'flex', alignItems: 'center' }}
+            >
+              <FileSearch size={13} color="var(--accent-secondary, #cba6f7)" />
             </span>
           ) : (
             <span
@@ -652,8 +683,8 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                         </button>
                       )}
                     </div>
-                    {pendingPdfs.map((file) => renderPaperItem(file, false))}
-                    {pendingPdfs.length === 0 && extractedPdfs.length > 0 && (
+                    {pendingPdfs.map((file) => renderPaperItem(file, 'pending'))}
+                    {pendingPdfs.length === 0 && (donePdfs.length > 0 || reviewPdfs.length > 0) && (
                       <div
                         style={{
                           padding: '10px 12px',
@@ -669,13 +700,13 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                   </div>
                 )}
 
-                {/* 2. Extracted / Done Papers (Bottom Group & Drop Zone) */}
+                {/* 2. Done Papers (Middle Group & Drop Zone) */}
                 {pdfs.length > 0 && (
                   <div
                     onDragOver={(e) => {
                       e.preventDefault();
                       e.dataTransfer.dropEffect = 'move';
-                      if (dragOverZone !== 'extracted') setDragOverZone('extracted');
+                      if (dragOverZone !== 'done') setDragOverZone('done');
                     }}
                     onDragLeave={(e) => {
                       if (!e.currentTarget.contains(e.relatedTarget as Node)) {
@@ -694,9 +725,10 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                     style={{
                       borderRadius: '4px',
                       transition: 'all 0.15s ease',
-                      border: dragOverZone === 'extracted' ? '1px dashed var(--accent-success, #a6e3a1)' : '1px dashed transparent',
-                      background: dragOverZone === 'extracted' ? 'rgba(166, 227, 161, 0.08)' : 'transparent',
+                      border: dragOverZone === 'done' ? '1px dashed var(--accent-success, #a6e3a1)' : '1px dashed transparent',
+                      background: dragOverZone === 'done' ? 'rgba(166, 227, 161, 0.08)' : 'transparent',
                       borderTop: '1px solid var(--border-subtle, #313244)',
+                      marginBottom: '4px',
                     }}
                   >
                     <div
@@ -715,15 +747,15 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                     >
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <CheckCircle2 size={10} />
-                        Extracted ({extractedPdfs.length})
+                        Done ({donePdfs.length})
                       </span>
-                      {extractedPdfs.length > 0 && (
+                      {donePdfs.length > 0 && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setAllPapersProcessingStatus('pending');
                           }}
-                          title="Mark all extracted papers as Pending"
+                          title="Mark all done papers as Pending"
                           style={{
                             background: 'rgba(249, 226, 175, 0.15)',
                             border: '1px solid rgba(249, 226, 175, 0.3)',
@@ -741,8 +773,8 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                         </button>
                       )}
                     </div>
-                    {extractedPdfs.map((file) => renderPaperItem(file, true))}
-                    {extractedPdfs.length === 0 && pendingPdfs.length > 0 && (
+                    {donePdfs.map((file) => renderPaperItem(file, 'done'))}
+                    {donePdfs.length === 0 && (pendingPdfs.length > 0 || reviewPdfs.length > 0) && (
                       <div
                         style={{
                           padding: '10px 12px',
@@ -752,8 +784,109 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
                           fontStyle: 'italic',
                         }}
                       >
-                        Drag papers here to mark as Done / Extracted.
+                        Drag papers here to mark as Done.
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. Review Papers (Bottom Group & Drop Zone, Collapsed by Default) */}
+                {pdfs.length > 0 && (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dragOverZone !== 'review') setDragOverZone('review');
+                    }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                        setDragOverZone(null);
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const paperId = e.dataTransfer.getData('text/plain') || draggedPdfId;
+                      if (paperId) {
+                        setPaperProcessingStatus(paperId, 'review');
+                        setIsReviewCollapsed(false);
+                      }
+                      setDraggedPdfId(null);
+                      setDragOverZone(null);
+                    }}
+                    style={{
+                      borderRadius: '4px',
+                      transition: 'all 0.15s ease',
+                      border: dragOverZone === 'review' ? '1px dashed var(--accent-secondary, #cba6f7)' : '1px dashed transparent',
+                      background: dragOverZone === 'review' ? 'rgba(203, 166, 247, 0.08)' : 'transparent',
+                      borderTop: '1px solid var(--border-subtle, #313244)',
+                    }}
+                  >
+                    <div
+                      onClick={() => setIsReviewCollapsed(!isReviewCollapsed)}
+                      style={{
+                        padding: '6px 12px 3px 12px',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        letterSpacing: '0.06em',
+                        textTransform: 'uppercase',
+                        color: 'var(--accent-secondary, #cba6f7)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: 'rgba(0, 0, 0, 0.12)',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}
+                      title={isReviewCollapsed ? 'Click to expand Review papers' : 'Click to collapse Review papers'}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {isReviewCollapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+                        <FileSearch size={10} />
+                        Review ({reviewPdfs.length})
+                      </span>
+                      {reviewPdfs.length > 0 && !isReviewCollapsed && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            for (const p of reviewPdfs) {
+                              setPaperProcessingStatus(p.id, 'done');
+                            }
+                          }}
+                          title="Mark all review papers as Done"
+                          style={{
+                            background: 'rgba(166, 227, 161, 0.15)',
+                            border: '1px solid rgba(166, 227, 161, 0.3)',
+                            borderRadius: '3px',
+                            color: 'var(--accent-success, #a6e3a1)',
+                            fontSize: '8.5px',
+                            padding: '1px 5px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                          }}
+                        >
+                          <Check size={9} /> Mark All Done
+                        </button>
+                      )}
+                    </div>
+                    {!isReviewCollapsed && (
+                      <>
+                        {reviewPdfs.map((file) => renderPaperItem(file, 'review'))}
+                        {reviewPdfs.length === 0 && (
+                          <div
+                            style={{
+                              padding: '10px 12px',
+                              fontSize: '10px',
+                              color: 'var(--text-muted, #6c7086)',
+                              textAlign: 'center',
+                              fontStyle: 'italic',
+                            }}
+                          >
+                            No papers under review. Drag papers here or use "Mark Review".
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
