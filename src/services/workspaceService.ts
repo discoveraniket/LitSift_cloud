@@ -18,6 +18,8 @@ export interface WorkspacePdfItem {
   id: string;
   name: string;
   status: 'Ready' | 'Extracted' | 'Error';
+  processingStatus?: 'pending' | 'done' | 'review' | 'deleted';
+  previousProcessingStatus?: 'pending' | 'done' | 'review';
   uploadedAt: number;
   base64?: string;
   sizeBytes?: number;
@@ -187,6 +189,8 @@ export const exportWorkspaceBundle = async (
       blob: (p.file instanceof Blob && p.file.size > 0) ? p.file : existing?.blob,
       base64: p.base64 || existing?.base64,
       status: p.status || existing?.status || 'Ready',
+      processingStatus: p.processingStatus || existing?.processingStatus,
+      previousProcessingStatus: p.previousProcessingStatus || existing?.previousProcessingStatus,
       uploadedAt: p.uploadedAt || existing?.uploadedAt || Date.now(),
       doi: p.doi || existing?.doi,
       pmcid: p.pmcid || existing?.pmcid,
@@ -221,6 +225,8 @@ export const exportWorkspaceBundle = async (
       name: item.name,
       title: item.title || item.name,
       status: item.status || 'Ready',
+      processingStatus: item.processingStatus,
+      previousProcessingStatus: item.previousProcessingStatus,
       uploadedAt: item.uploadedAt || Date.now(),
       base64: base64 || undefined,
       sizeBytes: item.blob ? item.blob.size : (base64 ? Math.round((base64.length * 3) / 4) : 0),
@@ -446,7 +452,7 @@ export const restoreWorkspaceBundle = async (
       blob: pdfBlob,
       base64: p.base64 || '',
       status: p.status || 'Ready',
-      processingStatus: p.processingStatus,
+      processingStatus: p.processingStatus || (p.status === 'Extracted' ? 'done' : 'pending'),
       previousProcessingStatus: p.previousProcessingStatus,
       uploadedAt: p.uploadedAt || Date.now(),
       doi: p.doi,

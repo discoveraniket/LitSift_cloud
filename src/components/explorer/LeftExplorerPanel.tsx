@@ -221,6 +221,7 @@ export const LeftExplorerPanel: React.FC<LeftExplorerPanelProps> = ({
       if (file.processingStatus === 'review') return 'review';
       if (file.processingStatus === 'done') return 'done';
       if (file.processingStatus === 'pending') return 'pending';
+      if (file.status === 'Extracted') return 'done';
       const hasGridRows = rows.some(
         (r) =>
           !r.isDraftRow &&
