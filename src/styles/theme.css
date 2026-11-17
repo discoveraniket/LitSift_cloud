@@ -1720,18 +1720,112 @@ mark.reader-search-mark.reader-search-match-current {
 
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: var(--bg-secondary);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--bg-surface);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--bg-active);
+}
+
+/* Pinned Left Columns Styling & Clear Elevation Divider */
+.ag-root-wrapper .ag-pinned-left-cols-container,
+.ag-root-wrapper .ag-pinned-left-header {
+  background-color: var(--bg-secondary) !important;
+  z-index: 5 !important;
+}
+
+.ag-root-wrapper .ag-cell.ag-cell-last-left-pinned,
+.ag-root-wrapper .ag-header-cell.ag-header-cell-last-left-pinned {
+  border-right: 2px solid var(--accent-primary, #89b4fa) !important;
+  box-shadow: 4px 0 10px -2px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* Column Header Pin Toggle Button */
+.col-pin-btn {
+  opacity: 0.45;
+  transition: opacity 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+}
+
+.ag-header-cell:hover .col-pin-btn,
+.ag-custom-header-container:hover .col-pin-btn {
+  opacity: 1 !important;
+}
+
+.col-pin-btn:hover {
+  opacity: 1 !important;
+  background-color: rgba(137, 180, 250, 0.25) !important;
+  color: var(--accent-primary, #89b4fa) !important;
+  transform: scale(1.1);
+}
+
+.col-pin-btn.is-pinned {
+  opacity: 1 !important;
+  color: var(--accent-primary, #89b4fa) !important;
+}
+
+.col-pin-btn.is-pinned:hover {
+  background-color: rgba(243, 139, 168, 0.25) !important;
+  color: var(--accent-danger, #f38ba8) !important;
+}
+
+/* Enhanced Prominent Horizontal Scrollbar for Data Grid */
+.bottom-grid .ag-body-horizontal-scroll {
+  height: 20px !important;
+  min-height: 20px !important;
+  background-color: var(--bg-tertiary, #11111b) !important;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08)) !important;
+  z-index: 10 !important;
+}
+
+.bottom-grid .ag-body-horizontal-scroll-viewport {
+  height: 20px !important;
+  min-height: 20px !important;
+  scrollbar-width: auto !important;
+  scrollbar-color: var(--bg-active, #45475a) var(--bg-tertiary, #11111b) !important;
+}
+
+.bottom-grid .ag-body-horizontal-scroll-viewport::-webkit-scrollbar,
+.bottom-grid .ag-root-wrapper ::-webkit-scrollbar:horizontal,
+.ag-theme-quartz-dark .ag-body-horizontal-scroll-viewport::-webkit-scrollbar {
+  height: 20px !important;
+}
+
+.bottom-grid .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-track,
+.bottom-grid .ag-root-wrapper ::-webkit-scrollbar-track:horizontal,
+.ag-theme-quartz-dark .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-track {
+  background: var(--bg-tertiary, #11111b) !important;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08)) !important;
+}
+
+.bottom-grid .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb,
+.bottom-grid .ag-root-wrapper ::-webkit-scrollbar-thumb:horizontal,
+.ag-theme-quartz-dark .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb {
+  background: var(--bg-active, #45475a) !important;
+  border-radius: 10px !important;
+  border: 3px solid var(--bg-tertiary, #11111b) !important;
+  cursor: grab !important;
+  transition: background-color 0.15s ease;
+}
+
+.bottom-grid .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb:hover,
+.bottom-grid .ag-root-wrapper ::-webkit-scrollbar-thumb:horizontal:hover,
+.ag-theme-quartz-dark .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary, #89b4fa) !important;
+  box-shadow: 0 0 6px rgba(137, 180, 250, 0.45) !important;
+}
+
+.bottom-grid .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb:active,
+.bottom-grid .ag-root-wrapper ::-webkit-scrollbar-thumb:horizontal:active,
+.ag-theme-quartz-dark .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb:active {
+  background: var(--accent-primary-hover, #b4befe) !important;
+  cursor: grabbing !important;
 }
 
 /* =========================================================================

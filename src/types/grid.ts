@@ -31,6 +31,7 @@ export interface SchemaColumn {
   field: string;
   headerName: string;
   editable?: boolean;
+  pinned?: 'left' | boolean;
 }
 
 export interface GridRow {
@@ -70,6 +71,7 @@ export interface GridState {
   addColumn: (headerName: string, initialValues?: Record<string, any>, citations?: Record<string, any>) => void;
   addColumns: (headerNames: string[], initialValues?: Record<string, any>, citations?: Record<string, any>) => void;
   renameColumn: (field: string, newHeaderName: string) => void;
+  togglePinColumn: (field: string) => void;
   deleteColumn: (field: string) => void;
   updatePaperTitle: (pdfId: string, oldTitle: string, newTitle: string) => void;
   mergeSelectedRows: (rowIds: string[], consolidatedRow?: Record<string, any>, citations?: Record<string, any>) => void;

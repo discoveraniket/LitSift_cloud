@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef, CellValueChangedEvent, CellFocusedEvent, CellClickedEvent, CellDoubleClickedEvent, CellEditRequestEvent, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
+import { Pin } from 'lucide-react';
 import { useGridStore } from '../../store/useGridStore';
 import { usePdfStore } from '../../store/usePdfStore';
 import { GridRow } from '../../types/grid';
@@ -134,10 +135,12 @@ const MultilineCellEditor = forwardRef((props: any, ref) => {
 });
 MultilineCellEditor.displayName = 'MultilineCellEditor';
 
-const EditableHeader: React.FC<any> = (params) => {
+export const EditableHeader: React.FC<any> = (params) => {
   const displayName = params.displayName || params.displayNameGetter?.() || params.column?.getColDef()?.headerName || '';
   const field = params.field || params.column?.getColId() || '';
   const onRename = params.onRename;
+  const onTogglePin = params.onTogglePin;
+  const isPinned = Boolean(params.isPinned);
 
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(displayName);
@@ -194,14 +197,65 @@ const EditableHeader: React.FC<any> = (params) => {
 
   return (
     <div
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        setIsEditing(true);
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+        gap: '4px',
       }}
-      title="Double-click to rename column"
-      style={{ cursor: 'pointer', width: '100%', userSelect: 'none' }}
+      className="ag-custom-header-container"
     >
-      {displayName}
+      <div
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          setIsEditing(true);
+        }}
+        title="Double-click to rename column"
+        style={{
+          cursor: 'pointer',
+          flex: 1,
+          userSelect: 'none',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {displayName}
+      </div>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          if (onTogglePin) onTogglePin(field);
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        title={isPinned ? 'Unpin column from left' : 'Pin column to left'}
+        className={`col-pin-btn ${isPinned ? 'is-pinned' : ''}`}
+        aria-label={isPinned ? `Unpin ${displayName}` : `Pin ${displayName}`}
+        style={{
+          background: isPinned ? 'rgba(137, 180, 250, 0.2)' : 'transparent',
+          border: 'none',
+          borderRadius: '3px',
+          color: isPinned ? 'var(--accent-primary, #89b4fa)' : 'var(--text-muted, #6c7086)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '2px 3px',
+          flexShrink: 0,
+          transition: 'all 0.15s ease',
+          opacity: isPinned ? 1 : 0.5,
+        }}
+      >
+        <Pin
+          size={11}
+          style={{
+            transform: isPinned ? 'rotate(45deg)' : 'none',
+            fill: isPinned ? 'currentColor' : 'none',
+          }}
+        />
+      </button>
     </div>
   );
 };
@@ -217,6 +271,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     updateCell,
     addColumn,
     renameColumn,
+    togglePinColumn,
     selectedRowIds,
     setSelectedRows,
     selectedColumnField,
@@ -278,9 +333,11 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   const colDefs = useMemo<ColDef<GridRow>[]>(() => {
     const dynamicCols: ColDef<GridRow>[] = columns.map((col) => {
       const isColSelected = selectedColumnField === col.field;
+      const isPinned = col.pinned === 'left' || col.pinned === true;
       return {
         field: col.field,
         headerName: col.headerName,
+        pinned: isPinned ? 'left' : undefined,
         valueGetter: (params) => {
           if (!params.data) return '';
           if (params.data[col.field] !== undefined && params.data[col.field] !== null && params.data[col.field] !== '') {
@@ -305,7 +362,9 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
         headerComponentParams: {
           displayName: col.headerName,
           field: col.field,
+          isPinned,
           onRename: renameColumn,
+          onTogglePin: togglePinColumn,
         },
         editable: true,
         cellEditor: MultilineCellEditor,
@@ -495,7 +554,7 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
     };
 
     return [rowNumCol, ...dynamicCols, addColCol];
-  }, [columns, addColumn, renameColumn, showAddColInput, newColName, isPreviewMode, selectedColumnField]);
+  }, [columns, addColumn, renameColumn, togglePinColumn, showAddColInput, newColName, isPreviewMode, selectedColumnField]);
 
   const isShiftKeyPressedRef = useRef(false);
   const isCtrlKeyPressedRef = useRef(false);
@@ -971,9 +1030,11 @@ export const AgGridWrapper: React.FC<AgGridWrapperProps> = ({
   return (
     <div className="ag-theme-quartz-dark" style={{ height: '100%', width: '100%' }}>
       <AgGridReact
+        theme="legacy"
         rowData={rowData}
         getRowId={(params) => params.data.id}
         columnDefs={colDefs}
+        alwaysShowHorizontalScroll={true}
         noRowsOverlayComponent={NoRowsOverlay}
         readOnlyEdit={true}
         onCellEditRequest={handleCellEditRequest}

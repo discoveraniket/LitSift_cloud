@@ -369,6 +369,19 @@ export const useGridStore = create<GridState>((set) => ({
         const col = state.columns.find((c) => c.field === field);
         if (col && field !== 'pdfTitle') {
           col.headerName = newHeaderName;
+          persistToStorage(state.columns, state.rows);
+        }
+      })
+    ),
+
+  togglePinColumn: (field) =>
+    set(
+      produce((state: GridState) => {
+        saveSnapshot(state);
+        const col = state.columns.find((c) => c.field === field);
+        if (col) {
+          col.pinned = col.pinned ? undefined : 'left';
+          persistToStorage(state.columns, state.rows);
         }
       })
     ),
